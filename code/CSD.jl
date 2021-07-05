@@ -6,7 +6,7 @@ struct CSD
     # energy grid
     eGrid::Array{Float64,1};
     # transformed energy grid
-    eTraf::Array{Float64,1};
+    eTrafo::Array{Float64,1};
     # stopping power for computational energy grid
     S::Array{Float64,1};
     # tabulated energy for sigma
@@ -57,12 +57,11 @@ struct CSD
     end
 end
 
-
 function SigmaAtEnergy(obj::CSD, energy::Float64)
     y = zeros(obj.settings.nPN)
     for i = 1:obj.settings.nPN
         # define Sigma mapping for interpolation at moment i
-        E2Sigma = LinearInterpolation(E_sigmaTab, sigma_tab[:,i]; extrapolation_bc=Throw())
+        E2Sigma = LinearInterpolation(obj.E_Tab, obj.sigma_tab[:,i]; extrapolation_bc=Throw())
         y[i] = E2Sigma(energy)
     end
     return y;
