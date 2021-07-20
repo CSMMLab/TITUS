@@ -1,7 +1,13 @@
 include("settings.jl")
 include("Solver.jl")
 
+using PyCall
 using PyPlot
+# pygui(:agg)
+# ENV["MPLBACKEND"]="agg"
+# using Plots
+# Plots.PyPlotBackend()
+using DelimitedFiles
 
 s = Settings(100);
 
@@ -13,13 +19,12 @@ solver = Solver(s)
 
 s.tEnd = tEnd;
 
-v = readdlm("PlaneSourceRaw", ',')
+v = readdlm("/home/pia/CSD-DLRA/code/PlaneSourceRaw", ',')
 uEx = zeros(length(v));
 for i = 1:length(v)
     if v[i] == ""
         uEx[i] = 0.0;
     else
-        println(v[i])
         uEx[i] = Float64(v[i])
     end
 end
@@ -33,6 +38,7 @@ ax[:plot](s.xMid,u[:,1], "r--", linewidth=2, label="PN", alpha=0.6)
 ax[:legend](loc="upper left")
 ax.set_xlim([s.a,s.b])
 ax.tick_params("both",labelsize=20) 
-show()
+fig.savefig("output.png", dpi=fig.dpi)
+
 
 println("main finished")

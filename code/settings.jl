@@ -54,7 +54,7 @@ mutable struct Settings
 
         # physical parameters
         if problem =="LineSource"
-            sigmaS = 1.0;#1.0;
+            sigmaS = 1.0;
             sigmaA = 0.0;        
         end
         sigmaT = sigmaA + sigmaS;
