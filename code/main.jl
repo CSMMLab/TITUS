@@ -9,7 +9,7 @@ using PyPlot
 # Plots.PyPlotBackend()
 using DelimitedFiles
 
-s = Settings(2002);
+s = Settings(1002);
 
 ############################
 solver = Solver(s)
@@ -20,6 +20,7 @@ solver = Solver(s)
 s.tEnd = tEnd;
 
 v = readdlm("/home/pia/CSD-DLRA/code/PlaneSourceRaw", ',')
+#v = readdlm("PlaneSourceRaw", ',')
 uEx = zeros(length(v));
 for i = 1:length(v)
     if v[i] == ""
@@ -28,7 +29,7 @@ for i = 1:length(v)
         uEx[i] = Float64(v[i])
     end
 end
-x = collect(range(-1.5,1.5,length=(2*length(v)-1)));
+x = collect(range(-1.5,stop=1.5,length=(2*length(v)-1)));
 uEx = [uEx[end:-1:2];uEx]
 
 

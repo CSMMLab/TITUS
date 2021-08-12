@@ -33,7 +33,7 @@ mutable struct Settings
     sigmaT::Float64;
     sigmaS::Float64;    
 
-    function Settings(Nx::Int=2002,problem::String="LineSource")
+    function Settings(Nx::Int=502,problem::String="LineSource")
         # spatial grid setting
         NCells = Nx - 1;
         a = -1.5; # left boundary
@@ -46,11 +46,11 @@ mutable struct Settings
         
         # time settings
         tEnd = 1.0#1.0;# 0.7;
-        cfl = 1.0; # CFL condition
+        cfl = 0.9; # CFL condition
         dt = cfl*dx;
         
         # number PN moments
-        nPN = 100; 
+        nPN = 99; 
 
         # physical parameters
         if problem =="LineSource"
