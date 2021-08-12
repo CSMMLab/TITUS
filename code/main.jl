@@ -9,7 +9,7 @@ using PyPlot
 # Plots.PyPlotBackend()
 using DelimitedFiles
 
-s = Settings(100);
+s = Settings(2002);
 
 ############################
 solver = Solver(s)

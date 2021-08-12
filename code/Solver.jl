@@ -19,8 +19,6 @@ struct Solver
     gamma::Array{Float64,1};
     # flux matrix PN system
     A::Array{Float64,2};
-    #scattering matrix diagonal
-    #G::Array{Float64,1}
 
     # physical parameters
     sigmaT::Float64;
@@ -33,8 +31,9 @@ struct Solver
         outRhs = zeros(settings.NCells,settings.nPN);
 
         # setup flux matrix
-        gamma = ones(settings.nPN) 
-        A = zeros(settings.nPN,settings.nPN)
+        gamma = ones(settings.nPN);
+        A = zeros(settings.nPN,settings.nPN);
+
 
 
         new(x,settings,outRhs,gamma,A,settings.sigmaT,settings.sigmaS);
@@ -59,7 +58,23 @@ function Rhs(obj::Solver,u::Array{Float64,2},t::Float64=0.0)
 end
 
 function ScatteringMatrix(obj::Solver)
-
+    G=-1*ones(obj.settings.nPN,1);
+    nSteps= 100000;
+    intSum = 0;
+    for l=2:obj.settings.nPN
+        G[l]=0;
+        # for k=-l:l
+        #     globalIdx = l*l+k+l+1;
+        #     G[globalIdx]=0;
+        #     int_Sum = 0.5 * (Pl(-1,l)+Pl(1,l));
+        #     for i=1:nSteps
+        #         intSum = intSum + Pl(-1+i*2/nSteps,l);
+        #     end
+        #     intSum= intSum*2/nSteps;
+        #     intSum= intSum*0.5;
+        #     G[globalIdx]= 1- intSum
+        # end
+    end
     return G
 end
 
@@ -72,7 +87,8 @@ function Solve(obj::Solver)
     u = SetupIC(obj);
 
     #Compute diagonal of scattering matrix G
-    #obj.G = ScatteringMatrix(obj);
+    G = ScatteringMatrix(obj);
+    sigmaS=ones(obj.settings.NCells,1).*obj.settings.sigmaS;
 
     #Precompute quadrature points, weights and polynomials at quad. points
     Nq=20;
@@ -93,7 +109,7 @@ function Solve(obj::Solver)
 
     #loop over time
     for t=0:dt:tEnd
-        u = u - dt * Rhs(obj,u,t); # Add scattering: smth like -dt*u*(obj.sigmaT+obj.sigmaS*obj.G); ?
+        u = u - dt * Rhs(obj,u,t) - dt*u.*(obj.sigmaT.+sigmaS*G'); 
     end
     # return end time and solution
     return t, u; #0.5*sqrt(obj.gamma[1])*u;
