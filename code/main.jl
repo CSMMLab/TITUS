@@ -1,5 +1,6 @@
 include("settings.jl")
 include("Solver.jl")
+include("dlr_driver.jl")
 
 using PyCall
 using PyPlot
@@ -14,8 +15,8 @@ s = Settings(1002);
 ############################
 solver = Solver(s)
 
-@time tEnd, u = Solve(solver);
-
+#@time tEnd, u = Solve(solver);
+@time tEnd, X,S,W, = SolveNaiveUnconventional(solver);
 
 s.tEnd = tEnd;
 

@@ -1,5 +1,8 @@
 __precompile__
 mutable struct Settings
+    # settings for DLRA
+    #rank
+    r::Int64;
     # grid settings
     # number spatial interfaces
     Nx::Int64;
@@ -34,6 +37,9 @@ mutable struct Settings
     sigmaS::Float64;    
 
     function Settings(Nx::Int=502,problem::String="LineSource")
+        # settings for DLRA
+        #rank
+        r = 5;
         # spatial grid setting
         NCells = Nx - 1;
         a = -1.5; # left boundary
