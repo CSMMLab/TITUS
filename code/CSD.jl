@@ -42,7 +42,7 @@ struct CSD
         eMinTrafo = ETab2ETrafo( minE );
 
         # determine transformed energy Grid for computation
-        nEnergies = 100;#settings.nEnergies;
+        nEnergies = 500;#settings.nEnergies;
         eTrafo = collect(range(eMaxTrafo - eMaxTrafo,eMaxTrafo - eMinTrafo,length = nEnergies));
 
         # determine corresponding original energy grid at which material parameters will be evaluated
@@ -58,6 +58,9 @@ struct CSD
 end
 
 function SigmaAtEnergy(obj::CSD, energy::Float64)
+    if energy <= 5e-5
+        energy = 5e-5+1e-6
+    end
     y = zeros(obj.settings.nPN)
     for i = 1:obj.settings.nPN
         # define Sigma mapping for interpolation at moment i

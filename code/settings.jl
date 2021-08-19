@@ -36,8 +36,8 @@ mutable struct Settings
     function Settings(Nx::Int=502,problem::String="LineSource")
         # spatial grid setting
         NCells = Nx - 1;
-        a = -1.5; # left boundary
-        b = 1.5; # right boundary
+        a = 0.0; # left boundary
+        b = 3.0; # right boundary
         x = collect(range(a,stop = b,length = NCells));
         dx = x[2]-x[1];
         x = [x[1]-dx;x]; # add ghost cells so that boundary cell centers lie on a and b
@@ -46,11 +46,11 @@ mutable struct Settings
         
         # time settings
         tEnd = 1.0#1.0;# 0.7;
-        cfl = 0.9; # CFL condition
+        cfl = 10.1; # CFL condition
         dt = cfl*dx;
         
         # number PN moments
-        nPN = 99; 
+        nPN = 10; 
 
         # physical parameters
         if problem =="LineSource"
