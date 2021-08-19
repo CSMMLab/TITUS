@@ -39,7 +39,7 @@ mutable struct Settings
     function Settings(Nx::Int=502,problem::String="LineSource")
         # settings for DLRA
         #rank
-        r = 5;
+        r = 10;
         # spatial grid setting
         NCells = Nx - 1;
         a = -1.5; # left boundary
@@ -66,7 +66,7 @@ mutable struct Settings
         sigmaT = sigmaA + sigmaS;
 
         # build class
-        new(Nx,NCells,a,b,dx,tEnd,dt,cfl,nPN,x,xMid,problem,sigmaT,sigmaS);
+        new(r,Nx,NCells,a,b,dx,tEnd,dt,cfl,nPN,x,xMid,problem,sigmaT,sigmaS);
     end
 
 end

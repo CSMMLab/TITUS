@@ -17,6 +17,8 @@ solver = Solver(s)
 
 #@time tEnd, u = Solve(solver);
 @time tEnd, X,S,W, = SolveNaiveUnconventional(solver);
+u = X*S*W';
+u=0.5*sqrt(solver.gamma[1])*u;
 
 s.tEnd = tEnd;
 
