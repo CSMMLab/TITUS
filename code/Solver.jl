@@ -65,9 +65,8 @@ struct Solver
 end
 
 function SetupIC(obj::Solver)
-    gamma = ones(obj.settings.nPN);
     u = zeros(obj.settings.NCells,obj.settings.nPN); # Nx interfaces, means we have Nx - 1 spatial cells
-    u[:,1] = 2/sqrt(gamma[1])*IC(obj.settings,obj.settings.xMid);
+    u[:,1] = 2/sqrt(obj.gamma[1])*IC(obj.settings,obj.settings.xMid);
     return u;
 end
 
@@ -125,7 +124,7 @@ function F(obj::Solver,u,t)
     #    A[i,i-1] = n/(2*n+1)*sqrt(gamma[i-1])/sqrt(gamma[i]);
     #end
 
-    u = u .- Rhs(obj,u,t) .- u*(obj.sigmaT*I - obj.settings.sigmaS*G); 
+    u = -Rhs(obj,u,t) .- u*(obj.sigmaT*I - obj.settings.sigmaS*G); 
    
     # return solution
     return u;
