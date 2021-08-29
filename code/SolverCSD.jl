@@ -58,7 +58,7 @@ struct SolverCSD
         csd = CSD(settings);
 
         # set density vector
-        density = ones(settings.NCells)
+        density = settings.density;
 
         # allocate dose vector
         dose = zeros(settings.NCells)
@@ -84,13 +84,12 @@ function SetupIC(obj::SolverCSD)
 end
 
 function PsiLeft(obj::SolverCSD,n::Int,mu::Float64)
-    E0 = 5.0;
+    E0 = obj.settings.eMax;
     return 10^5*exp(-200.0*(1.0-mu)^2)*exp(-50*(E0-E)^2)
 end
 
-
 function BCLeft(obj::SolverCSD,n::Int)
-    E0 = 5.0;
+    E0 = obj.settings.eMax;
     E = obj.csd.eGrid[n];
     PsiLeft = 10^5*exp.(-200.0*(1.0.-obj.mu).^2)*exp(-50*(E0-E)^2)
     uHat = zeros(obj.settings.nPN)
@@ -105,10 +104,12 @@ function Rhs(obj::SolverCSD,u::Array{Float64,2},t::Float64=0.0)
     obj.outRhs[1,:] = u[1,:];
     obj.outRhs[obj.settings.NCells,:] = u[obj.settings.NCells,:];
     dx = obj.settings.dx
+    dt = obj.settings.dE
 
     for j=2:obj.settings.NCells-1
-        obj.outRhs[j,:] = (0.5 * (obj.A*u[j,:]+obj.A*u[j+1,:]) - obj.settings.dx/(2*obj.settings.dt)*(u[j+1,:]-u[j,:]) - 0.5 * (obj.A*u[j-1,:]+obj.A*u[j,:]) + obj.settings.dx/(2*obj.settings.dt)*(u[j,:]-u[j-1,:]))/obj.settings.dx;
-        # simplifying Pias code gives, so it should be correct: obj.outRhs[j,:] = -1/(2*dt)*(u[j+1,:]-2*u[j,:]+u[j-1,:])+0.5 * (obj.A*u[j+1,:]-obj.A*u[j-1,:])/dx;
+        densityLeft = 2*obj.density[j-1]*obj.density[j]/(obj.density[j-1]+obj.density[j])
+        densityRight = 2*(obj.density[j+1]*obj.density[j])/(obj.density[j+1]+obj.density[j])
+        obj.outRhs[j,:] = -1/(2*dt)*(u[j+1,:]-2*u[j,:]+u[j-1,:])+0.5 * obj.A*((u[j+1,:]+u[j,:])/densityRight-(u[j-1,:]+u[j,:])/densityLeft)/dx;
     end
     return obj.outRhs;
 end
@@ -148,7 +149,9 @@ function Solve(obj::SolverCSD)
 
     nEnergies = length(eTrafo);
     dE = eTrafo[2]-eTrafo[1];
-    obj.settings.dt = dE
+    obj.settings.dE = dE
+
+    println("CFL = ",dE/obj.settings.dx*maximum(densityInv))
 
     # setup flux matrix (alternative analytic computation)
     #A = zeros(settings.nPN,settings.nPN)
@@ -175,7 +178,7 @@ function Solve(obj::SolverCSD)
         u[1,:] .= BCLeft(obj,n);
 
         # perform time update
-        uTilde = u .- dE * Rhs(obj,densityInv*u); 
+        uTilde = u .- dE * Rhs(obj,u); 
         uTilde[1,:] .= BCLeft(obj,n);
         #uNew = uTilde .- dE*uTilde*D;
         for j = 1:(settings.NCells-1)

@@ -33,8 +33,8 @@ struct CSD
         end
 
         # define minimal and maximal energy for computation
-        minE = 5e-5;
-        maxE = 5#settings.maxE;
+        minE = 5e-5+1e-9;
+        maxE = settings.eMax;
 
         # determine bounds of transformed energy grid for computation
         ETab2ETrafo = LinearInterpolation(E_tab, E_transformed; extrapolation_bc=Throw())
@@ -42,7 +42,7 @@ struct CSD
         eMinTrafo = ETab2ETrafo( minE );
 
         # determine transformed energy Grid for computation
-        nEnergies = 500;#settings.nEnergies;
+        nEnergies = Integer(ceil(maxE/settings.dE));
         eTrafo = collect(range(eMaxTrafo - eMaxTrafo,eMaxTrafo - eMinTrafo,length = nEnergies));
 
         # determine corresponding original energy grid at which material parameters will be evaluated
@@ -59,7 +59,7 @@ end
 
 function SigmaAtEnergy(obj::CSD, energy::Float64)
     if energy <= 5e-5
-        energy = 5e-5+1e-6
+        energy = 5e-5+1e-9
     end
     y = zeros(obj.settings.nPN)
     for i = 1:obj.settings.nPN

@@ -11,7 +11,7 @@ using DelimitedFiles
 
 close("all")
 
-s = Settings(302);
+s = Settings(2002);
 
 ############################
 solver = SolverCSD(s)
