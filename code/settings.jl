@@ -86,7 +86,7 @@ mutable struct Settings
         dE = cfl*dx*minimum(density);
         
         # number PN moments
-        nPN = 14; 
+        nPN = 4; 
 
         # build class
         new(Nx,NCells,a,b,dx,eMax,dE,cfl,nPN,x,xMid,problem,sigmaT,sigmaS,density);
