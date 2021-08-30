@@ -33,7 +33,7 @@ struct CSD
         end
 
         # define minimal and maximal energy for computation
-        minE = 5e-5+1e-9;
+        minE = 5e-5+1e-8;
         maxE = settings.eMax;
 
         # determine bounds of transformed energy grid for computation

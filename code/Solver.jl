@@ -94,14 +94,6 @@ function Solve(obj::Solver)
     G = ScatteringMatrix(obj);
     sigmaS=ones(obj.settings.NCells,1).*obj.settings.sigmaS;
 
-    #Precompute quadrature points, weights and polynomials at quad. points
-    Nq=200;
-    (x,w) = gauss(Nq);
-    P=zeros(Nq,obj.settings.nPN);
-    for k=1:Nq
-        P[k,:] = collectPl(x[k],lmax=obj.settings.nPN-1);
-    end
-
     # setup gamma vector (square norm of P) to nomralize
     settings = obj.settings
     gamma = zeros(settings.nPN);
@@ -110,27 +102,19 @@ function Solve(obj::Solver)
         gamma[i] = 2/(2*n+1);
     end
 
-    #Compute flux matrix A 
-    for i=1:obj.settings.nPN
-        for l=1:obj.settings.nPN
-            for k=1:Nq
-              obj.A[i,l] = obj.A[i,l] + w[k]*x[k]*P[k,i]*P[k,l]/sqrt(gamma[l])/sqrt(gamma[i]);
-            end 
-        end
+
+    # setup flux matrix 
+    A = zeros(settings.nPN,settings.nPN)
+
+    for i = 1:(settings.nPN-1)
+        n = i-1;
+        A[i,i+1] = (n+1)/(2*n+1)*sqrt(gamma[i+1])/sqrt(gamma[i]);
     end
 
-    # setup flux matrix (alternative analytic computation)
-    #A = zeros(settings.nPN,settings.nPN)
-
-    #for i = 1:(settings.nPN-1)
-    #    n = i-1;
-    #    A[i,i+1] = (n+1)/(2*n+1)*sqrt(gamma[i+1])/sqrt(gamma[i]);
-    #end
-
-    #for i = 2:settings.nPN
-    #    n = i-1;
-    #    A[i,i-1] = n/(2*n+1)*sqrt(gamma[i-1])/sqrt(gamma[i]);
-    #end
+    for i = 2:settings.nPN
+        n = i-1;
+        A[i,i-1] = n/(2*n+1)*sqrt(gamma[i-1])/sqrt(gamma[i]);
+    end
 
     #loop over time
     for t=0:dt:tEnd

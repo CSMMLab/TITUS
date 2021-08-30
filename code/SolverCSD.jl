@@ -21,6 +21,8 @@ struct SolverCSD
     gamma::Array{Float64,1};
     # flux matrix PN system
     A::Array{Float64,2};
+    # Roe matrix
+    AbsA::Array{Float64,2};
     # normalized Legendre Polynomials
     P::Array{Float64,2};
     # quadrature points
@@ -53,6 +55,23 @@ struct SolverCSD
             gamma[i] = 2/(2*n+1);
         end
         A = zeros(settings.nPN,settings.nPN);
+            # setup flux matrix (alternative analytic computation)
+        for i = 1:(settings.nPN-1)
+            n = i-1;
+            A[i,i+1] = (n+1)/(2*n+1)*sqrt(gamma[i+1])/sqrt(gamma[i]);
+        end
+
+        for i = 2:settings.nPN
+            n = i-1;
+            A[i,i-1] = n/(2*n+1)*sqrt(gamma[i-1])/sqrt(gamma[i]);
+        end
+
+        # setup Roe matrix
+        S = eigvals(A)
+        V = eigvecs(A)
+        AbsA = V*abs.(diagm(S))*inv(V)
+
+        println("check: ",maximum(A.-V*diagm(S)*inv(V)))
 
         # construct CSD fields
         csd = CSD(settings);
@@ -74,12 +93,21 @@ struct SolverCSD
             end
         end
 
-        new(x,settings,outRhs,gamma,A,P,mu,w,settings.sigmaT,settings.sigmaS,csd,density,dose);
+        new(x,settings,outRhs,gamma,A,AbsA,P,mu,w,settings.sigmaT,settings.sigmaS,csd,density,dose);
     end
 end
 
 function SetupIC(obj::SolverCSD)
-    u = zeros(obj.settings.NCells,obj.settings.nPN); # Nx interfaces, means we have Nx - 1 spatial cells
+    u = zeros(obj.settings.NCells,obj.settings.nPN);
+    if obj.settings.problem == "WaterPhantomKerstin" || obj.settings.problem == "AirCavity"
+        PCurrent = collectPl(1,lmax=obj.settings.nPN-1);
+        for i = 1:obj.settings.nPN
+            u[:,i] = IC(obj.settings,obj.settings.xMid) .* PCurrent[i-1]/sqrt(obj.gamma[i])
+        end
+        println(maximum(u[:,1]))
+    elseif obj.settings.problem == "WaterPhantomEdgar"
+        # Nx interfaces, means we have Nx - 1 spatial cells
+    end
     return u;
 end
 
@@ -89,14 +117,19 @@ function PsiLeft(obj::SolverCSD,n::Int,mu::Float64)
 end
 
 function BCLeft(obj::SolverCSD,n::Int)
-    E0 = obj.settings.eMax;
-    E = obj.csd.eGrid[n];
-    PsiLeft = 10^5*exp.(-200.0*(1.0.-obj.mu).^2)*exp(-50*(E0-E)^2)
-    uHat = zeros(obj.settings.nPN)
-    for i = 1:obj.settings.nPN
-        uHat[i] = sum(PsiLeft.*obj.w.*obj.P[:,i]);
+    if obj.settings.problem == "WaterPhantomEdgar"
+        E0 = obj.settings.eMax;
+        E = obj.csd.eGrid[n];
+        PsiLeft = 10^5*exp.(-200.0*(1.0.-obj.mu).^2)*exp(-50*(E0-E)^2)
+        uHat = zeros(obj.settings.nPN)
+        for i = 1:obj.settings.nPN
+            uHat[i] = sum(PsiLeft.*obj.w.*obj.P[:,i]);
+        end
+        return uHat*obj.density[1]*obj.csd.S[n]
+    else
+        return 0.0
     end
-    return uHat*obj.density[1]*obj.csd.S[n]
+    
 end
 
 function Rhs(obj::SolverCSD,u::Array{Float64,2},t::Float64=0.0)   
@@ -107,9 +140,12 @@ function Rhs(obj::SolverCSD,u::Array{Float64,2},t::Float64=0.0)
     dt = obj.settings.dE
 
     for j=2:obj.settings.NCells-1
-        densityLeft = 2*obj.density[j-1]*obj.density[j]/(obj.density[j-1]+obj.density[j])
-        densityRight = 2*(obj.density[j+1]*obj.density[j])/(obj.density[j+1]+obj.density[j])
-        obj.outRhs[j,:] = -1/(2*dt)*(u[j+1,:]-2*u[j,:]+u[j-1,:])+0.5 * obj.A*((u[j+1,:]+u[j,:])/densityRight-(u[j-1,:]+u[j,:])/densityLeft)/dx;
+        #densityLeft = 2*obj.density[j-1]*obj.density[j]/(obj.density[j-1]+obj.density[j])
+        #densityRight = 2*(obj.density[j+1]*obj.density[j])/(obj.density[j+1]+obj.density[j])
+        #obj.outRhs[j,:] = -1/(2*dt)*(u[j+1,:]-2*u[j,:]+u[j-1,:])+0.5 * obj.A*((u[j+1,:]+u[j,:])/densityRight-(u[j-1,:]+u[j,:])/densityLeft)/dx;
+        #obj.outRhs[j,:] = -1/(2*dt)*(u[j+1,:]-2*u[j,:]+u[j-1,:])+0.5 * obj.A*((u[j+1,:]/obj.density[j+1]+u[j,:]/obj.density[j])-(u[j-1,:]/obj.density[j-1]+u[j,:]/obj.density[j]))/dx;
+        obj.outRhs[j,:] = 1/2/dx * (obj.A*(u[j+1,:]/obj.density[j+1]-u[j-1,:]/obj.density[j-1]) - obj.AbsA * ( u[j+1,:]/obj.density[j+1] - 2*u[j,:]/obj.density[j] + u[j-1,:]/obj.density[j-1] ))
+        #obj.outRhs[j,:] = 1/2/dx * (obj.A*(u[j+1,:]-u[j-1,:]) - obj.AbsA * ( u[j+1,:] - 2*u[j,:] + u[j-1,:] ))
     end
     return obj.outRhs;
 end
@@ -125,27 +161,8 @@ function Solve(obj::SolverCSD)
     # Set up initial condition
     u = SetupIC(obj);
 
-    #Precompute quadrature points, weights and polynomials at quad. points
-    Nq=200;
-    (x,w) = gauss(Nq);
-    P=zeros(Nq,obj.settings.nPN);
-    for k=1:Nq
-        P[k,:] = collectPl(x[k],lmax=obj.settings.nPN-1);
-    end
-
     # setup gamma vector (square norm of P) to nomralize
     settings = obj.settings
-    gamma = obj.gamma
-    
-
-    #Compute flux matrix A 
-    for i=1:obj.settings.nPN
-        for l=1:obj.settings.nPN
-            for k=1:Nq
-              obj.A[i,l] = obj.A[i,l] + w[k]*x[k]*P[k,i]*P[k,l]/sqrt(gamma[l])/sqrt(gamma[i]);
-            end 
-        end
-    end
 
     nEnergies = length(eTrafo);
     dE = eTrafo[2]-eTrafo[1];
@@ -153,18 +170,7 @@ function Solve(obj::SolverCSD)
 
     println("CFL = ",dE/obj.settings.dx*maximum(densityInv))
 
-    # setup flux matrix (alternative analytic computation)
-    #A = zeros(settings.nPN,settings.nPN)
 
-    #for i = 1:(settings.nPN-1)
-    #    n = i-1;
-    #    A[i,i+1] = (n+1)/(2*n+1)*sqrt(gamma[i+1])/sqrt(gamma[i]);
-    #end
-
-    #for i = 2:settings.nPN
-    #    n = i-1;
-    #    A[i,i-1] = n/(2*n+1)*sqrt(gamma[i-1])/sqrt(gamma[i]);
-    #end
 
     uNew = deepcopy(u)
 
@@ -179,6 +185,15 @@ function Solve(obj::SolverCSD)
 
         # perform time update
         uTilde = u .- dE * Rhs(obj,u); 
+
+        # apply filtering
+        lam = 0.0#5e-7
+        for j = 1:(settings.NCells-1)
+            for i = 1:obj.settings.nPN
+                uTilde[j,i] = uTilde[j,i]/(1+lam*i^2*(i-1)^2);
+            end
+        end
+
         uTilde[1,:] .= BCLeft(obj,n);
         #uNew = uTilde .- dE*uTilde*D;
         for j = 1:(settings.NCells-1)
