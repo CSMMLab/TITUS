@@ -9,7 +9,7 @@ using DelimitedFiles
 
 close("all")
 
-s = Settings(5002);
+s = Settings(1002,1002);
 
 if s.problem == "AirCavity"
     smapIn = readdlm("dose_ac.txt", ',', Float64)
@@ -28,22 +28,37 @@ solver = SolverCSD(s)
 
 @time u, dose = Solve(solver);
 
-fig, ax = subplots()
-ax.plot(s.xMid,u[:,1], "r--", linewidth=2, label="PN", alpha=0.6)
-ax.legend(loc="upper left")
-ax.set_xlim([s.a,s.b])
-ax.tick_params("both",labelsize=20) 
-fig.savefig("scalarFlux.png", dpi=fig.dpi)
+#fig = figure("Dose Contour",figsize=(10,10))
+#ax = fig.add_subplot(2,1,1,projection="3d")
+#plot_surface(s.xMid,s.yMid,dose, rstride=2,edgecolors="k", cstride=2, cmap=ColorMap("gray"), alpha=0.8, linewidth=0.25)
+#xlabel("X")
+#ylabel("Y")
+#PyPlot.title("Surface Plot")
 
-fig, ax = subplots()
-maxDose = maximum(dose[Integer(floor(s.NCells*(0.2-s.a)/(s.b-s.a))):end]); # maximum dose value starting at x = 0.5
-ax.plot(s.xMid,dose./maxDose, "r--", linewidth=2, label="PN dose", alpha=0.8)
-#ax.plot(s.xMid,s.density, "k-", linewidth=2, label="Starmap dose", alpha=0.6)
-ax.plot(xRef.-2.0,doseRef./maximum(doseRef), "k-", linewidth=2, label="Starmap dose", alpha=0.6)
-ax.legend(loc="upper left")
-ax.set_xlim([0,s.b])
-#ax.set_ylim([0,1])
-ax.tick_params("both",labelsize=20) 
-fig.savefig("dose.png", dpi=fig.dpi)
+#subplot(212)
+#ax = fig.add_subplot(2,1,2)
+#cp = contour(s.xMid,s.yMid,dose, colors="black", linewidth=2.0)
+#ax.clabel(cp, inline=1, fontsize=10)
+#xlabel("X")
+#ylabel("Y")
+#PyPlot.title("Contour Plot")
+#tight_layout()
+
+#surf(s.xMid,s.yMid,dose,st=:surface,camera=(-30,30));
+#fig = figure("pyplot_surfaceplot",figsize=(10,10))
+#plot_surface(s.xMid,s.yMid,dose, rstride=2, cstride=2, cmap=ColorMap("viridis"), alpha=0.8)
+
+#surf(s.xMid,s.yMid,dose,st=:surface,camera=(-30,30));
+#fig = figure("u0",figsize=(10,10))
+#plot_surface(s.xMid,s.yMid,u[:,:,1], rstride=2, cstride=2, cmap=ColorMap("viridis"), alpha=0.8)
+
+fig = figure("Dose Contour",figsize=(10,10),dpi=100)
+
+pcolormesh(dose)
+#colorbar()
+
+fig = figure("u Contour",figsize=(10,10),dpi=100)
+
+pcolormesh(u[:,:,1])
 
 println("main finished")

@@ -155,10 +155,10 @@ function SetupSystemMatrices(obj::PNSystem)
             if  j >= 0 && j < nTotalEntries  obj.Az[i+1,j+1] = BParam( l + 1, k ); end
         end
     end
-    println("System Matrix Set UP!")
-    println("A_x =", obj.Ax)
-    println("A_y =", obj.Ay)
-    println("A_z =", obj.Az)
+    #println("System Matrix Set UP!")
+    #println("A_x =", obj.Ax)
+    #println("A_y =", obj.Ay)
+    #println("A_z =", obj.Az)
 end
 
 #function G( const Vector& u, const Vector& v, const Vector& nUnit, const Vector& n ) {

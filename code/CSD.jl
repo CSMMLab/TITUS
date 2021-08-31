@@ -61,8 +61,8 @@ function SigmaAtEnergy(obj::CSD, energy::Float64)
     if energy <= 5e-5
         energy = 5e-5+1e-9
     end
-    y = zeros(obj.settings.nPN)
-    for i = 1:obj.settings.nPN
+    y = zeros(obj.settings.nPN+1)
+    for i = 1:(obj.settings.nPN+1)
         # define Sigma mapping for interpolation at moment i
         E2Sigma = LinearInterpolation(obj.E_Tab, obj.sigma_tab[:,i]; extrapolation_bc=Throw())
         y[i] = E2Sigma(energy)
