@@ -115,7 +115,12 @@ function SetupIC(obj::SolverCSD)
             end
         end
     elseif obj.settings.problem == "2D"
-        u[:,:,1] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid) 
+        for l = 0:obj.settings.nPN
+            for k=-l:l
+                i = GlobalIndex( l, k )+1;
+                u[:,:,i] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)*obj.csd.StarMAPmoments[i]
+            end
+        end
     end
     return u;
 end
@@ -138,7 +143,33 @@ function BCLeft(obj::SolverCSD,n::Int)
     else
         return 0.0
     end
-    
+end
+
+function Slope(u,v,w,dx)
+    mMinus = (v-u)/dx;
+    mPlus = (w-v)/dx;
+    if mPlus*mMinus > 0
+        return 2*mMinus*mPlus/(mMinus+mPlus);
+    else
+        return 0.0;
+    end
+end
+
+function RhsHighOrder(obj::SolverCSD,u::Array{Float64,3},t::Float64=0.0)   
+    #Boundary conditions
+    #obj.outRhs[1,:] = u[1,:];
+    #obj.outRhs[obj.settings.NCells,:] = u[obj.settings.NCells,:];
+    dx = obj.settings.dx
+    dz = obj.settings.dy
+
+    for j=2:obj.settings.NCellsX-1
+        for i=2:obj.settings.NCellsY-1
+            # Idea: use this formulation to define outRhsX and outRhsY, then apply splitting to get u2 = u + dt*outRhsX(u), uNew = u2 + dt*outRhsY(u2)
+            obj.outRhs[j,i,:] = 1/2/dx * obj.pn.Ax * (u[j+1,i,:]/obj.density[j+1,i]-u[j-1,i,:]/obj.density[j-1,i]) - 1/2/dx * obj.AbsAx*( u[j+1,i,:]/obj.density[j+1,i] - 2*u[j,i,:]/obj.density[j,i] + u[j-1,i,:]/obj.density[j-1,i] );
+            obj.outRhs[j,i,:] += 1/2/dz * obj.pn.Az * (u[j,i+1,:]/obj.density[j,i+1]-u[j,i-1,:]/obj.density[j,i-1]) - 1/2/dz * obj.AbsAz*( u[j,i+1,:]/obj.density[j,i+1] - 2*u[j,i,:]/obj.density[j,i] + u[j,i-1,:]/obj.density[j,i-1] );
+        end
+    end
+    return obj.outRhs;
 end
 
 function Rhs(obj::SolverCSD,u::Array{Float64,3},t::Float64=0.0)   
@@ -183,7 +214,7 @@ function Solve(obj::SolverCSD)
     prog = Progress(nEnergies,1)
 
     #loop over energy
-    for n=1:(nEnergies-0)
+    for n=1:nEnergies
         # compute scattering coefficients at current energy
         sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
        
@@ -223,11 +254,13 @@ function Solve(obj::SolverCSD)
         end
         
         # update dose
-        if n > 1
-            obj.dose .+= 0.5 * dE * ( uNew[:,:,1] * S[n] + u[:,:,1] * S[n - 1] ) ./ obj.density;    # update dose with trapezoidal rule
-        else
-            obj.dose .+= dE * uNew[:,:,1] * S[n] ./ obj.density;
-        end
+        obj.dose .+= dE * uNew[:,:,1] * obj.csd.SMid[n] ./ obj.density ./( 1 + (n==1||n==nEnergies));
+        #if n > 1 && n < nEnergies
+        #    obj.dose .+= 0.5 * dE * ( uNew[:,:,1] * S[n] + u[:,:,1] * S[n - 1] ) ./ obj.density;    # update dose with trapezoidal rule
+            #obj.dose .+= dE * uNew[:,:,1] * SMinus[n] ./ obj.density;
+        #else
+        #    obj.dose .+= 0.5*dE * uNew[:,:,1] * S[n] ./ obj.density;
+        #end
 
         u .= uNew;
         next!(prog) # update progress bar

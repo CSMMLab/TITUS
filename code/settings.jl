@@ -1,3 +1,5 @@
+using Distributions
+
 __precompile__
 mutable struct Settings
     # grid settings
@@ -49,10 +51,10 @@ mutable struct Settings
         NCellsX = Nx - 1;
         NCellsY = Ny - 1;
 
-        a = -1.0; # left boundary
+        a = 0.0; # left boundary
         b = 1.0; # right boundary
 
-        c = -1.0; # lower boundary
+        c = 0.0; # lower boundary
         d = 1.0; # upper boundary
 
         problem = "2D" # WaterPhantomKerstin, AirCavity
@@ -81,12 +83,12 @@ mutable struct Settings
         yMid = y[1:(end-1)].+0.5*dy
 
         # time settings
-        eMax = 5.0
-        cfl = 1.4#1.0#1.2#0.6#1.9; # CFL condition
+        eMax = 1.0
+        cfl = 1.7#1.4#1.2#0.6#1.9; # CFL condition
         dE = cfl*dx*minimum(density);
         
         # number PN moments
-        nPN = 5; # use odd number
+        nPN = 7; # use odd number
 
         # build class
         new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,sigmaT,sigmaS,density);
@@ -94,13 +96,17 @@ mutable struct Settings
 end
 
 function IC(obj::Settings,x,y)
+    posBeamX = 0.5;
+    posBeamY = 0.5;
+    x0 = x .- posBeamX;
+    y0 = y .- posBeamY;
     out = zeros(length(x),length(y));
-    s1 = 0.1
+    s1 = 0.01
     s2 = s1^2
     floor = 1e-4
     for j = 1:length(x);
         for i = 1:length(y);
-            out[j,i] = 1/(s1*sqrt(2*pi))*exp.(-(x[j].^2+y[i].^2) ./ 2.0./s2^2)
+            out[j,i] = 1/(s1*sqrt(2*pi))^2*exp.(-(x0[j].^2+y0[i].^2) ./ 2.0./s2)
         end
     end
     

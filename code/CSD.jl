@@ -9,10 +9,13 @@ struct CSD
     eTrafo::Array{Float64,1};
     # stopping power for computational energy grid
     S::Array{Float64,1};
+    SMid::Array{Float64,1};
     # tabulated energy for sigma
     E_Tab::Array{Float64,1};
     # tabulated sigma
     sigma_tab::Array{Float64,2};
+    # moment values for IC
+    StarMAPmoments::Array{Float64,1};
     # settings
     settings::Settings
 
@@ -53,7 +56,11 @@ struct CSD
         E2S = LinearInterpolation(E_tab, S_tab; extrapolation_bc=Throw())
         S = E2S(eGrid)
 
-        new(eGrid,eTrafo,S,E_sigmaTab,sigma_tab,settings);
+        # compute stopping power at intermediate time points
+        dE = eTrafo[2]-eTrafo[1];
+        SMid = E2S(eGrid.+0.5*dE)
+
+        new(eGrid,eTrafo,S,SMid,E_sigmaTab,sigma_tab,param.StarMAPmoments,settings);
     end
 end
 
