@@ -5,11 +5,10 @@ include("SolverCSD.jl")
 using PyCall
 using PyPlot
 using DelimitedFiles
-using DelimitedFiles
 
 close("all")
 
-s = Settings(5002);
+s = Settings(5001); #WaterPhantomKerstin Nx = 5001, 
 
 if s.problem == "AirCavity"
     smapIn = readdlm("dose_ac.txt", ',', Float64)

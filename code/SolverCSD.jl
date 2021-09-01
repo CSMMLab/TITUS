@@ -42,6 +42,10 @@ struct SolverCSD
     # dose vector
     dose::Array{Float64,1};
 
+    # tridiagonal stencil matrices
+    L1I::SymTridiagonal{Float64, Vector{Float64}};
+    L2::Tridiagonal{Float64, Vector{Float64}};
+
     # constructor
     function SolverCSD(settings)
         x = settings.x;
@@ -93,7 +97,13 @@ struct SolverCSD
             end
         end
 
-        new(x,settings,outRhs,gamma,A,AbsA,P,mu,w,settings.sigmaT,settings.sigmaS,csd,density,dose);
+        # setup stencil matrices
+        #SymTridiagonal{Float64, Vector{Float64}}
+        dE = csd.eTrafo[2]-csd.eTrafo[1];
+        L1I = SymTridiagonal(-2*ones(settings.NCells),ones(settings.NCells-1))/2/settings.dx;
+        L2 = Tridiagonal(-ones(settings.NCells-1),zeros(settings.NCells),ones(settings.NCells-1))/2/settings.dx;
+
+        new(x,settings,outRhs,gamma,A,AbsA,P,mu,w,settings.sigmaT,settings.sigmaS,csd,density,dose,L1I,L2);
     end
 end
 
@@ -129,25 +139,22 @@ function BCLeft(obj::SolverCSD,n::Int)
     else
         return 0.0
     end
-    
+end
+
+function Filter(obj::SolverCSD,u)
+    lam = 5e-7
+    for j = 1:(obj.settings.NCells-1)
+        for i = 1:obj.settings.nPN
+            u[j,i] = u[j,i]/(1+lam*i^2*(i-1)^2);
+        end
+    end
+    return u;
 end
 
 function Rhs(obj::SolverCSD,u::Array{Float64,2},t::Float64=0.0)   
-    #Boundary conditions
-    obj.outRhs[1,:] = u[1,:];
-    obj.outRhs[obj.settings.NCells,:] = u[obj.settings.NCells,:];
-    dx = obj.settings.dx
-    dt = obj.settings.dE
 
-    for j=2:obj.settings.NCells-1
-        #densityLeft = 2*obj.density[j-1]*obj.density[j]/(obj.density[j-1]+obj.density[j])
-        #densityRight = 2*(obj.density[j+1]*obj.density[j])/(obj.density[j+1]+obj.density[j])
-        #obj.outRhs[j,:] = -1/(2*dt)*(u[j+1,:]-2*u[j,:]+u[j-1,:])+0.5 * obj.A*((u[j+1,:]+u[j,:])/densityRight-(u[j-1,:]+u[j,:])/densityLeft)/dx;
-        #obj.outRhs[j,:] = -1/(2*dt)*(u[j+1,:]-2*u[j,:]+u[j-1,:])+0.5 * obj.A*((u[j+1,:]/obj.density[j+1]+u[j,:]/obj.density[j])-(u[j-1,:]/obj.density[j-1]+u[j,:]/obj.density[j]))/dx;
-        obj.outRhs[j,:] = 1/2/dx * (obj.A*(u[j+1,:]/obj.density[j+1]-u[j-1,:]/obj.density[j-1]) - obj.AbsA * ( u[j+1,:]/obj.density[j+1] - 2*u[j,:]/obj.density[j] + u[j-1,:]/obj.density[j-1] ))
-        #obj.outRhs[j,:] = 1/2/dx * (obj.A*(u[j+1,:]-u[j-1,:]) - obj.AbsA * ( u[j+1,:] - 2*u[j,:] + u[j-1,:] ))
-    end
-    return obj.outRhs;
+    return obj.L2*u*obj.A' - obj.L1I*u*obj.AbsA'
+
 end
 
 function Solve(obj::SolverCSD)
@@ -170,12 +177,12 @@ function Solve(obj::SolverCSD)
 
     println("CFL = ",dE/obj.settings.dx*maximum(densityInv))
 
-
-
     uNew = deepcopy(u)
 
+    prog = Progress(nEnergies,1)
+
     #loop over energy
-    for n=1:(nEnergies-0)
+    for n=1:nEnergies
         # compute scattering coefficients at current energy
         sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
         D = Diagonal(sigmaS[1] .- sigmaS);
@@ -184,30 +191,23 @@ function Solve(obj::SolverCSD)
         u[1,:] .= BCLeft(obj,n);
 
         # perform time update
-        uTilde = u .- dE * Rhs(obj,u); 
+        uTilde = u .- dE * Rhs(obj,densityInv*u)
 
         # apply filtering
-        lam = 0.0#5e-7
-        for j = 1:(settings.NCells-1)
-            for i = 1:obj.settings.nPN
-                uTilde[j,i] = uTilde[j,i]/(1+lam*i^2*(i-1)^2);
-            end
-        end
+        #uTilde = Filter(obj,uTilde)
 
         uTilde[1,:] .= BCLeft(obj,n);
-        #uNew = uTilde .- dE*uTilde*D;
+
+        # perform scattering
         for j = 1:(settings.NCells-1)
             uNew[j,:] = (I + dE*D)\uTilde[j,:];
         end
         
         # update dose
-        if n > 1
-            obj.dose .+= 0.5 * dE * ( uNew[:,1] * S[n] + u[:,1] * S[n - 1] ) ./ obj.density;    # update dose with trapezoidal rule
-        else
-            obj.dose .+= dE * uNew[:,1] * S[n] ./ obj.density;
-        end
+        obj.dose .+= dE * uNew[:,1] * obj.csd.SMid[n] ./ obj.density ./( 1 + (n==1||n==nEnergies));
 
         u .= uNew;
+        next!(prog) # update progress bar
     end
     # return end time and solution
     return 0.5*sqrt(obj.gamma[1])*u,obj.dose;
