@@ -15,10 +15,14 @@ s = Settings(1002);
 ############################
 solver = Solver(s)
 
-#@time tEnd, u = Solve(solver);
+# @time tEnd, u = Solve(solver);
 @time tEnd, X,S,W, = SolveNaiveUnconventional(solver);
 u = X*S*W';
 u=0.5*sqrt(solver.gamma[1])*u;
+
+@time tEnd, X2,S2,W2, = SolveUnconventional(solver);
+u2 = X2*S2*W2';
+u2=0.5*sqrt(solver.gamma[1])*u2;
 
 s.tEnd = tEnd;
 
@@ -38,7 +42,8 @@ uEx = [uEx[end:-1:2];uEx]
 
 fig, ax = subplots()
 ax[:plot](x,uEx, "k-", linewidth=2, label="exact", alpha=0.6)
-ax[:plot](s.xMid,u[:,1], "r--", linewidth=2, label="PN", alpha=0.6)
+ax[:plot](s.xMid,u[:,1], "r--", linewidth=2, label="Naive DLR", alpha=0.6)
+ax[:plot](s.xMid,u2[:,1], "b--", linewidth=2, label="DLR", alpha=0.6)
 ax[:legend](loc="upper left")
 ax.set_xlim([s.a,s.b])
 ax.tick_params("both",labelsize=20) 
