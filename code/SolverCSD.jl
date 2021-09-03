@@ -38,6 +38,7 @@ struct SolverCSD
 
     # material density
     density::Array{Float64,1};
+    densityInv::Array{Float64,2};
 
     # dose vector
     dose::Array{Float64,1};
@@ -82,6 +83,8 @@ struct SolverCSD
 
         # set density vector
         density = settings.density;
+        # define density matrix
+        densityInv = Diagonal(1.0 ./density);
 
         # allocate dose vector
         dose = zeros(settings.NCells)
@@ -99,11 +102,12 @@ struct SolverCSD
 
         # setup stencil matrices
         #SymTridiagonal{Float64, Vector{Float64}}
-        dE = csd.eTrafo[2]-csd.eTrafo[1];
+        settings.dE = csd.eTrafo[2]-csd.eTrafo[1];
+
         L1I = SymTridiagonal(-2*ones(settings.NCells),ones(settings.NCells-1))/2/settings.dx;
         L2 = Tridiagonal(-ones(settings.NCells-1),zeros(settings.NCells),ones(settings.NCells-1))/2/settings.dx;
 
-        new(x,settings,outRhs,gamma,A,AbsA,P,mu,w,settings.sigmaT,settings.sigmaS,csd,density,dose,L1I,L2);
+        new(x,settings,outRhs,gamma,A,AbsA,P,mu,w,settings.sigmaT,settings.sigmaS,csd,density,densityInv,dose,L1I,L2);
     end
 end
 
@@ -211,5 +215,30 @@ function Solve(obj::SolverCSD)
     end
     # return end time and solution
     return 0.5*sqrt(obj.gamma[1])*u,obj.dose;
+end
 
+    function F(obj::SolverCSD,u,n)
+        energy = obj.csd.eGrid;
+
+        # compute scattering coefficients at current energy
+        sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
+        D = Diagonal(sigmaS[1] .- sigmaS);
+
+        # set boundary condition
+        u[1,:] .= BCLeft(obj,n);
+
+        # perform time update
+        u = - Rhs(obj,obj.densityInv*u)
+
+        # apply filtering
+        #uTilde = Filter(obj,uTilde)
+
+        u[1,:] .= BCLeft(obj,n);
+
+        # perform scattering
+        for j = 1:(obj.settings.NCells-1)
+            u[j,:] = (I + obj.settings.dE *D)\u[j,:];
+        end
+
+        return u
 end
