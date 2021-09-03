@@ -10,7 +10,7 @@ using WriteVTK
 
 close("all")
 
-s = Settings(501,501);
+s = Settings(1001,1001);
 
 if s.problem == "AirCavity"
     smapIn = readdlm("dose_ac.txt", ',', Float64)
@@ -22,6 +22,10 @@ elseif s.problem == "WaterPhantomKerstin"
     doseRef = smapIn[:,2]
 elseif s.problem == "2D"
     doseRef = readdlm("validationData/dose_starmap_full301.txt", Float64)
+    xRef = readdlm("validationData/x_starmap_nx301.txt", Float64)
+    yRef = readdlm("validationData/y_starmap_ny301.txt", Float64)
+elseif s.problem == "2DHighD"
+    doseRef = readdlm("validationData/dose_starmap_full301_inhomogenity.txt", Float64)
     xRef = readdlm("validationData/x_starmap_nx301.txt", Float64)
     yRef = readdlm("validationData/y_starmap_ny301.txt", Float64)
 else
@@ -86,5 +90,7 @@ vtkfile = vtk_grid("output/dose_csd_nx$(s.NCellsX)ny$(s.NCellsY)", s.xMid, s.yMi
 vtkfile["dose"] = dose
 vtkfile["dose_normalized"] = dose./maximum(dose)
 outfiles = vtk_save(vtkfile)
+
+writedlm("output/dose_csd_nx$(s.NCellsX)ny$(s.NCellsY).txt", dose)
 
 println("main finished")

@@ -57,7 +57,9 @@ mutable struct Settings
         c = 0.0; # lower boundary
         d = 1.0; # upper boundary
 
-        problem = "2D" # WaterPhantomKerstin, AirCavity
+        problem = "2DHighD" # WaterPhantomKerstin, AirCavity, 2DHighD
+
+        density = ones(NCellsX,NCellsY);
 
         # physical parameters
         sigmaS = 0.0;
@@ -65,10 +67,12 @@ mutable struct Settings
         if problem =="LineSource"
             sigmaS = 1.0;
             sigmaA = 0.0;        
+        elseif problem =="2DHighD"
+            density[Int(floor(s.NCellsX*0.56/(b-a))):end,:] .= 5.0;
         end
         sigmaT = sigmaA + sigmaS;
 
-        density = ones(NCellsX,NCellsY);
+        
 
         # spatial grid
         x = collect(range(a,stop = b,length = NCellsX));

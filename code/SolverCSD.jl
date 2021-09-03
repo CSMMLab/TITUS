@@ -114,7 +114,7 @@ function SetupIC(obj::SolverCSD)
                 u[:,:,i] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid) .* PCurrent[l]/sqrt(obj.gamma[l+1])
             end
         end
-    elseif obj.settings.problem == "2D"
+    elseif obj.settings.problem == "2D" || obj.settings.problem == "2DHighD"
         for l = 0:obj.settings.nPN
             for k=-l:l
                 i = GlobalIndex( l, k )+1;
