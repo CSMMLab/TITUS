@@ -111,19 +111,6 @@ function F(obj::Solver,u,t)
     #Compute diagonal of scattering matrix G
     G = ScatteringMatrix(obj);
 
-    # setup flux matrix (alternative analytic computation)
-    #A = zeros(settings.nPN,settings.nPN)
-
-    #for i = 1:(settings.nPN-1)
-    #    n = i-1;
-    #    A[i,i+1] = (n+1)/(2*n+1)*sqrt(gamma[i+1])/sqrt(gamma[i]);
-    #end
-
-    #for i = 2:settings.nPN
-    #    n = i-1;
-    #    A[i,i-1] = n/(2*n+1)*sqrt(gamma[i-1])/sqrt(gamma[i]);
-    #end
-
     u = -Rhs(obj,u,t) .- u*(obj.sigmaT*I - obj.settings.sigmaS*G); 
    
     # return solution
