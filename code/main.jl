@@ -5,12 +5,11 @@ include("SolverCSD.jl")
 using PyCall
 using PyPlot
 using DelimitedFiles
-using DelimitedFiles
 using WriteVTK
 
 close("all")
 
-s = Settings(1001,1001);
+s = Settings(101,101);
 
 if s.problem == "AirCavity"
     smapIn = readdlm("dose_ac.txt", ',', Float64)

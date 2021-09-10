@@ -100,6 +100,39 @@ struct SolverCSD
             end
         end
 
+        # setupt stencil matrix
+        nx = settings.NCellsX;
+        ny = settings.NCellsY;
+        N = pn.nTotalEntries;
+        L1Ix = spzeros(nx*ny,nx*ny);
+        for i = 2:nx-1
+            for j = 2:ny-1
+                # x part
+                index = vectorIndex(nx,i,j);
+                indexPlus = vectorIndex(nx,i+1,j);
+                indexMinus = vectorIndex(nx,i-1,j);
+                L1Ix[index,index] = -2.0/2/settings.dx; 
+                if i > 1
+                    L1Ix[index,indexMinus] = 1/2/settings.dx; 
+                end
+                if i < nx
+                    L1Ix[index,indexPlus] = 1/2/settings.dx; 
+                end
+
+                # y part
+                index = vectorIndex(nx,i,j);
+                indexPlus = vectorIndex(nx,i+1,j);
+                indexMinus = vectorIndex(nx,i-1,j);
+                L1Ix[index,index] = -2.0/2/settings.dx; 
+                if i > 1
+                    L1Ix[index,indexMinus] = 1/2/settings.dx; 
+                end
+                if i < nx
+                    L1Ix[index,indexPlus] = 1/2/settings.dx; 
+                end
+            end
+        end
+
         new(x,y,settings,outRhs,gamma,AbsAx,AbsAz,P,mu,w,csd,pn,density,dose);
     end
 end
@@ -192,13 +225,20 @@ end
 function Solve(obj::SolverCSD)
     eTrafo = obj.csd.eTrafo;
     energy = obj.csd.eGrid;
-    S = obj.csd.S; # todo
+    S = obj.csd.S;
 
     # define density matrix
     densityInv = Diagonal(1.0 ./obj.density);
 
-    # Set up initial condition
-    u = SetupIC(obj);
+    # Set up initial condition and store as matrix
+    v = SetupIC(obj);
+    nx = obj.settings.NCellsX;
+    ny = obj.settings.NCellsY;
+    N = obj.pn.nTotalEntries
+    u = zeros(nx*ny,N);
+    for k = 1:N
+        u[:,k] = vec(v[:,:,k]);
+    end
 
     # setup gamma vector (square norm of P) to nomralize
     settings = obj.settings
@@ -268,4 +308,8 @@ function Solve(obj::SolverCSD)
     # return end time and solution
     return 0.5*sqrt(obj.gamma[1])*u,obj.dose;
 
+end
+
+function vectorIndex(nx,i,j)
+    return (i-1)*nx + j;
 end

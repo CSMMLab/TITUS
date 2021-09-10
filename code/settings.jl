@@ -1,5 +1,3 @@
-using Distributions
-
 __precompile__
 mutable struct Settings
     # grid settings
@@ -68,7 +66,7 @@ mutable struct Settings
             sigmaS = 1.0;
             sigmaA = 0.0;        
         elseif problem =="2DHighD"
-            density[Int(floor(s.NCellsX*0.56/(b-a))):end,:] .= 5.0;
+            density[Int(floor(NCellsX*0.56/(b-a))):end,:] .= 5.0;
         end
         sigmaT = sigmaA + sigmaS;
 
