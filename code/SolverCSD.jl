@@ -4,6 +4,7 @@ using ProgressMeter
 using LinearAlgebra
 using LegendrePolynomials
 using QuadGK
+using SparseArrays
 
 include("CSD.jl")
 include("PNSystem.jl")
@@ -38,9 +39,15 @@ struct SolverCSD
 
     # material density
     density::Array{Float64,2};
+    densityVec::Array{Float64,1};
 
     # dose vector
-    dose::Array{Float64,2};
+    dose::Array{Float64,1};
+
+    L1x::SparseMatrixCSC{Float64, Int64};
+    L1y::SparseMatrixCSC{Float64, Int64};
+    L2x::SparseMatrixCSC{Float64, Int64};
+    L2y::SparseMatrixCSC{Float64, Int64};
 
     # constructor
     function SolverCSD(settings)
@@ -87,7 +94,7 @@ struct SolverCSD
         density = settings.density;
 
         # allocate dose vector
-        dose = zeros(settings.NCellsX,settings.NCellsY)
+        dose = zeros(settings.NCellsX*settings.NCellsY)
 
         # compute normalized Legendre Polynomials
         Nq=200;
@@ -104,36 +111,42 @@ struct SolverCSD
         nx = settings.NCellsX;
         ny = settings.NCellsY;
         N = pn.nTotalEntries;
-        L1Ix = spzeros(nx*ny,nx*ny);
+        L1x = spzeros(nx*ny,nx*ny);
+        L1y = spzeros(nx*ny,nx*ny);
+        L2x = spzeros(nx*ny,nx*ny);
+        L2y = spzeros(nx*ny,nx*ny);
         for i = 2:nx-1
             for j = 2:ny-1
                 # x part
                 index = vectorIndex(nx,i,j);
                 indexPlus = vectorIndex(nx,i+1,j);
                 indexMinus = vectorIndex(nx,i-1,j);
-                L1Ix[index,index] = -2.0/2/settings.dx; 
+                L1x[index,index] = 2.0/2/settings.dx/density[i,j]; 
                 if i > 1
-                    L1Ix[index,indexMinus] = 1/2/settings.dx; 
+                    L1x[index,indexMinus] = -1/2/settings.dx/density[i-1,j]; 
+                    L2x[index,indexMinus] = -1/2/settings.dx/density[i-1,j]; 
                 end
                 if i < nx
-                    L1Ix[index,indexPlus] = 1/2/settings.dx; 
+                    L1x[index,indexPlus] = -1/2/settings.dx/density[i+1,j]; 
+                    L2x[index,indexPlus] = 1/2/settings.dx/density[i+1,j];
                 end
 
                 # y part
-                index = vectorIndex(nx,i,j);
-                indexPlus = vectorIndex(nx,i+1,j);
-                indexMinus = vectorIndex(nx,i-1,j);
-                L1Ix[index,index] = -2.0/2/settings.dx; 
-                if i > 1
-                    L1Ix[index,indexMinus] = 1/2/settings.dx; 
+                indexPlus = vectorIndex(nx,i,j+1);
+                indexMinus = vectorIndex(nx,i,j-1);
+                L1y[index,index] += 2.0/2/settings.dy/density[i,j]; 
+                if j > 1
+                    L1y[index,indexMinus] = -1/2/settings.dy/density[i,j-1]; 
+                    L2y[index,indexMinus] = -1/2/settings.dy/density[i,j-1];
                 end
-                if i < nx
-                    L1Ix[index,indexPlus] = 1/2/settings.dx; 
+                if j < ny
+                    L1y[index,indexPlus] = -1/2/settings.dy/density[i,j+1]; 
+                    L2y[index,indexPlus] = 1/2/settings.dy/density[i,j+1];
                 end
             end
         end
 
-        new(x,y,settings,outRhs,gamma,AbsAx,AbsAz,P,mu,w,csd,pn,density,dose);
+        new(x,y,settings,outRhs,gamma,AbsAx,AbsAz,P,mu,w,csd,pn,density,vec(density'),dose,L1x,L1y,L2x,L2y);
     end
 end
 
@@ -205,7 +218,7 @@ function RhsHighOrder(obj::SolverCSD,u::Array{Float64,3},t::Float64=0.0)
     return obj.outRhs;
 end
 
-function Rhs(obj::SolverCSD,u::Array{Float64,3},t::Float64=0.0)   
+function RhsMatrix(obj::SolverCSD,u::Array{Float64,3},t::Float64=0.0)   
     #Boundary conditions
     #obj.outRhs[1,:] = u[1,:];
     #obj.outRhs[obj.settings.NCells,:] = u[obj.settings.NCells,:];
@@ -220,6 +233,11 @@ function Rhs(obj::SolverCSD,u::Array{Float64,3},t::Float64=0.0)
         end
     end
     return obj.outRhs;
+end
+
+function Rhs(obj::SolverCSD,u::Array{Float64,2},t::Float64=0.0)   
+
+    return obj.L2x*u*obj.pn.Ax' + obj.L2y*u*obj.pn.Az' + obj.L1x*u*obj.AbsAx' + obj.L1y*u*obj.AbsAz';
 end
 
 function Solve(obj::SolverCSD)
@@ -252,6 +270,16 @@ function Solve(obj::SolverCSD)
     uNew = deepcopy(u)
 
     prog = Progress(nEnergies,1)
+
+    out = zeros(nx*ny,N);
+    vout = RhsMatrix(obj,v)
+    for k = 1:N
+        out[:,k] = vec(vout[:,:,k]');
+    end
+
+    println("error rhs = ",norm(Rhs(obj,u) - out))
+    println("norm rhs = ",norm(Rhs(obj,u)))
+    println("norm rhs = ",norm(out))
 
     #loop over energy
     for n=1:nEnergies
@@ -286,15 +314,12 @@ function Solve(obj::SolverCSD)
 
         #uTilde[1,:] .= BCLeft(obj,n);
         #uNew = uTilde .- dE*uTilde*D;
-        for j = 1:(settings.NCellsX-1)
-            for i = 1:(settings.NCellsY-1)
-                uNew[j,i,:] = (I + dE*D)\uTilde[j,i,:];
-                #uNew[j,i,:] = uTilde[j,i,:]
-            end
+        for j = 1:size(uNew,1)
+            uNew[j,:] = (I + dE*D)\uTilde[j,:];
         end
         
         # update dose
-        obj.dose .+= dE * uNew[:,:,1] * obj.csd.SMid[n] ./ obj.density ./( 1 + (n==1||n==nEnergies));
+        obj.dose .+= dE * uNew[:,1] * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
         #if n > 1 && n < nEnergies
         #    obj.dose .+= 0.5 * dE * ( uNew[:,:,1] * S[n] + u[:,:,1] * S[n - 1] ) ./ obj.density;    # update dose with trapezoidal rule
             #obj.dose .+= dE * uNew[:,:,1] * SMinus[n] ./ obj.density;
@@ -312,4 +337,14 @@ end
 
 function vectorIndex(nx,i,j)
     return (i-1)*nx + j;
+end
+
+function Vec2Mat(nx,ny,v)
+    m = zeros(nx,ny);
+    for i = 1:nx
+        for j = 1:ny
+            m[i,j] = v[(i-1)*nx + j]
+        end
+    end
+    return m;
 end

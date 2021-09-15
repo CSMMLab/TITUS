@@ -55,7 +55,7 @@ mutable struct Settings
         c = 0.0; # lower boundary
         d = 1.0; # upper boundary
 
-        problem = "2DHighD" # WaterPhantomKerstin, AirCavity, 2DHighD
+        problem = "2DHighD" # WaterPhantomKerstin, AirCavity, 2D, 2DHighD
 
         density = ones(NCellsX,NCellsY);
 
@@ -69,8 +69,6 @@ mutable struct Settings
             density[Int(floor(NCellsX*0.56/(b-a))):end,:] .= 5.0;
         end
         sigmaT = sigmaA + sigmaS;
-
-        
 
         # spatial grid
         x = collect(range(a,stop = b,length = NCellsX));

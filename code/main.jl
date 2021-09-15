@@ -9,7 +9,7 @@ using WriteVTK
 
 close("all")
 
-s = Settings(101,101);
+s = Settings(701,701);
 
 if s.problem == "AirCavity"
     smapIn = readdlm("dose_ac.txt", ',', Float64)
@@ -35,6 +35,9 @@ end
 solver = SolverCSD(s)
 
 @time u, dose = Solve(solver);
+
+u = Vec2Mat(s.NCellsX,s.NCellsY,u)
+dose = Vec2Mat(s.NCellsX,s.NCellsY,dose)
 
 #fig = figure("Dose Contour",figsize=(10,10))
 #ax = fig.add_subplot(2,1,1,projection="3d")
