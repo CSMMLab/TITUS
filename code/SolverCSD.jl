@@ -414,6 +414,293 @@ function Solve(obj::SolverCSD)
 
 end
 
+function SolveNaiveUnconventional(obj::SolverCSD)
+    # Get rank
+    r=5;
+
+    eTrafo = obj.csd.eTrafo;
+    energy = obj.csd.eGrid;
+    S = obj.csd.S;
+
+    # Set up initial condition and store as matrix
+    v = SetupIC(obj);
+    nx = obj.settings.NCellsX;
+    ny = obj.settings.NCellsY;
+    N = obj.pn.nTotalEntries
+    u = zeros(nx*ny,N);
+    for k = 1:N
+        u[:,k] = vec(v[:,:,k]);
+    end
+
+    # Low-rank approx of init data:
+    X,S,W = svd(u);
+    
+    # rank-r truncation:
+    X = X[:,1:r];
+    W = W[:,1:r];
+    S = Diagonal(S);
+    S = S[1:r, 1:r];
+    K = zeros(size(X));
+
+    # define density matrix
+    densityInv = Diagonal(1.0 ./obj.density);
+    Id = Diagonal(ones(N));
+
+    # setup gamma vector (square norm of P) to nomralize
+    settings = obj.settings
+
+    nEnergies = length(eTrafo);
+    dE = eTrafo[2]-eTrafo[1];
+    obj.settings.dE = dE
+
+    println("CFL = ",dE/obj.settings.dx*maximum(densityInv))
+
+    uNew = deepcopy(u)
+
+    out = zeros(nx*ny,N);
+    vout = RhsMatrix(obj,v)
+    for k = 1:N
+        out[:,k] = vec(vout[:,:,k]');
+    end
+
+    println("error rhs = ",norm(Rhs(obj,u) - out))
+    println("norm rhs = ",norm(Rhs(obj,u)))
+    println("norm rhs = ",norm(out))
+
+    prog = Progress(nEnergies,1)
+
+    for n=1:nEnergies
+
+        # compute scattering coefficients at current energy
+        sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
+       
+        Dvec = zeros(obj.pn.nTotalEntries)
+        for l = 0:obj.pn.N
+            for k=-l:l
+                i = GlobalIndex( l, k );
+                Dvec[i+1] = sigmaS[l+1]
+            end
+        end
+
+        D = Diagonal(sigmaS[1] .- Dvec);
+
+        ################## K-step ##################
+        K .= X*S;
+
+        K .= K .- dE*(obj.L2x*u*obj.pn.Ax' + obj.L2y*u*obj.pn.Az' + obj.L1x*u*obj.AbsAx' + obj.L1y*u*obj.AbsAz')*W;
+
+        XNew,STmp = qr(K);
+        XNew = XNew[:,1:r];
+
+        MUp = XNew' * X;
+
+        ################## L-step ##################
+        L = W*S';
+
+        L .= L .- dE*(X'*(obj.L2x*u*obj.pn.Ax' + obj.L2y*u*obj.pn.Az' + obj.L1x*u*obj.AbsAx' + obj.L1y*u*obj.AbsAz'))';
+                
+        WNew,STmp = qr(L);
+        WNew = WNew[:,1:r];
+
+        NUp = WNew' * W;
+        W .= WNew;
+        X .= XNew;
+
+        ################## S-step ##################
+        S .= MUp*S*(NUp')
+
+        S .= S .- dE.*X'*(obj.L2x*u*obj.pn.Ax' + obj.L2y*u*obj.pn.Az' + obj.L1x*u*obj.AbsAx' + obj.L1y*u*obj.AbsAz')*W;
+
+        #println(maximum(S))
+
+        u .= X*S*W';
+
+        ################## scattering ##################
+        #for j = 1:(obj.settings.NCells-1)
+        #    u[j,:] = (I + obj.settings.dE *D)\u[j,:];
+        #end
+        #X,S,W = svd(u);
+
+        for j = 1:size(uNew,1)
+            u[j,:] = (Id .+ dE*D)\u[j,:];
+        end
+        X,S,W = svd(u);
+
+        # rank-r truncation:
+        X = X[:,1:r];
+        W = W[:,1:r];
+        S = Diagonal(S);
+        S = S[1:r, 1:r];
+
+        next!(prog) # update progress bar
+               
+        # update dose
+        obj.dose .+= dE * uNew[:,1] * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+    end
+
+    # return end time and solution
+    return 0.5*sqrt(obj.gamma[1])*X*S*W',obj.dose;
+
+end
+
+
+function SolveUnconventional(obj::SolverCSD)
+    # Get rank
+    r=15;
+
+    eTrafo = obj.csd.eTrafo;
+    energy = obj.csd.eGrid;
+
+    # Set up initial condition and store as matrix
+    v = SetupIC(obj);
+    nx = obj.settings.NCellsX;
+    ny = obj.settings.NCellsY;
+    N = obj.pn.nTotalEntries
+    u = zeros(nx*ny,N);
+    for k = 1:N
+        u[:,k] = vec(v[:,:,k]);
+    end
+
+    # Low-rank approx of init data:
+    X,S,W = svd(u);
+    
+    # rank-r truncation:
+    X = X[:,1:r];
+    W = W[:,1:r];
+    S = Diagonal(S);
+    S = S[1:r, 1:r];
+    K = zeros(size(X));
+
+    # define density matrix
+    densityInv = Diagonal(1.0 ./obj.density);
+    Id = Diagonal(ones(N));
+
+    # setup gamma vector (square norm of P) to nomralize
+    settings = obj.settings
+
+    nEnergies = length(eTrafo);
+    dE = eTrafo[2]-eTrafo[1];
+    obj.settings.dE = dE
+
+    println("CFL = ",dE/obj.settings.dx*maximum(densityInv))
+
+    uNew = deepcopy(u)
+
+    out = zeros(nx*ny,N);
+    vout = RhsMatrix(obj,v)
+    for k = 1:N
+        out[:,k] = vec(vout[:,:,k]');
+    end
+
+    WAxW = zeros(r,r)
+    WAzW = zeros(r,r)
+    WAbsAxW = zeros(r,r)
+    WAbsAzW = zeros(r,r)
+
+    XL2xX = zeros(r,r)
+    XL2yX = zeros(r,r)
+    XL1xX = zeros(r,r)
+    XL1yX = zeros(r,r)
+
+    MUp = zeros(r,r)
+    NUp = zeros(r,r)
+
+    XNew = zeros(nx*ny,r)
+    STmp = zeros(r,r)
+
+    println("error rhs = ",norm(Rhs(obj,u) - out))
+    println("norm rhs = ",norm(Rhs(obj,u)))
+    println("norm rhs = ",norm(out))
+
+    prog = Progress(nEnergies,1)
+
+    for n=1:nEnergies
+
+        # compute scattering coefficients at current energy
+        sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
+       
+        Dvec = zeros(obj.pn.nTotalEntries)
+        for l = 0:obj.pn.N
+            for k=-l:l
+                i = GlobalIndex( l, k );
+                Dvec[i+1] = sigmaS[l+1]
+            end
+        end
+
+        D = Diagonal(sigmaS[1] .- Dvec);
+
+        ################## K-step ##################
+        K .= X*S;
+
+        WAzW .= W'*obj.pn.Az'*W
+        WAbsAzW .= W'*obj.AbsAz'*W
+        WAbsAxW .= W'*obj.AbsAx'*W
+        WAxW .= W'*obj.pn.Ax'*W
+
+        K .= K .- dE*(obj.L2x*K*WAxW + obj.L2y*K*WAzW + obj.L1x*K*WAbsAxW + obj.L1y*K*WAbsAzW);
+
+        XNew,STmp = qr!(K);
+        XNew = Matrix(XNew)
+        XNew = XNew[:,1:r];
+
+        MUp .= XNew' * X;
+        ################## L-step ##################
+        L = W*S';
+
+        XL2xX .= X'*obj.L2x*X
+        XL2yX .= X'*obj.L2y*X
+        XL1xX .= X'*obj.L1x*X
+        XL1yX .= X'*obj.L1y*X
+
+        L .= L .- dE*(obj.pn.Ax*L*XL2xX' + obj.pn.Az*L*XL2yX' + obj.AbsAx*L*XL1xX' + obj.AbsAz*L*XL1yX');
+                
+        WNew,STmp = qr(L);
+        WNew = Matrix(WNew)
+        WNew = WNew[:,1:r];
+
+        NUp .= WNew' * W;
+        W .= WNew;
+        X .= XNew;
+        ################## S-step ##################
+        S .= MUp*S*(NUp')
+
+        XL2xX .= X'*obj.L2x*X
+        XL2yX .= X'*obj.L2y*X
+        XL1xX .= X'*obj.L1x*X
+        XL1yX .= X'*obj.L1y*X
+
+        WAzW .= W'*obj.pn.Az'*W
+        WAbsAzW .= W'*obj.AbsAz'*W
+        WAbsAxW .= W'*obj.AbsAx'*W
+        WAxW .= W'*obj.pn.Ax'*W
+
+        S .= S .- dE.*(XL2xX*S*WAxW + XL2yX*S*WAzW + XL1xX*S*WAbsAxW + XL1yX*S*WAbsAzW);
+        ############## Scattering ##############
+        L .= W*S';
+        for i = 1:r
+            L[:,i] = (Id .+ dE*D)\L[:,i]
+        end
+
+        W,S = qr(L);
+        W = Matrix(W)
+        W = W[:, 1:r];
+        S = Matrix(S)
+        S = S[1:r, 1:r];
+
+        S .= S';
+
+        next!(prog) # update progress bar
+        # update dose
+        obj.dose .+= dE * X*S*W[1,:] * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+
+    end
+
+    # return end time and solution
+    return 0.5*sqrt(obj.gamma[1])*X*S*W',obj.dose;
+
+end
+
+
 function vectorIndex(nx,i,j)
     return (i-1)*nx + j;
 end

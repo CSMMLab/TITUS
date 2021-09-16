@@ -9,7 +9,7 @@ using WriteVTK
 
 close("all")
 
-s = Settings(701,701);
+s = Settings(401,401);
 
 if s.problem == "AirCavity"
     smapIn = readdlm("dose_ac.txt", ',', Float64)
@@ -34,7 +34,7 @@ end
 ############################
 solver = SolverCSD(s)
 
-@time u, dose = Solve(solver);
+@time u, dose = SolveUnconventional(solver);
 
 u = Vec2Mat(s.NCellsX,s.NCellsY,u)
 dose = Vec2Mat(s.NCellsX,s.NCellsY,dose)
