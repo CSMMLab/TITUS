@@ -5,6 +5,8 @@ using LinearAlgebra
 using LegendrePolynomials
 using QuadGK
 using SparseArrays
+using SphericalHarmonics
+using MultivariatePolynomials
 
 include("CSD.jl")
 include("PNSystem.jl")
@@ -230,12 +232,16 @@ end
 
 function SetupIC(obj::SolverCSD)
     u = zeros(obj.settings.NCellsX,obj.settings.NCellsY,obj.pn.nTotalEntries);
-    if obj.settings.problem == "2DDirected"
+    S = SphericalHarmonics.cache(1);
+    theta = 0.0;
+    computePlmcostheta!(S, theta, obj.settings.nPN)
+    Y = real(computeYlm!(S, 0.0, 0.0, 1))
+    if obj.settings.problem == "CT"
         PCurrent = collectPl(1,lmax=obj.settings.nPN);
         for l = 0:obj.settings.nPN
             for k=-l:l
                 i = GlobalIndex( l, k )+1;
-                u[:,:,i] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid) .* PCurrent[l]/sqrt(obj.gamma[l+1])
+                u[:,:,i] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)*Y[i];#obj.csd.StarMAPmoments[i]# .* PCurrent[l]/sqrt(obj.gamma[l+1])
             end
         end
     elseif obj.settings.problem == "2D" || obj.settings.problem == "2DHighD"
@@ -314,7 +320,6 @@ function RhsMatrix(obj::SolverCSD,u::Array{Float64,3},t::Float64=0.0)
 end
 
 function Rhs(obj::SolverCSD,u::Array{Float64,2},t::Float64=0.0)   
-
     return obj.L2x*u*obj.pn.Ax' + obj.L2y*u*obj.pn.Az' + obj.L1x*u*obj.AbsAx' + obj.L1y*u*obj.AbsAz';
 end
 
@@ -416,7 +421,7 @@ end
 
 function SolveNaiveUnconventional(obj::SolverCSD)
     # Get rank
-    r=5;
+    r=obj.settings.r;
 
     eTrafo = obj.csd.eTrafo;
     energy = obj.csd.eGrid;
@@ -546,7 +551,7 @@ end
 
 function SolveUnconventional(obj::SolverCSD)
     # Get rank
-    r=15;
+    r=obj.settings.r;
 
     eTrafo = obj.csd.eTrafo;
     energy = obj.csd.eGrid;
@@ -699,7 +704,6 @@ function SolveUnconventional(obj::SolverCSD)
     return 0.5*sqrt(obj.gamma[1])*X*S*W',obj.dose;
 
 end
-
 
 function vectorIndex(nx,i,j)
     return (i-1)*nx + j;

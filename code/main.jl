@@ -9,7 +9,7 @@ using WriteVTK
 
 close("all")
 
-s = Settings(401,401);
+s = Settings(151,151,15);
 
 if s.problem == "AirCavity"
     smapIn = readdlm("dose_ac.txt", ',', Float64)
@@ -35,6 +35,7 @@ end
 solver = SolverCSD(s)
 
 @time u, dose = SolveUnconventional(solver);
+#@time u, dose = Solve(solver);
 
 u = Vec2Mat(s.NCellsX,s.NCellsY,u)
 dose = Vec2Mat(s.NCellsX,s.NCellsY,dose)
@@ -69,6 +70,12 @@ pcolormesh(dose)
 #colorbar()
 savefig("output/doseNx$(s.Nx)")
 
+fig = figure("density",figsize=(10,10),dpi=100)
+
+pcolormesh(solver.density)
+#colorbar()
+savefig("output/densityNx$(s.Nx)")
+
 fig = figure("u Contour",figsize=(10,10),dpi=100)
 
 pcolormesh(u[:,:,1])
@@ -78,7 +85,9 @@ savefig("output/u0Nx$(s.Nx)")
 fig, ax = subplots()
 nyRef = length(yRef)
 ax.plot(s.xMid,dose[:,Int(floor(s.NCellsY/2))]./maximum(dose[:,Int(floor(s.NCellsY/2))]), "r--", linewidth=2, label="CSD", alpha=0.8)
-ax.plot(xRef',doseRef[:,Int(floor(nyRef/2))]./maximum(doseRef[:,Int(floor(nyRef/2))]), "k-", linewidth=2, label="Starmap", alpha=0.6)
+if s.problem == "2DHighD"
+    ax.plot(xRef',doseRef[:,Int(floor(nyRef/2))]./maximum(doseRef[:,Int(floor(nyRef/2))]), "k-", linewidth=2, label="Starmap", alpha=0.6)
+end
 #ax.plot(csd.eGrid,csd.S, "r--o", linewidth=2, label="S", alpha=0.6)
 ax.legend(loc="upper left")
 ax.set_xlim([s.c,s.d])

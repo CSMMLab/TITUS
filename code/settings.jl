@@ -1,4 +1,7 @@
 __precompile__
+
+using Images, FileIO
+
 mutable struct Settings
     # grid settings
     # number spatial interfaces
@@ -43,7 +46,10 @@ mutable struct Settings
     # patient density
     density::Array{Float64,2};
 
-    function Settings(Nx::Int=102,Ny::Int=102,problem::String="LineSource")
+    # rank
+    r::Int;
+
+    function Settings(Nx::Int=102,Ny::Int=102,r::Int=15,problem::String="LineSource")
 
         # spatial grid setting
         NCellsX = Nx - 1;
@@ -55,18 +61,30 @@ mutable struct Settings
         c = 0.0; # lower boundary
         d = 1.0; # upper boundary
 
-        problem = "2DHighD" # WaterPhantomKerstin, AirCavity, 2D, 2DHighD
+        problem = "CT" # WaterPhantomKerstin, AirCavity, 2D, 2DHighD, CT
 
         density = ones(NCellsX,NCellsY);
 
         # physical parameters
         sigmaS = 0.0;
         sigmaA = 0.0; 
+        eMax = 1.0
         if problem =="LineSource"
             sigmaS = 1.0;
             sigmaA = 0.0;        
         elseif problem =="2DHighD"
             density[Int(floor(NCellsX*0.56/(b-a))):end,:] .= 5.0;
+        elseif problem =="CT"
+            img = Float64.(Gray.(load("phantom.png")))
+            nx = size(img,1)
+            ny = size(img,2)
+            densityMin = 0.1
+            for i = 1:NCellsX
+                for j = 1:NCellsY
+                    density[i,j] = max(0*img[Int(floor(i/NCellsX*nx)),Int(floor(j/NCellsY*ny))],densityMin)
+                end
+            end
+            eMax = 50.0
         end
         sigmaT = sigmaA + sigmaS;
 
@@ -83,7 +101,6 @@ mutable struct Settings
         yMid = y[1:(end-1)].+0.5*dy
 
         # time settings
-        eMax = 1.0
         cfl = 1.7#1.4#1.2#0.6#1.9; # CFL condition
         dE = cfl*dx*minimum(density);
         
@@ -91,13 +108,16 @@ mutable struct Settings
         nPN = 13; # use odd number
 
         # build class
-        new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,sigmaT,sigmaS,density);
+        new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,sigmaT,sigmaS,density,r);
     end
 end
 
 function IC(obj::Settings,x,y)
     posBeamX = 0.5;
     posBeamY = 0.5;
+    if obj.problem == "CT"
+        #posBeamX = obj.a;
+    end
     x0 = x .- posBeamX;
     y0 = y .- posBeamY;
     out = zeros(length(x),length(y));
