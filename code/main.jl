@@ -9,7 +9,7 @@ using WriteVTK
 
 close("all")
 
-s = Settings(151,151,15);
+s = Settings(251,251,15);
 
 if s.problem == "AirCavity"
     smapIn = readdlm("dose_ac.txt", ',', Float64)
@@ -72,14 +72,15 @@ savefig("output/doseNx$(s.Nx)")
 
 fig = figure("density",figsize=(10,10),dpi=100)
 
-pcolormesh(solver.density)
+pcolormesh(solver.density,cmap="gray")
+contour(dose, 30,cmap="magma")
 #colorbar()
 savefig("output/densityNx$(s.Nx)")
 
 fig = figure("u Contour",figsize=(10,10),dpi=100)
 
 pcolormesh(u[:,:,1])
-savefig("output/u0Nx$(s.Nx)")
+#CS = plt.pcolormesh(X, Y, Z)
 
 # line plot dose
 fig, ax = subplots()

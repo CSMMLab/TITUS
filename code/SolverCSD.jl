@@ -5,11 +5,12 @@ using LinearAlgebra
 using LegendrePolynomials
 using QuadGK
 using SparseArrays
-using SphericalHarmonics
+using SphericalHarmonicExpansions,SphericalHarmonics,TypedPolynomials,GSL
 using MultivariatePolynomials
 
 include("CSD.jl")
 include("PNSystem.jl")
+include("quadratures/Quadrature.jl")
 
 struct SolverCSD
     # spatial grid of cell interfaces
@@ -50,6 +51,10 @@ struct SolverCSD
     L1y::SparseMatrixCSC{Float64, Int64};
     L2x::SparseMatrixCSC{Float64, Int64};
     L2y::SparseMatrixCSC{Float64, Int64};
+
+    Q::Quadrature
+    O::Array{Float64,2};
+    M::Array{Float64,2};
 
     # constructor
     function SolverCSD(settings)
@@ -226,22 +231,82 @@ struct SolverCSD
         end
         L2y = sparse(II,J,vals,nx*ny,nx*ny);
 
-        new(x,y,settings,outRhs,gamma,AbsAx,AbsAz,P,mu,w,csd,pn,density,vec(density'),dose,L1x,L1y,L2x,L2y);
+        # setup quadrature
+        qorder = 2; # must be even for standard quadrature
+        qtype = 1; # Type must be 1 for "standard" or 2 for "octa" and 3 for "ico".
+        Q = Quadrature(qorder,qtype)
+
+        Ωs = Q.pointsxyz
+        weights = Q.weights
+        Norder = (qorder+1)*(qorder+1)
+        nq = length(weights);
+
+        Y = zeros(qorder +1,2*(qorder +1)+1,nq)
+        YY = zeros(Norder,nq)
+        @polyvar xx yy zz
+        counter = 1
+        for l=0:qorder
+            for m=-l:l
+                sphericalh = ylm(l,m,xx,yy,zz)
+                for q = 1 : nq
+                    Y[l+1,m+l+1,q] = sphericalh(xx=>Ωs[q,1],yy=>Ωs[q,2],zz=>Ωs[q,3])
+                    YY[counter,q] =  sphericalh(xx=>Ωs[q,1],yy=>Ωs[q,2],zz=>Ωs[q,3])
+                end
+                counter += 1
+            end
+        end
+        normY = zeros(Norder);
+        for i = 1:Norder
+            for k = 1:nq
+                normY[i] = normY[i] + YY[i,k]^2
+            end
+        end
+        normY = sqrt.(normY)
+    
+        Mat = zeros(nq,nq)
+        O = zeros(nq,Norder)
+        M = zeros(Norder,nq)
+        for i=1:nq
+            for j=1:nq
+                counter = 1
+                for l=0:qorder
+                    for m=-l:l
+                        O[i,counter] = YY[counter,i] # / normY[counter] 
+                        M[counter,j] = YY[counter,j]*weights[j]# / normY[counter]
+                        counter += 1
+                    end
+                end
+            end
+        end
+        
+        v = O*M*ones(nq)
+    
+        counter = 1
+        for q=1:nq
+            O[q,:] /= v[q]
+        end
+
+        v = O*M*ones(nq)
+
+        println(v)
+
+        new(x,y,settings,outRhs,gamma,AbsAx,AbsAz,P,mu,w,csd,pn,density,vec(density'),dose,L1x,L1y,L2x,L2y,Q,O,M);
     end
 end
 
 function SetupIC(obj::SolverCSD)
     u = zeros(obj.settings.NCellsX,obj.settings.NCellsY,obj.pn.nTotalEntries);
-    S = SphericalHarmonics.cache(1);
     theta = 0.0;
-    computePlmcostheta!(S, theta, obj.settings.nPN)
-    Y = real(computeYlm!(S, 0.0, 0.0, 1))
+    phi = 0.0;
+    Y = computeYlm(theta, phi, lmax = obj.settings.nPN, SHType = SphericalHarmonics.RealHarmonics())
+    
     if obj.settings.problem == "CT"
         PCurrent = collectPl(1,lmax=obj.settings.nPN);
         for l = 0:obj.settings.nPN
             for k=-l:l
                 i = GlobalIndex( l, k )+1;
-                u[:,:,i] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)*Y[i];#obj.csd.StarMAPmoments[i]# .* PCurrent[l]/sqrt(obj.gamma[l+1])
+                #u[:,:,i] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)*Y[i];#obj.csd.StarMAPmoments[i]# .* PCurrent[l]/sqrt(obj.gamma[l+1])
+                u[:,:,i] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)*obj.csd.StarMAPmoments[i]
             end
         end
     elseif obj.settings.problem == "2D" || obj.settings.problem == "2DHighD"
@@ -321,6 +386,94 @@ end
 
 function Rhs(obj::SolverCSD,u::Array{Float64,2},t::Float64=0.0)   
     return obj.L2x*u*obj.pn.Ax' + obj.L2y*u*obj.pn.Az' + obj.L1x*u*obj.AbsAx' + obj.L1y*u*obj.AbsAz';
+end
+
+function SolveFirstCollisionSource(obj::SolverCSD)
+    eTrafo = obj.csd.eTrafo;
+    energy = obj.csd.eGrid;
+    S = obj.csd.S;
+
+    # Set up initial condition and store as matrix
+    v = SetupIC(obj);
+    nx = obj.settings.NCellsX;
+    ny = obj.settings.NCellsY;
+    N = obj.pn.nTotalEntries
+    u = zeros(nx*ny,N);
+    for k = 1:N
+        u[:,k] = vec(v[:,:,k]);
+    end
+
+    # define density matrix
+    densityInv = Diagonal(1.0 ./obj.density);
+    Id = Diagonal(ones(N));
+
+    # setup gamma vector (square norm of P) to nomralize
+    settings = obj.settings
+
+    nEnergies = length(eTrafo);
+    dE = eTrafo[2]-eTrafo[1];
+    obj.settings.dE = dE
+
+    println("CFL = ",dE/obj.settings.dx*maximum(densityInv))
+
+    uNew = deepcopy(u)
+
+    prog = Progress(nEnergies,1)
+
+    out = zeros(nx*ny,N);
+    vout = RhsMatrix(obj,v)
+    for k = 1:N
+        out[:,k] = vec(vout[:,:,k]');
+    end
+
+    println("error rhs = ",norm(Rhs(obj,u) - out))
+    println("norm rhs = ",norm(Rhs(obj,u)))
+    println("norm rhs = ",norm(out))
+
+    #loop over energy
+    for n=1:nEnergies
+        # compute scattering coefficients at current energy
+        sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
+
+        # stream uncollided particles
+       
+        Dvec = zeros(obj.pn.nTotalEntries)
+        for l = 0:obj.pn.N
+            for k=-l:l
+                i = GlobalIndex( l, k );
+                Dvec[i+1] = sigmaS[l+1]
+            end
+        end
+
+        D = Diagonal(sigmaS[1] .- Dvec);
+
+        # set boundary condition
+        #u[1,:] .= BCLeft(obj,n);
+
+        # perform time update
+        uTilde = u .- dE * Rhs(obj,u); 
+
+        #uTilde[1,:] .= BCLeft(obj,n);
+        #uNew = uTilde .- dE*uTilde*D;
+        for j = 1:size(uNew,1)
+            uNew[j,:] = (Id .+ dE*D)\uTilde[j,:];
+        end
+        
+        # update dose
+        obj.dose .+= dE * uNew[:,1] * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+        #if n > 1 && n < nEnergies
+        #    obj.dose .+= 0.5 * dE * ( uNew[:,:,1] * S[n] + u[:,:,1] * S[n - 1] ) ./ obj.density;    # update dose with trapezoidal rule
+            #obj.dose .+= dE * uNew[:,:,1] * SMinus[n] ./ obj.density;
+        #else
+        #    obj.dose .+= 0.5*dE * uNew[:,:,1] * S[n] ./ obj.density;
+        #end
+
+        u .= uNew;
+        next!(prog) # update progress bar
+    end
+    # return end time and solution
+    return 0.5*sqrt(obj.gamma[1])*u,obj.dose;
+
 end
 
 function Solve(obj::SolverCSD)
@@ -404,12 +557,6 @@ function Solve(obj::SolverCSD)
         
         # update dose
         obj.dose .+= dE * uNew[:,1] * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
-        #if n > 1 && n < nEnergies
-        #    obj.dose .+= 0.5 * dE * ( uNew[:,:,1] * S[n] + u[:,:,1] * S[n - 1] ) ./ obj.density;    # update dose with trapezoidal rule
-            #obj.dose .+= dE * uNew[:,:,1] * SMinus[n] ./ obj.density;
-        #else
-        #    obj.dose .+= 0.5*dE * uNew[:,:,1] * S[n] ./ obj.density;
-        #end
 
         u .= uNew;
         next!(prog) # update progress bar
@@ -547,7 +694,6 @@ function SolveNaiveUnconventional(obj::SolverCSD)
     return 0.5*sqrt(obj.gamma[1])*X*S*W',obj.dose;
 
 end
-
 
 function SolveUnconventional(obj::SolverCSD)
     # Get rank

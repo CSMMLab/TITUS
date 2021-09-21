@@ -61,7 +61,7 @@ mutable struct Settings
         c = 0.0; # lower boundary
         d = 1.0; # upper boundary
 
-        problem = "CT" # WaterPhantomKerstin, AirCavity, 2D, 2DHighD, CT
+        problem = "2DHighD" # WaterPhantomKerstin, AirCavity, 2D, 2DHighD, CT
 
         density = ones(NCellsX,NCellsY);
 
@@ -81,10 +81,10 @@ mutable struct Settings
             densityMin = 0.1
             for i = 1:NCellsX
                 for j = 1:NCellsY
-                    density[i,j] = max(0*img[Int(floor(i/NCellsX*nx)),Int(floor(j/NCellsY*ny))],densityMin)
+                    density[i,j] = max(5*img[Int(floor(i/NCellsX*nx)),Int(floor(j/NCellsY*ny))],densityMin)
                 end
             end
-            eMax = 50.0
+            eMax = 10.0
         end
         sigmaT = sigmaA + sigmaS;
 
