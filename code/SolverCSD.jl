@@ -286,38 +286,22 @@ struct SolverCSD
             O[q,:] /= v[q]
         end
 
-        v = O*M*ones(nq)
-
-        println(v)
-
         new(x,y,settings,outRhs,gamma,AbsAx,AbsAz,P,mu,w,csd,pn,density,vec(density'),dose,L1x,L1y,L2x,L2y,Q,O,M);
     end
 end
 
 function SetupIC(obj::SolverCSD)
-    u = zeros(obj.settings.NCellsX,obj.settings.NCellsY,obj.pn.nTotalEntries);
-    theta = 0.0;
-    phi = 0.0;
-    Y = computeYlm(theta, phi, lmax = obj.settings.nPN, SHType = SphericalHarmonics.RealHarmonics())
+    nq = obj.Q.nquadpoints;
+    psi = zeros(obj.settings.NCellsX,obj.settings.NCellsY,nq);
     
-    if obj.settings.problem == "CT"
-        PCurrent = collectPl(1,lmax=obj.settings.nPN);
-        for l = 0:obj.settings.nPN
-            for k=-l:l
-                i = GlobalIndex( l, k )+1;
-                #u[:,:,i] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)*Y[i];#obj.csd.StarMAPmoments[i]# .* PCurrent[l]/sqrt(obj.gamma[l+1])
-                u[:,:,i] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)*obj.csd.StarMAPmoments[i]
-            end
-        end
-    elseif obj.settings.problem == "2D" || obj.settings.problem == "2DHighD"
-        for l = 0:obj.settings.nPN
-            for k=-l:l
-                i = GlobalIndex( l, k )+1;
-                u[:,:,i] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)*obj.csd.StarMAPmoments[i]
+    if obj.settings.problem == "CT" || obj.settings.problem == "2D" || obj.settings.problem == "2DHighD"
+        for k = 1:nq
+            if obj.Q.pointsxyz[k][1] > 0.9
+                psi[:,:,k] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)
             end
         end
     end
-    return u;
+    return psi;
 end
 
 function PsiLeft(obj::SolverCSD,n::Int,mu::Float64)
@@ -388,20 +372,121 @@ function Rhs(obj::SolverCSD,u::Array{Float64,2},t::Float64=0.0)
     return obj.L2x*u*obj.pn.Ax' + obj.L2y*u*obj.pn.Az' + obj.L1x*u*obj.AbsAx' + obj.L1y*u*obj.AbsAz';
 end
 
+# the first minmod code is the fast version of the second minmod  below that is commented
+@inline minmod(x::Float64, y::Float64) = ifelse(x < 0, clamp(y, x, 0.0), clamp(y, 0.0, x))
+#@inline function minmod(x::Float64, y::Float64)
+#    return sign(x) * max(0.0, min(abs(x),y*sign(x) ) );
+#end
+
+@inline function slopefit(left::Float64, center::Float64, right::Float64)
+    tmp = minmod(0.5 * (right - left),2.0 * (center - left));
+    return minmod(2.0 * (right - center),tmp);
+end
+
+function solveFlux!(obj::SolverCSD, phi::Array{Float64,3}, flux::Array{Float64,3})
+    # computes the numerical flux over cell boundaries for each ordinate
+    # for faster computation, we split the iteration over quadrature points
+    # into four different blocks: North West, Nort East, Sout West, South East
+    # this corresponds to the direction the ordinates point to
+    idxPosPos = findall((obj.Q.pointsxyz[:,1].>=0.0) .&(obj.Q.pointsxyz[:,2].>=0.0))
+    idxPosNeg = findall((obj.Q.pointsxyz[:,1].>=0.0) .&(obj.Q.pointsxyz[:,2].<0.0))
+    idxNegPos = findall((obj.Q.pointsxyz[:,1].<0.0)  .&(obj.Q.pointsxyz[:,2].>=0.0))
+    idxNegNeg = findall((obj.Q.pointsxyz[:,1].<0.0)  .&(obj.Q.pointsxyz[:,2].<0.0))
+
+    nx = collect(3:(obj.settings.NCellsX-2));
+    ny = collect(3:(obj.settings.NCellsY-2));
+
+    # PosPos
+    for j=nx,i=ny, q = idxPosPos
+        s1 = phi[i,j-2,q]
+        s2 = phi[i,j-1,q]
+        s3 = phi[i,j,q]
+        s4 = phi[i,j+1,q]
+        northflux = s3+0.5 .*slopefit(s2,s3,s4)
+        southflux = s2+0.5 .*slopefit(s1,s2,s3)
+
+        s1 = phi[i-2,j,q]
+        s2 = phi[i-1,j,q]
+        s3 = phi[i,j,q]
+        s4 = phi[i+1,j,q]
+        eastflux = s3+0.5 .*slopefit(s2,s3,s4)
+        westflux = s2+0.5 .*slopefit(s1,s2,s3)
+
+        flux[i,j,q] = obj.Q.pointsxyz[q,1] ./obj.settings.dx .* (eastflux-westflux) +
+        obj.Q.pointsxyz[q,2]./obj.settings.dy .* (northflux-southflux)
+    end
+    #PosNeg
+    for j=nx,i=ny,q = idxPosNeg
+        s1 = phi[i,j-1,q]
+        s2 = phi[i,j,q]
+        s3 = phi[i,j+1,q]
+        s4 = phi[i,j+2,q]
+        northflux = s3-0.5 .* slopefit(s2,s3,s4)
+        southflux = s2-0.5 .*slopefit(s1,s2,s3)
+
+        s1 = phi[i-2,j,q]
+        s2 = phi[i-1,j,q]
+        s3 = phi[i,j,q]
+        s4 = phi[i+1,j,q]
+        eastflux = s3+0.5 .*slopefit(s2,s3,s4)
+        westflux = s2+0.5 .*slopefit(s1,s2,s3)
+
+        flux[i,j,q] = obj.Q.pointsxyz[q,1] ./obj.settings.dx .*(eastflux-westflux) +
+        obj.Q.pointsxyz[q,2] ./obj.settings.dy .*(northflux-southflux)
+    end
+
+    # NegPos
+    for j=nx,i=ny,q = idxNegPos
+        s1 = phi[i,j-2,q]
+        s2 = phi[i,j-1,q]
+        s3 = phi[i,j,q]
+        s4 = phi[i,j+1,q]
+        northflux = s3+0.5 .*slopefit(s2,s3,s4)
+        southflux = s2+0.5 .*slopefit(s1,s2,s3)
+
+        s1 = phi[i-1,j,q]
+        s2 = phi[i,j,q]
+        s3 = phi[i+1,j,q]
+        s4 = phi[i+2,j,q]
+        eastflux = s3-0.5 .*slopefit(s2,s3,s4)
+        westflux = s2-0.5 .*slopefit(s1,s2,s3)
+
+        flux[i,j,q] = obj.Q.pointsxyz[q,1]./obj.settings.dx .*(eastflux-westflux) +
+        obj.Q.pointsxyz[q,2] ./obj.settings.dy .*(northflux-southflux)
+    end
+
+    # NegNeg
+    for j=nx,i=ny,q = idxNegNeg
+        s1 = phi[i,j-1,q]
+        s2 = phi[i,j,q]
+        s3 = phi[i,j+1,q]
+        s4 = phi[i,j+2,q]
+        northflux = s3-0.5 .* slopefit(s2,s3,s4)
+        southflux = s2-0.5 .* slopefit(s1,s2,s3)
+
+        s1 = phi[i-1,j,q]
+        s2 = phi[i,j,q]
+        s3 = phi[i+1,j,q]
+        s4 = phi[i+2,j,q]
+        eastflux = s3-0.5 .* slopefit(s2,s3,s4)
+        westflux = s2-0.5 .* slopefit(s1,s2,s3)
+
+        flux[i,j,q] = obj.Q.pointsxyz[q,1] ./obj.settings.dx .*(eastflux-westflux) +
+        obj.Q.pointsxyz[q,2] ./obj.settings.dy .*(northflux-southflux)
+    end
+end
+
 function SolveFirstCollisionSource(obj::SolverCSD)
     eTrafo = obj.csd.eTrafo;
     energy = obj.csd.eGrid;
     S = obj.csd.S;
 
     # Set up initial condition and store as matrix
-    v = SetupIC(obj);
+    psi = SetupIC(obj);
     nx = obj.settings.NCellsX;
     ny = obj.settings.NCellsY;
+    nq = obj.Q.nquadpoints;
     N = obj.pn.nTotalEntries
-    u = zeros(nx*ny,N);
-    for k = 1:N
-        u[:,k] = vec(v[:,:,k]);
-    end
 
     # define density matrix
     densityInv = Diagonal(1.0 ./obj.density);
@@ -416,19 +501,12 @@ function SolveFirstCollisionSource(obj::SolverCSD)
 
     println("CFL = ",dE/obj.settings.dx*maximum(densityInv))
 
+    u = zeros(nx*ny,N);
     uNew = deepcopy(u)
+    psiNew = deepcopy(psi)
+    flux = zeros(size(psi))
 
     prog = Progress(nEnergies,1)
-
-    out = zeros(nx*ny,N);
-    vout = RhsMatrix(obj,v)
-    for k = 1:N
-        out[:,k] = vec(vout[:,:,k]');
-    end
-
-    println("error rhs = ",norm(Rhs(obj,u) - out))
-    println("norm rhs = ",norm(Rhs(obj,u)))
-    println("norm rhs = ",norm(out))
 
     #loop over energy
     for n=1:nEnergies
@@ -436,6 +514,8 @@ function SolveFirstCollisionSource(obj::SolverCSD)
         sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
 
         # stream uncollided particles
+        solveFlux!(obj,psi,flux);
+        psiNew .= psi .- dE*flux .- dE*obj.O*sigmaS[1]*obj.M*psi;
        
         Dvec = zeros(obj.pn.nTotalEntries)
         for l = 0:obj.pn.N
@@ -456,7 +536,7 @@ function SolveFirstCollisionSource(obj::SolverCSD)
         #uTilde[1,:] .= BCLeft(obj,n);
         #uNew = uTilde .- dE*uTilde*D;
         for j = 1:size(uNew,1)
-            uNew[j,:] = (Id .+ dE*D)\uTilde[j,:];
+            uNew[j,:] = (Id .+ dE*D)\(uTilde[j,:] .- dE*Diagonal(Dvec)*obj.M*psiNew[j,:]);
         end
         
         # update dose
@@ -469,6 +549,7 @@ function SolveFirstCollisionSource(obj::SolverCSD)
         #end
 
         u .= uNew;
+        psi .= psiNew;
         next!(prog) # update progress bar
     end
     # return end time and solution
