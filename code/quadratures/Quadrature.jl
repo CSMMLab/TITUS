@@ -5,6 +5,7 @@ include("standardQuadrature.jl")
 include("dim2Quadrature.jl")
 using FastGaussQuadrature
 
+# quadrature class written by Thomas Camminady
 
 export Quadrature
 export rotateandinterpolate!

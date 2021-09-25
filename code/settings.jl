@@ -61,7 +61,7 @@ mutable struct Settings
         c = 0.0; # lower boundary
         d = 1.0; # upper boundary
 
-        problem = "2DHighD" # WaterPhantomKerstin, AirCavity, 2D, 2DHighD, CT
+        problem = "CT" # WaterPhantomKerstin, AirCavity, 2D, 2DHighD, CT
 
         density = ones(NCellsX,NCellsY);
 
@@ -78,13 +78,13 @@ mutable struct Settings
             img = Float64.(Gray.(load("phantom.png")))
             nx = size(img,1)
             ny = size(img,2)
-            densityMin = 0.1
+            densityMin = 0.3
             for i = 1:NCellsX
                 for j = 1:NCellsY
-                    density[i,j] = max(5*img[Int(floor(i/NCellsX*nx)),Int(floor(j/NCellsY*ny))],densityMin)
+                    density[i,j] = max(2*img[Int(floor(i/NCellsX*nx)),Int(floor(j/NCellsY*ny))],densityMin)
                 end
             end
-            eMax = 10.0
+            eMax = 1.0
         end
         sigmaT = sigmaA + sigmaS;
 
@@ -101,11 +101,11 @@ mutable struct Settings
         yMid = y[1:(end-1)].+0.5*dy
 
         # time settings
-        cfl = 1.7#1.4#1.2#0.6#1.9; # CFL condition
+        cfl = 1.7#1.7 # CFL condition
         dE = cfl*dx*minimum(density);
         
         # number PN moments
-        nPN = 13; # use odd number
+        nPN = 13#13; # use odd number
 
         # build class
         new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,sigmaT,sigmaS,density,r);

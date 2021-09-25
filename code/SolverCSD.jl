@@ -7,6 +7,7 @@ using QuadGK
 using SparseArrays
 using SphericalHarmonicExpansions,SphericalHarmonics,TypedPolynomials,GSL
 using MultivariatePolynomials
+using Einsum
 
 include("CSD.jl")
 include("PNSystem.jl")
@@ -232,24 +233,25 @@ struct SolverCSD
         L2y = sparse(II,J,vals,nx*ny,nx*ny);
 
         # setup quadrature
-        qorder = 2; # must be even for standard quadrature
+        qorder = settings.nPN+1; # must be even for standard quadrature
         qtype = 1; # Type must be 1 for "standard" or 2 for "octa" and 3 for "ico".
         Q = Quadrature(qorder,qtype)
 
         Ωs = Q.pointsxyz
         weights = Q.weights
-        Norder = (qorder+1)*(qorder+1)
+        #Norder = (qorder+1)*(qorder+1)
+        Norder = pn.nTotalEntries
         nq = length(weights);
 
-        Y = zeros(qorder +1,2*(qorder +1)+1,nq)
+        #Y = zeros(qorder +1,2*(qorder +1)+1,nq)
         YY = zeros(Norder,nq)
         @polyvar xx yy zz
         counter = 1
-        for l=0:qorder
+        for l=0:settings.nPN
             for m=-l:l
                 sphericalh = ylm(l,m,xx,yy,zz)
                 for q = 1 : nq
-                    Y[l+1,m+l+1,q] = sphericalh(xx=>Ωs[q,1],yy=>Ωs[q,2],zz=>Ωs[q,3])
+                    #Y[l+1,m+l+1,q] = sphericalh(xx=>Ωs[q,1],yy=>Ωs[q,2],zz=>Ωs[q,3])
                     YY[counter,q] =  sphericalh(xx=>Ωs[q,1],yy=>Ωs[q,2],zz=>Ωs[q,3])
                 end
                 counter += 1
@@ -269,7 +271,7 @@ struct SolverCSD
         for i=1:nq
             for j=1:nq
                 counter = 1
-                for l=0:qorder
+                for l=0:settings.nPN
                     for m=-l:l
                         O[i,counter] = YY[counter,i] # / normY[counter] 
                         M[counter,j] = YY[counter,j]*weights[j]# / normY[counter]
@@ -296,7 +298,7 @@ function SetupIC(obj::SolverCSD)
     
     if obj.settings.problem == "CT" || obj.settings.problem == "2D" || obj.settings.problem == "2DHighD"
         for k = 1:nq
-            if obj.Q.pointsxyz[k][1] > 0.9
+            if obj.Q.pointsxyz[k][1] > 0.5
                 psi[:,:,k] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)
             end
         end
@@ -507,6 +509,10 @@ function SolveFirstCollisionSource(obj::SolverCSD)
     flux = zeros(size(psi))
 
     prog = Progress(nEnergies,1)
+    scatSN = zeros(size(psi))
+    MapOrdinates = obj.O*obj.M
+
+    uOUnc = zeros(nx*ny);
 
     #loop over energy
     for n=1:nEnergies
@@ -515,7 +521,14 @@ function SolveFirstCollisionSource(obj::SolverCSD)
 
         # stream uncollided particles
         solveFlux!(obj,psi,flux);
-        psiNew .= psi .- dE*flux .- dE*obj.O*sigmaS[1]*obj.M*psi;
+
+        @einsum scatSN[i,j,k] = MapOrdinates[k,l]*psi[i,j,l]*sigmaS[1]
+
+        psi .= psi .- dE*flux;
+
+        @einsum scatSN[i,j,k] = MapOrdinates[k,l]*psi[i,j,l]*sigmaS[1]
+        
+        psiNew .= psi ./ (1+dE*sigmaS[1]);
        
         Dvec = zeros(obj.pn.nTotalEntries)
         for l = 0:obj.pn.N
@@ -535,12 +548,24 @@ function SolveFirstCollisionSource(obj::SolverCSD)
 
         #uTilde[1,:] .= BCLeft(obj,n);
         #uNew = uTilde .- dE*uTilde*D;
-        for j = 1:size(uNew,1)
-            uNew[j,:] = (Id .+ dE*D)\(uTilde[j,:] .- dE*Diagonal(Dvec)*obj.M*psiNew[j,:]);
+        
+        for i = 1:nx
+            for j = 1:ny
+                idx = (i-1)*nx + j
+                uNew[idx,:] = (Id .+ dE*D)\(uTilde[idx,:] .+ dE*Diagonal(Dvec)*obj.M*psiNew[i,j,:]);
+            end
         end
+
+        for i = 1:nx
+            for j = 1:ny
+                idx = (i-1)*nx + j
+                uOUnc[idx] = psiNew[i,j,:]'*obj.M[1,:];
+            end
+        end
+        println(maximum(psi)," ",maximum(abs.(uOUnc))," ",maximum(abs.(uNew[:,1])))
         
         # update dose
-        obj.dose .+= dE * uNew[:,1] * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+        obj.dose .+= dE * (uNew[:,1]+uOUnc) * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
         #if n > 1 && n < nEnergies
         #    obj.dose .+= 0.5 * dE * ( uNew[:,:,1] * S[n] + u[:,:,1] * S[n - 1] ) ./ obj.density;    # update dose with trapezoidal rule
             #obj.dose .+= dE * uNew[:,:,1] * SMinus[n] ./ obj.density;
