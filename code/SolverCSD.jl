@@ -52,6 +52,7 @@ struct SolverCSD
     L1y::SparseMatrixCSC{Float64, Int64};
     L2x::SparseMatrixCSC{Float64, Int64};
     L2y::SparseMatrixCSC{Float64, Int64};
+    boundaryIdx::Array{Int,1}
 
     Q::Quadrature
     O::Array{Float64,2};
@@ -232,6 +233,31 @@ struct SolverCSD
         end
         L2y = sparse(II,J,vals,nx*ny,nx*ny);
 
+        # collect boundary indices
+        boundaryIdx = zeros(Int,2*nx+2*ny)
+        counter = 0;
+        for i = 1:nx
+            counter +=1;
+            j = 1;
+            idx = (i-1)*nx + j;
+            boundaryIdx[counter] = idx
+            counter +=1;
+            j = ny;
+            idx = (i-1)*nx + j;
+            boundaryIdx[counter] = idx
+        end
+
+        for j = 1:ny
+            counter +=1;
+            i = 1;
+            idx = (i-1)*nx + j;
+            boundaryIdx[counter] = idx
+            counter +=1;
+            i = nx;
+            idx = (i-1)*nx + j;
+            boundaryIdx[counter] = idx
+        end
+
         # setup quadrature
         qorder = settings.nPN+1; # must be even for standard quadrature
         qtype = 1; # Type must be 1 for "standard" or 2 for "octa" and 3 for "ico".
@@ -288,7 +314,7 @@ struct SolverCSD
             O[q,:] /= v[q]
         end
 
-        new(x,y,settings,outRhs,gamma,AbsAx,AbsAz,P,mu,w,csd,pn,density,vec(density'),dose,L1x,L1y,L2x,L2y,Q,O,M);
+        new(x,y,settings,outRhs,gamma,AbsAx,AbsAz,P,mu,w,csd,pn,density,vec(density'),dose,L1x,L1y,L2x,L2y,boundaryIdx,Q,O,M);
     end
 end
 
@@ -629,6 +655,9 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     XNew = zeros(nx*ny,r)
     STmp = zeros(r,r)
 
+    # impose boundary condition
+    X[obj.boundaryIdx,:] .= 0.0;
+
     # setup gamma vector (square norm of P) to nomralize
     settings = obj.settings
 
@@ -657,12 +686,8 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         # stream uncollided particles
         solveFlux!(obj,psi,flux);
 
-        #@einsum scatSN[i,j,k] = MapOrdinates[k,l]*psi[i,j,l]*sigmaS[1]
-
         psi .= psi .- dE*flux;
 
-        #@einsum scatSN[i,j,k] = MapOrdinates[k,l]*psi[i,j,l]*sigmaS[1]
-        
         psiNew .= psi ./ (1+dE*sigmaS[1]);
        
         Dvec = zeros(obj.pn.nTotalEntries)
@@ -715,6 +740,9 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         XNew,STmp = qr!(K);
         XNew = Matrix(XNew)
         XNew = XNew[:,1:r];
+
+        # impose boundary condition
+        XNew[obj.boundaryIdx,:] .= 0.0;
 
         MUp .= XNew' * X;
         ################## L-step ##################
@@ -817,6 +845,9 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
     XNew = zeros(nx*ny,r)
     STmp = zeros(r,r)
 
+    # impose boundary condition
+    X[obj.boundaryIdx,:] .= 0.0;
+
     # setup gamma vector (square norm of P) to nomralize
     settings = obj.settings
 
@@ -904,6 +935,9 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         XNew = Matrix(XNew)
         XNew = XNew[:,1:2*r];
 
+        # impose boundary condition
+        XNew[obj.boundaryIdx,:] .= 0.0;
+
         MUp = XNew' * X;
         ################## L-step ##################
         L = W*S';
@@ -990,6 +1024,9 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         S = S[1:rmax,1:rmax];
         X = XNew[:,1:rmax];
         W = WNew[:,1:rmax];
+
+        # impose boundary condition
+        X[obj.boundaryIdx,:] .= 0.0;
 
         # update rank
         r = rmax;

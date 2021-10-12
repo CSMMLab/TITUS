@@ -9,7 +9,7 @@ using WriteVTK
 
 close("all")
 
-nx = 71;
+nx = 151;
 s = Settings(nx,nx,100);
 
 if s.problem == "AirCavity"
@@ -38,7 +38,7 @@ solver1 = SolverCSD(s)
 u = Vec2Mat(s.NCellsX,s.NCellsY,u)
 dose = Vec2Mat(s.NCellsX,s.NCellsY,dose)
 
-s = Settings(nx,nx,20);
+s = Settings(nx,nx,int(maximum(rankInTime[2,:])));
 solver2 = SolverCSD(s)
 @time u_DLR, dose_DLR = SolveFirstCollisionSourceDLR(solver2);
 
