@@ -522,11 +522,7 @@ function SolveFirstCollisionSource(obj::SolverCSD)
         # stream uncollided particles
         solveFlux!(obj,psi,flux);
 
-        @einsum scatSN[i,j,k] = MapOrdinates[k,l]*psi[i,j,l]*sigmaS[1]
-
         psi .= psi .- dE*flux;
-
-        @einsum scatSN[i,j,k] = MapOrdinates[k,l]*psi[i,j,l]*sigmaS[1]
         
         psiNew .= psi ./ (1+dE*sigmaS[1]);
        
@@ -553,15 +549,10 @@ function SolveFirstCollisionSource(obj::SolverCSD)
             for j = 1:ny
                 idx = (i-1)*nx + j
                 uNew[idx,:] = (Id .+ dE*D)\(uTilde[idx,:] .+ dE*Diagonal(Dvec)*obj.M*psiNew[i,j,:]);
-            end
-        end
-
-        for i = 1:nx
-            for j = 1:ny
-                idx = (i-1)*nx + j
                 uOUnc[idx] = psiNew[i,j,:]'*obj.M[1,:];
             end
         end
+
         println(maximum(psi)," ",maximum(abs.(uOUnc))," ",maximum(abs.(uNew[:,1])))
         
         # update dose
@@ -579,6 +570,186 @@ function SolveFirstCollisionSource(obj::SolverCSD)
     end
     # return end time and solution
     return 0.5*sqrt(obj.gamma[1])*u,obj.dose;
+
+end
+
+function SolveFirstCollisionSourceDLR(obj::SolverCSD)
+    # Get rank
+    r=obj.settings.r;
+
+    eTrafo = obj.csd.eTrafo;
+    energy = obj.csd.eGrid;
+    S = obj.csd.S;
+
+    # Set up initial condition and store as matrix
+    psi = SetupIC(obj);
+    nx = obj.settings.NCellsX;
+    ny = obj.settings.NCellsY;
+    nq = obj.Q.nquadpoints;
+    N = obj.pn.nTotalEntries
+    # Set up initial condition and store as matrix
+    u = zeros(nx*ny,N);
+    for k = 1:N
+        u[:,k] = vec(psi[:,:,k]);
+    end
+
+    # define density matrix
+    densityInv = Diagonal(1.0 ./obj.density);
+    Id = Diagonal(ones(N));
+
+    # Low-rank approx of init data:
+    X,S,W = svd(u);
+    
+    # rank-r truncation:
+    X = X[:,1:r];
+    W = W[:,1:r];
+    S = Diagonal(S);
+    S = S[1:r, 1:r];
+    K = zeros(size(X));
+
+    WAxW = zeros(r,r)
+    WAzW = zeros(r,r)
+    WAbsAxW = zeros(r,r)
+    WAbsAzW = zeros(r,r)
+
+    XL2xX = zeros(r,r)
+    XL2yX = zeros(r,r)
+    XL1xX = zeros(r,r)
+    XL1yX = zeros(r,r)
+
+    MUp = zeros(r,r)
+    NUp = zeros(r,r)
+
+    XNew = zeros(nx*ny,r)
+    STmp = zeros(r,r)
+
+    # setup gamma vector (square norm of P) to nomralize
+    settings = obj.settings
+
+    nEnergies = length(eTrafo);
+    dE = eTrafo[2]-eTrafo[1];
+    obj.settings.dE = dE
+
+    println("CFL = ",dE/obj.settings.dx*maximum(densityInv))
+
+    
+    uNew = deepcopy(u)
+    psiNew = deepcopy(psi)
+    flux = zeros(size(psi))
+
+    prog = Progress(nEnergies,1)
+    scatSN = zeros(size(psi))
+    MapOrdinates = obj.O*obj.M
+
+    uOUnc = zeros(nx*ny);
+
+    #loop over energy
+    for n=1:nEnergies
+        # compute scattering coefficients at current energy
+        sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
+
+        # stream uncollided particles
+        solveFlux!(obj,psi,flux);
+
+        #@einsum scatSN[i,j,k] = MapOrdinates[k,l]*psi[i,j,l]*sigmaS[1]
+
+        psi .= psi .- dE*flux;
+
+        #@einsum scatSN[i,j,k] = MapOrdinates[k,l]*psi[i,j,l]*sigmaS[1]
+        
+        psiNew .= psi ./ (1+dE*sigmaS[1]);
+       
+        Dvec = zeros(obj.pn.nTotalEntries)
+        for l = 0:obj.pn.N
+            for k=-l:l
+                i = GlobalIndex( l, k );
+                Dvec[i+1] = sigmaS[l+1]
+            end
+        end
+
+        D = Diagonal(sigmaS[1] .- Dvec);
+
+        ################## K-step ##################
+        K .= X*S;
+
+        WAzW .= W'*obj.pn.Az'*W
+        WAbsAzW .= W'*obj.AbsAz'*W
+        WAbsAxW .= W'*obj.AbsAx'*W
+        WAxW .= W'*obj.pn.Ax'*W
+
+        K .= K .- dE*(obj.L2x*K*WAxW + obj.L2y*K*WAzW + obj.L1x*K*WAbsAxW + obj.L1y*K*WAbsAzW);
+
+        XNew,STmp = qr!(K);
+        XNew = Matrix(XNew)
+        XNew = XNew[:,1:r];
+
+        MUp .= XNew' * X;
+        ################## L-step ##################
+        L = W*S';
+
+        XL2xX .= X'*obj.L2x*X
+        XL2yX .= X'*obj.L2y*X
+        XL1xX .= X'*obj.L1x*X
+        XL1yX .= X'*obj.L1y*X
+
+        L .= L .- dE*(obj.pn.Ax*L*XL2xX' + obj.pn.Az*L*XL2yX' + obj.AbsAx*L*XL1xX' + obj.AbsAz*L*XL1yX');
+                
+        WNew,STmp = qr(L);
+        WNew = Matrix(WNew)
+        WNew = WNew[:,1:r];
+
+        NUp .= WNew' * W;
+        W .= WNew;
+        X .= XNew;
+        ################## S-step ##################
+        S .= MUp*S*(NUp')
+
+        XL2xX .= X'*obj.L2x*X
+        XL2yX .= X'*obj.L2y*X
+        XL1xX .= X'*obj.L1x*X
+        XL1yX .= X'*obj.L1y*X
+
+        WAzW .= W'*obj.pn.Az'*W
+        WAbsAzW .= W'*obj.AbsAz'*W
+        WAbsAxW .= W'*obj.AbsAx'*W
+        WAxW .= W'*obj.pn.Ax'*W
+
+        S .= S .- dE.*(XL2xX*S*WAxW + XL2yX*S*WAzW + XL1xX*S*WAbsAxW + XL1yX*S*WAbsAzW);
+        ############## Scattering ##############
+        L .= W*S';
+        for i = 1:r
+            L[:,i] = (Id .+ dE*D)\L[:,i]
+        end
+
+        W,S = qr(L);
+        W = Matrix(W)
+        W = W[:, 1:r];
+        S = Matrix(S)
+        S = S[1:r, 1:r];
+
+        S .= S';
+
+       
+        for i = 1:nx
+            for j = 1:ny
+                idx = (i-1)*nx + j
+                uOUnc[idx] = psiNew[i,j,:]'*obj.M[1,:];
+            end
+        end
+
+        println(maximum(psi)," ",maximum(abs.(uOUnc))," ",maximum(abs.(uNew[:,1])))
+        
+        # update dose
+        #obj.dose .+= dE * (uNew[:,1]+uOUnc) * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+        next!(prog) # update progress bar
+        # update dose
+        obj.dose .+= dE * (X*S*W[1,:]+uOUnc) * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+
+        psi .= psiNew;
+        next!(prog) # update progress bar
+    end
+    # return end time and solution
+    return 0.5*sqrt(obj.gamma[1])*X*S*W',obj.dose;
 
 end
 
@@ -936,6 +1107,7 @@ function SolveUnconventional(obj::SolverCSD)
         L .= W*S';
         for i = 1:r
             L[:,i] = (Id .+ dE*D)\L[:,i]
+            LNew = L - dt*LNew*D
         end
 
         W,S = qr(L);

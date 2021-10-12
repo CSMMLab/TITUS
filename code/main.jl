@@ -9,7 +9,7 @@ using WriteVTK
 
 close("all")
 
-s = Settings(71,71,5);
+s = Settings(71,71,50);
 
 if s.problem == "AirCavity"
     smapIn = readdlm("dose_ac.txt", ',', Float64)
@@ -32,13 +32,19 @@ else
 end
 
 ############################
-solver = SolverCSD(s)
+solver1 = SolverCSD(s)
+solver2 = SolverCSD(s)
 
-@time u, dose = SolveFirstCollisionSource(solver);
+@time u, dose = SolveFirstCollisionSource(solver1);
+
+@time u_DLR, dose_DLR = SolveFirstCollisionSourceDLR(solver2);
 #@time u, dose = Solve(solver);
 
 u = Vec2Mat(s.NCellsX,s.NCellsY,u)
 dose = Vec2Mat(s.NCellsX,s.NCellsY,dose)
+
+u_DLR = Vec2Mat(s.NCellsX,s.NCellsY,u_DLR)
+dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR)
 
 #fig = figure("Dose Contour",figsize=(10,10))
 #ax = fig.add_subplot(2,1,1,projection="3d")
@@ -63,6 +69,11 @@ dose = Vec2Mat(s.NCellsX,s.NCellsY,dose)
 #surf(s.xMid,s.yMid,dose,st=:surface,camera=(-30,30));
 #fig = figure("u0",figsize=(10,10))
 #plot_surface(s.xMid,s.yMid,u[:,:,1], rstride=2, cstride=2, cmap=ColorMap("viridis"), alpha=0.8)
+fig = figure("Dose Difference",figsize=(10,10),dpi=100)
+
+pcolormesh(dose-dose_DLR)
+#colorbar()
+savefig("output/doseDiffNx$(s.Nx)")
 
 fig = figure("Dose Contour",figsize=(10,10),dpi=100)
 
@@ -70,12 +81,29 @@ pcolormesh(dose)
 #colorbar()
 savefig("output/doseNx$(s.Nx)")
 
+fig = figure("Dose Contour",figsize=(10,10),dpi=100)
+
+pcolormesh(dose_DLR)
+#colorbar()
+savefig("output/doseDLRNx$(s.Nx)")
+
+
+
 fig = figure("density",figsize=(10,10),dpi=100)
 
-pcolormesh(solver.density,cmap="gray")
+pcolormesh(solver1.density,cmap="gray")
 contour(dose, 30,cmap="magma")
 #colorbar()
-savefig("output/densityNx$(s.Nx)")
+
+fig = figure("density",figsize=(10,10),dpi=100)
+
+pcolormesh(solver2.density,cmap="gray")
+contour(dose_DLR, 30,cmap="magma")
+#colorbar()
+savefig("output/densityDLRNx$(s.Nx)")
+
+fig = figure("density",figsize=(10,10),dpi=100)
+
 
 fig = figure("u Contour",figsize=(10,10),dpi=100)
 
@@ -84,10 +112,11 @@ pcolormesh(u[:,:,1])
 
 # line plot dose
 fig, ax = subplots()
-nyRef = length(yRef)
+#nyRef = length(yRef)
 ax.plot(s.xMid,dose[:,Int(floor(s.NCellsY/2))]./maximum(dose[:,Int(floor(s.NCellsY/2))]), "r--", linewidth=2, label="CSD", alpha=0.8)
+ax.plot(s.xMid,dose_DLR[:,Int(floor(s.NCellsY/2))]./maximum(dose_DLR[:,Int(floor(s.NCellsY/2))]), "b--", linewidth=2, label="CSD_DLR", alpha=0.8)
 if s.problem == "2DHighD"
-    ax.plot(xRef',doseRef[:,Int(floor(nyRef/2))]./maximum(doseRef[:,Int(floor(nyRef/2))]), "k-", linewidth=2, label="Starmap", alpha=0.6)
+ #   ax.plot(xRef',doseRef[:,Int(floor(nyRef/2))]./maximum(doseRef[:,Int(floor(nyRef/2))]), "k-", linewidth=2, label="Starmap", alpha=0.6)
 end
 #ax.plot(csd.eGrid,csd.S, "r--o", linewidth=2, label="S", alpha=0.6)
 ax.legend(loc="upper left")
