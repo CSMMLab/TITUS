@@ -590,7 +590,14 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     # Set up initial condition and store as matrix
     u = zeros(nx*ny,N);
     for k = 1:N
-        u[:,k] = vec(psi[:,:,k]);
+        for i = 1:nx
+            for j = 1:ny
+                idx = (i-1)*nx + j
+                for q = 1:nq
+                    u[idx,k] += obj.M[k,q]*psi[i,j,q];
+                end
+            end
+        end
     end
 
     # define density matrix
@@ -598,14 +605,12 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     Id = Diagonal(ones(N));
 
     # Low-rank approx of init data:
-    X,S,W = svd(zeros(nx*ny,N));
+    X,S,W = svd(u);
     
     # rank-r truncation:
     X = X[:,1:r];
     W = W[:,1:r];
-    S = Diagonal(S);
-    S = S[1:r, 1:r];
-    print(S)
+    S = zeros(r,r);
     K = zeros(size(X));
 
     WAxW = zeros(r,r)
@@ -670,6 +675,38 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
         D = Diagonal(sigmaS[1] .- Dvec);
 
+        ############## Scattering ##############
+        L = W*S';
+
+        XTPsi = zeros(nq,r)
+        for k = 1:nq
+            for l = 1:r
+                for i = 1:nx
+                    for j = 1:ny
+                        idx = (i-1)*nx + j
+                        XTPsi[k,l] = XTPsi[k,l] + psiNew[i,j,k]*X[idx,l]
+                        #println(psiNew[i,j,k]*X[idx,:])
+                    end
+                end
+            end
+        end
+        #println()
+        #println(maximum(XTPsi))
+        #println(maximum(psiNew))
+        #println(maximum(X))
+
+        for i = 1:r
+            L[:,i] = (Id .+ dE*D)\(L[:,i].+dE*Diagonal(Dvec)*obj.M*XTPsi[:,i])
+        end
+
+        W,S = qr(L);
+        W = Matrix(W)
+        W = W[:, 1:r];
+        S = Matrix(S)
+        S = S[1:r, 1:r];
+
+        S .= S';
+
         ################## K-step ##################
         K .= X*S;
 
@@ -716,30 +753,6 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         WAxW .= W'*obj.pn.Ax'*W
 
         S .= S .- dE.*(XL2xX*S*WAxW + XL2yX*S*WAzW + XL1xX*S*WAbsAxW + XL1yX*S*WAbsAzW);
-        ############## Scattering ##############
-        L .= W*S';
-
-        XTPsi = zeros(nq,r)
-        for k = 1:nq
-            for i = 1:nx
-                for j = 1:ny
-                    idx = (i-1)*nx + j
-                    XTPsi[k,:] += psiNew[i,j,k]*X[idx,:]
-                end
-            end
-        end
-
-        for i = 1:r
-            L[:,i] = (Id .+ dE*D)\(L[:,i].+dE*Diagonal(Dvec)*obj.M*XTPsi[:,i])
-        end
-
-        W,S = qr(L);
-        W = Matrix(W)
-        W = W[:, 1:r];
-        S = Matrix(S)
-        S = S[1:r, 1:r];
-
-        S .= S';
        
         for i = 1:nx
             for j = 1:ny

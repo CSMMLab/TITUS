@@ -9,7 +9,7 @@ using WriteVTK
 
 close("all")
 
-s = Settings(71,71,50);
+s = Settings(151,151,50);
 
 if s.problem == "AirCavity"
     smapIn = readdlm("dose_ac.txt", ',', Float64)
@@ -53,16 +53,24 @@ pcolormesh(dose-dose_DLR)
 savefig("output/doseDiffNx$(s.Nx)")
 
 fig = figure("Dose, full",figsize=(10,10),dpi=100)
-
-pcolormesh(dose)
+ax = gca()
+pcolormesh(s.xMid,s.yMid,dose,vmin=0.0,vmax=maximum(dose))
+ax.tick_params("both",labelsize=20) 
 #colorbar()
+plt.xlabel("x", fontsize=20)
+plt.ylabel("y", fontsize=20)
+plt.title(L"dose, $P_N$", fontsize=25)
 savefig("output/doseNx$(s.Nx)")
 
 fig = figure("Dose, DLRA",figsize=(10,10),dpi=100)
-
-pcolormesh(dose_DLR)
+ax = gca()
+pcolormesh(s.xMid,s.yMid,dose_DLR,vmin=0.0,vmax=maximum(dose))
+ax.tick_params("both",labelsize=20) 
 #colorbar()
-savefig("output/doseDLRNx$(s.Nx)")
+plt.xlabel("x", fontsize=20)
+plt.ylabel("y", fontsize=20)
+plt.title(L"dose, DLRA", fontsize=25)
+savefig("output/doseDLRANx$(s.Nx)")
 
 fig = figure("Dose countours, full",figsize=(10,10),dpi=100)
 
