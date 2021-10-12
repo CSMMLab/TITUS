@@ -777,6 +777,250 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
 end
 
+
+function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
+    # Get rank
+    r=10;
+    rMaxTotal = Int(floor(obj.settings.r/2));
+
+    eTrafo = obj.csd.eTrafo;
+    energy = obj.csd.eGrid;
+    S = obj.csd.S;
+
+    # Set up initial condition and store as matrix
+    psi = SetupIC(obj);
+    nx = obj.settings.NCellsX;
+    ny = obj.settings.NCellsY;
+    nq = obj.Q.nquadpoints;
+    N = obj.pn.nTotalEntries
+    # Set up initial condition and store as matrix
+    u = zeros(nx*ny,N);
+    for k = 1:N
+        for i = 1:nx
+            for j = 1:ny
+                idx = (i-1)*nx + j
+                for q = 1:nq
+                    u[idx,k] += obj.M[k,q]*psi[i,j,q];
+                end
+            end
+        end
+    end
+
+    # define density matrix
+    densityInv = Diagonal(1.0 ./obj.density);
+    Id = Diagonal(ones(N));
+
+    # Low-rank approx of init data:
+    X,S,W = svd(u);
+    
+    # rank-r truncation:
+    X = X[:,1:r];
+    W = W[:,1:r];
+    S = zeros(r,r);
+    K = zeros(size(X));
+
+    XNew = zeros(nx*ny,r)
+    STmp = zeros(r,r)
+
+    # setup gamma vector (square norm of P) to nomralize
+    settings = obj.settings
+
+    nEnergies = length(eTrafo);
+    dE = eTrafo[2]-eTrafo[1];
+    obj.settings.dE = dE
+
+    println("CFL = ",dE/obj.settings.dx*maximum(densityInv))
+    
+    uNew = deepcopy(u)
+    psiNew = deepcopy(psi)
+    flux = zeros(size(psi))
+
+    prog = Progress(nEnergies,1)
+    scatSN = zeros(size(psi))
+    MapOrdinates = obj.O*obj.M
+
+    rankInTime = zeros(2,nEnergies);
+
+    uOUnc = zeros(nx*ny);
+
+    #loop over energy
+    for n=1:nEnergies
+        rankInTime[1,n] = energy[n];
+        rankInTime[2,n] = r;
+        # compute scattering coefficients at current energy
+        sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
+
+        # stream uncollided particles
+        solveFlux!(obj,psi,flux);
+
+        #@einsum scatSN[i,j,k] = MapOrdinates[k,l]*psi[i,j,l]*sigmaS[1]
+
+        psi .= psi .- dE*flux;
+
+        #@einsum scatSN[i,j,k] = MapOrdinates[k,l]*psi[i,j,l]*sigmaS[1]
+        
+        psiNew .= psi ./ (1+dE*sigmaS[1]);
+       
+        Dvec = zeros(obj.pn.nTotalEntries)
+        for l = 0:obj.pn.N
+            for k=-l:l
+                i = GlobalIndex( l, k );
+                Dvec[i+1] = sigmaS[l+1]
+            end
+        end
+
+        D = Diagonal(sigmaS[1] .- Dvec);
+
+        ############## Scattering ##############
+        L = W*S';
+        WOld = W;
+
+        XTPsi = zeros(nq,r)
+        for k = 1:nq
+            for l = 1:r
+                for i = 1:nx
+                    for j = 1:ny
+                        idx = (i-1)*nx + j
+                        XTPsi[k,l] = XTPsi[k,l] + psiNew[i,j,k]*X[idx,l]
+                        #println(psiNew[i,j,k]*X[idx,:])
+                    end
+                end
+            end
+        end
+        #println()
+        #println(maximum(XTPsi))
+        #println(maximum(psiNew))
+        #println(maximum(X))
+
+        for i = 1:r
+            L[:,i] = (Id .+ dE*D)\(L[:,i].+dE*Diagonal(Dvec)*obj.M*XTPsi[:,i])
+        end
+
+        W,S = qr(L);
+        W = Matrix(W)
+        W = W[:, 1:r];
+        S = Matrix(S)
+        S = S[1:r, 1:r];
+
+        S .= S';
+
+        ################## K-step ##################
+        K = X*S;
+
+        WAzW = W'*obj.pn.Az'*W
+        WAbsAzW = W'*obj.AbsAz'*W
+        WAbsAxW = W'*obj.AbsAx'*W
+        WAxW = W'*obj.pn.Ax'*W
+
+        K .= K .- dE*(obj.L2x*K*WAxW + obj.L2y*K*WAzW + obj.L1x*K*WAbsAxW + obj.L1y*K*WAbsAzW);
+
+        XNew,STmp = qr!([K X]);
+        XNew = Matrix(XNew)
+        XNew = XNew[:,1:2*r];
+
+        MUp = XNew' * X;
+        ################## L-step ##################
+        L = W*S';
+
+        XL2xX = X'*obj.L2x*X
+        XL2yX = X'*obj.L2y*X
+        XL1xX = X'*obj.L1x*X
+        XL1yX = X'*obj.L1y*X
+
+        L .= L .- dE*(obj.pn.Ax*L*XL2xX' + obj.pn.Az*L*XL2yX' + obj.AbsAx*L*XL1xX' + obj.AbsAz*L*XL1yX');
+                
+        WNew,STmp = qr([L WOld]);
+        WNew = Matrix(WNew)
+        WNew = WNew[:,1:2*r];
+
+        NUp = WNew' * W;
+        W = WNew;
+        X = XNew;
+        ################## S-step ##################
+        S = MUp*S*(NUp')
+
+        XL2xX = X'*obj.L2x*X
+        XL2yX = X'*obj.L2y*X
+        XL1xX = X'*obj.L1x*X
+        XL1yX = X'*obj.L1y*X
+
+        WAzW = W'*obj.pn.Az'*W
+        WAbsAzW = W'*obj.AbsAz'*W
+        WAbsAxW = W'*obj.AbsAx'*W
+        WAxW = W'*obj.pn.Ax'*W
+
+        S .= S .- dE.*(XL2xX*S*WAxW + XL2yX*S*WAzW + XL1xX*S*WAbsAxW + XL1yX*S*WAbsAzW);
+       
+        for i = 1:nx
+            for j = 1:ny
+                idx = (i-1)*nx + j
+                uOUnc[idx] = psiNew[i,j,:]'*obj.M[1,:];
+            end
+        end
+        
+        # update dose
+        next!(prog) # update progress bar
+        # update dose
+        obj.dose .+= dE * (X*S*W[1,:]+uOUnc) * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+
+        ################## truncate ##################
+
+        # Compute singular values of S1 and decide how to truncate:
+        U,D,V = svd(S);
+        U = Matrix(U); V = Matrix(V)
+        rmax = -1;
+        S .= zeros(size(S));
+
+        tmp = 0.0;
+        tol = obj.settings.epsAdapt*norm(D);
+        
+        rmax = Int(floor(size(D,1)/2));
+        println("tol = ",tol)
+
+        println(D)
+        
+        for j=1:2*rmax
+            tmp = sqrt(sum(D[j:2*rmax]).^2);
+            if(tmp<tol)
+                rmax = j;
+                break;
+            end
+        end
+        
+        rmax = min(rmax,rMaxTotal);
+        rmax = max(rmax,2);
+
+        for l = 1:rmax
+            S[l,l] = D[l];
+        end
+
+        # if 2*r was actually not enough move to highest possible rank
+        if rmax == -1
+            rmax = rMaxTotal;
+        end
+
+        # update solution with new rank
+        XNew = XNew*U;
+        WNew = WNew*V;
+
+        # update solution with new rank
+        S = S[1:rmax,1:rmax];
+        X = XNew[:,1:rmax];
+        W = WNew[:,1:rmax];
+
+        # update rank
+        r = rmax;
+        println("Rank ",r)
+
+        psi .= psiNew;
+        next!(prog) # update progress bar
+    end
+    # return end time and solution
+    return 0.5*sqrt(obj.gamma[1])*X*S*W',obj.dose,rankInTime;
+
+end
+
+
 function Solve(obj::SolverCSD)
     eTrafo = obj.csd.eTrafo;
     energy = obj.csd.eGrid;

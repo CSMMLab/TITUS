@@ -49,6 +49,9 @@ mutable struct Settings
     # rank
     r::Int;
 
+    # tolerance for rank adaptivity
+    epsAdapt::Float64;  
+
     function Settings(Nx::Int=102,Ny::Int=102,r::Int=15,problem::String="LineSource")
 
         # spatial grid setting
@@ -67,7 +70,7 @@ mutable struct Settings
 
         # physical parameters
         sigmaS = 0.0;
-        sigmaA = 0.0; 
+        sigmaA = 0.0;
         eMax = 1.0
         if problem =="LineSource"
             sigmaS = 1.0;
@@ -110,9 +113,10 @@ mutable struct Settings
         
         # number PN moments
         nPN = 13#13; # use odd number
+        epsAdapt = 5e-2;
 
         # build class
-        new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,sigmaT,sigmaS,density,r);
+        new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,sigmaT,sigmaS,density,r,epsAdapt);
     end
 end
 

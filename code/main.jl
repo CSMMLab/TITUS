@@ -9,7 +9,7 @@ using WriteVTK
 
 close("all")
 
-s = Settings(151,151,20);
+s = Settings(151,151,100);
 
 if s.problem == "AirCavity"
     smapIn = readdlm("dose_ac.txt", ',', Float64)
@@ -35,9 +35,9 @@ end
 solver1 = SolverCSD(s)
 solver2 = SolverCSD(s)
 
-@time u, dose = SolveFirstCollisionSource(solver1);
+@time u, dose, rankInTime = SolveFirstCollisionSourceAdaptiveDLR(solver1);
 
-@time u_DLR, dose_DLR = SolveFirstCollisionSourceDLR(solver2);
+#@time u_DLR, dose_DLR = SolveFirstCollisionSourceDLR(solver2);
 #@time u, dose = Solve(solver);
 
 u = Vec2Mat(s.NCellsX,s.NCellsY,u)
@@ -108,6 +108,19 @@ ax.set_ylim([0,1.05])
 ax.tick_params("both",labelsize=20) 
 show()
 savefig("output/DoseCutYNx$(s.Nx)")
+
+fig = figure("rank in energy",figsize=(10, 10), dpi=100)
+ax = gca()
+ax.plot(rankInTime[1,:],rankInTime[2,:], "b--", linewidth=2, label=L"$\bar{\vartheta} = 0.05$", alpha=1.0)
+ax.set_xlim([0.0,s.eMax])
+#ax.set_ylim([0.0,440])
+ax.set_xlabel("time", fontsize=20);
+ax.set_ylabel("rank", fontsize=20);
+ax.tick_params("both",labelsize=20) 
+ax.legend(loc="upper left", fontsize=20)
+tight_layout()
+fig.canvas.draw() # Update the figure
+savefig("rank_in_time_euler_nx$(s.NCellsX).png")
 
 # write vtk file
 vtkfile = vtk_grid("output/dose_csd_nx$(s.NCellsX)ny$(s.NCellsY)", s.xMid, s.yMid)
