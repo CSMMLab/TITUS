@@ -9,7 +9,7 @@ using WriteVTK
 
 close("all")
 
-s = Settings(151,151,50);
+s = Settings(151,151,20);
 
 if s.problem == "AirCavity"
     smapIn = readdlm("dose_ac.txt", ',', Float64)

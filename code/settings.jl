@@ -75,10 +75,14 @@ mutable struct Settings
         elseif problem =="2DHighD"
             density[Int(floor(NCellsX*0.56/(b-a))):end,:] .= 5.0;
         elseif problem =="CT"
-            img = Float64.(Gray.(load("phantom.png")))
+            #img = Float64.(Gray.(load("phantom.png")))
+            pathlib = pyimport("pathlib")
+            path = pathlib.Path(pwd())
+            println(path)
+            img = Float64.(Gray.(load("Liver_1.png")))
             nx = size(img,1)
             ny = size(img,2)
-            densityMin = 0.3
+            densityMin = 0.5
             for i = 1:NCellsX
                 for j = 1:NCellsY
                     density[i,j] = max(2*img[Int(floor(i/NCellsX*nx)),Int(floor(j/NCellsY*ny))],densityMin)
