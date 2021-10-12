@@ -685,15 +685,10 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
                     for j = 1:ny
                         idx = (i-1)*nx + j
                         XTPsi[k,l] = XTPsi[k,l] + psiNew[i,j,k]*X[idx,l]
-                        #println(psiNew[i,j,k]*X[idx,:])
                     end
                 end
             end
         end
-        #println()
-        #println(maximum(XTPsi))
-        #println(maximum(psiNew))
-        #println(maximum(X))
 
         for i = 1:r
             L[:,i] = (Id .+ dE*D)\(L[:,i].+dE*Diagonal(Dvec)*obj.M*XTPsi[:,i])
@@ -853,11 +848,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         # stream uncollided particles
         solveFlux!(obj,psi,flux);
 
-        #@einsum scatSN[i,j,k] = MapOrdinates[k,l]*psi[i,j,l]*sigmaS[1]
-
         psi .= psi .- dE*flux;
-
-        #@einsum scatSN[i,j,k] = MapOrdinates[k,l]*psi[i,j,l]*sigmaS[1]
         
         psiNew .= psi ./ (1+dE*sigmaS[1]);
        
@@ -882,15 +873,10 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
                     for j = 1:ny
                         idx = (i-1)*nx + j
                         XTPsi[k,l] = XTPsi[k,l] + psiNew[i,j,k]*X[idx,l]
-                        #println(psiNew[i,j,k]*X[idx,:])
                     end
                 end
             end
         end
-        #println()
-        #println(maximum(XTPsi))
-        #println(maximum(psiNew))
-        #println(maximum(X))
 
         for i = 1:r
             L[:,i] = (Id .+ dE*D)\(L[:,i].+dE*Diagonal(Dvec)*obj.M*XTPsi[:,i])
@@ -975,9 +961,6 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         tol = obj.settings.epsAdapt*norm(D);
         
         rmax = Int(floor(size(D,1)/2));
-        println("tol = ",tol)
-
-        println(D)
         
         for j=1:2*rmax
             tmp = sqrt(sum(D[j:2*rmax]).^2);
@@ -1010,7 +993,6 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
 
         # update rank
         r = rmax;
-        println("Rank ",r)
 
         psi .= psiNew;
         next!(prog) # update progress bar

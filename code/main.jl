@@ -9,7 +9,8 @@ using WriteVTK
 
 close("all")
 
-s = Settings(151,151,100);
+nx = 71;
+s = Settings(nx,nx,100);
 
 if s.problem == "AirCavity"
     smapIn = readdlm("dose_ac.txt", ',', Float64)
@@ -33,15 +34,13 @@ end
 
 ############################
 solver1 = SolverCSD(s)
-solver2 = SolverCSD(s)
-
 @time u, dose, rankInTime = SolveFirstCollisionSourceAdaptiveDLR(solver1);
-
-#@time u_DLR, dose_DLR = SolveFirstCollisionSourceDLR(solver2);
-#@time u, dose = Solve(solver);
-
 u = Vec2Mat(s.NCellsX,s.NCellsY,u)
 dose = Vec2Mat(s.NCellsX,s.NCellsY,dose)
+
+s = Settings(nx,nx,20);
+solver2 = SolverCSD(s)
+@time u_DLR, dose_DLR = SolveFirstCollisionSourceDLR(solver2);
 
 u_DLR = Vec2Mat(s.NCellsX,s.NCellsY,u_DLR)
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR)
@@ -73,24 +72,31 @@ plt.title(L"dose, DLRA", fontsize=25)
 savefig("output/doseDLRANx$(s.Nx)")
 
 fig = figure("Dose countours, full",figsize=(10,10),dpi=100)
-
+ax = gca()
 pcolormesh(solver1.density,cmap="gray")
 contour(dose, 30,cmap="magma")
 #colorbar()
+ax.tick_params("both",labelsize=20) 
+plt.xlabel("x", fontsize=20)
+plt.ylabel("y", fontsize=20)
 
 fig = figure("Dose countours, DLRA",figsize=(10,10),dpi=100)
-
+ax = gca()
 pcolormesh(solver2.density,cmap="gray")
 contour(dose_DLR, 30,cmap="magma")
+ax.tick_params("both",labelsize=20) 
+plt.xlabel("x", fontsize=20)
+plt.ylabel("y", fontsize=20)
+
 #colorbar()
 savefig("output/densityDLRNx$(s.Nx)")
 
-fig = figure("density",figsize=(10,10),dpi=100)
-
-
 fig = figure("u Contour",figsize=(10,10),dpi=100)
-
+ax = gca()
 pcolormesh(u[:,:,1])
+ax.tick_params("both",labelsize=20) 
+plt.xlabel("x", fontsize=20)
+plt.ylabel("y", fontsize=20)
 #CS = plt.pcolormesh(X, Y, Z)
 
 # line plot dose
