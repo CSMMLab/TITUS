@@ -553,7 +553,7 @@ function SolveFirstCollisionSource(obj::SolverCSD)
             end
         end
 
-        println(maximum(psi)," ",maximum(abs.(uOUnc))," ",maximum(abs.(uNew[:,1])))
+        #println(maximum(psi)," ",maximum(abs.(uOUnc))," ",maximum(abs.(uNew[:,1])))
         
         # update dose
         obj.dose .+= dE * (uNew[:,1]+uOUnc) * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
@@ -598,13 +598,14 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     Id = Diagonal(ones(N));
 
     # Low-rank approx of init data:
-    X,S,W = svd(u);
+    X,S,W = svd(zeros(nx*ny,N));
     
     # rank-r truncation:
     X = X[:,1:r];
     W = W[:,1:r];
     S = Diagonal(S);
     S = S[1:r, 1:r];
+    print(S)
     K = zeros(size(X));
 
     WAxW = zeros(r,r)
@@ -717,8 +718,19 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         S .= S .- dE.*(XL2xX*S*WAxW + XL2yX*S*WAzW + XL1xX*S*WAbsAxW + XL1yX*S*WAbsAzW);
         ############## Scattering ##############
         L .= W*S';
+
+        XTPsi = zeros(nq,r)
+        for k = 1:nq
+            for i = 1:nx
+                for j = 1:ny
+                    idx = (i-1)*nx + j
+                    XTPsi[k,:] += psiNew[i,j,k]*X[idx,:]
+                end
+            end
+        end
+
         for i = 1:r
-            L[:,i] = (Id .+ dE*D)\L[:,i]
+            L[:,i] = (Id .+ dE*D)\(L[:,i].+dE*Diagonal(Dvec)*obj.M*XTPsi[:,i])
         end
 
         W,S = qr(L);
@@ -728,7 +740,6 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         S = S[1:r, 1:r];
 
         S .= S';
-
        
         for i = 1:nx
             for j = 1:ny
@@ -737,7 +748,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
             end
         end
 
-        println(maximum(psi)," ",maximum(abs.(uOUnc))," ",maximum(abs.(uNew[:,1])))
+        #println(maximum(psi)," ",maximum(abs.(uOUnc))," ",maximum(abs.(uNew[:,1])))
         
         # update dose
         #obj.dose .+= dE * (uNew[:,1]+uOUnc) * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));

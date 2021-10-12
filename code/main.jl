@@ -46,56 +46,31 @@ dose = Vec2Mat(s.NCellsX,s.NCellsY,dose)
 u_DLR = Vec2Mat(s.NCellsX,s.NCellsY,u_DLR)
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR)
 
-#fig = figure("Dose Contour",figsize=(10,10))
-#ax = fig.add_subplot(2,1,1,projection="3d")
-#plot_surface(s.xMid,s.yMid,dose, rstride=2,edgecolors="k", cstride=2, cmap=ColorMap("gray"), alpha=0.8, linewidth=0.25)
-#xlabel("X")
-#ylabel("Y")
-#PyPlot.title("Surface Plot")
-
-#subplot(212)
-#ax = fig.add_subplot(2,1,2)
-#cp = contour(s.xMid,s.yMid,dose, colors="black", linewidth=2.0)
-#ax.clabel(cp, inline=1, fontsize=10)
-#xlabel("X")
-#ylabel("Y")
-#PyPlot.title("Contour Plot")
-#tight_layout()
-
-#surf(s.xMid,s.yMid,dose,st=:surface,camera=(-30,30));
-#fig = figure("pyplot_surfaceplot",figsize=(10,10))
-#plot_surface(s.xMid,s.yMid,dose, rstride=2, cstride=2, cmap=ColorMap("viridis"), alpha=0.8)
-
-#surf(s.xMid,s.yMid,dose,st=:surface,camera=(-30,30));
-#fig = figure("u0",figsize=(10,10))
-#plot_surface(s.xMid,s.yMid,u[:,:,1], rstride=2, cstride=2, cmap=ColorMap("viridis"), alpha=0.8)
 fig = figure("Dose Difference",figsize=(10,10),dpi=100)
 
 pcolormesh(dose-dose_DLR)
 #colorbar()
 savefig("output/doseDiffNx$(s.Nx)")
 
-fig = figure("Dose Contour",figsize=(10,10),dpi=100)
+fig = figure("Dose, full",figsize=(10,10),dpi=100)
 
 pcolormesh(dose)
 #colorbar()
 savefig("output/doseNx$(s.Nx)")
 
-fig = figure("Dose Contour",figsize=(10,10),dpi=100)
+fig = figure("Dose, DLRA",figsize=(10,10),dpi=100)
 
 pcolormesh(dose_DLR)
 #colorbar()
 savefig("output/doseDLRNx$(s.Nx)")
 
-
-
-fig = figure("density",figsize=(10,10),dpi=100)
+fig = figure("Dose countours, full",figsize=(10,10),dpi=100)
 
 pcolormesh(solver1.density,cmap="gray")
 contour(dose, 30,cmap="magma")
 #colorbar()
 
-fig = figure("density",figsize=(10,10),dpi=100)
+fig = figure("Dose countours, DLRA",figsize=(10,10),dpi=100)
 
 pcolormesh(solver2.density,cmap="gray")
 contour(dose_DLR, 30,cmap="magma")
