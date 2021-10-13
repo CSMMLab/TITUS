@@ -79,10 +79,7 @@ mutable struct Settings
             density[Int(floor(NCellsX*0.56/(b-a))):end,:] .= 5.0;
         elseif problem =="CT"
             #img = Float64.(Gray.(load("phantom.png")))
-            pathlib = pyimport("pathlib")
-            path = pathlib.Path(pwd())
-            println(path)
-            img = Float64.(Gray.(load("Liver_1.png")))
+            img = Float64.(Gray.(load("Prostate_1.png")))
             nx = size(img,1)
             ny = size(img,2)
             densityMin = 0.5
@@ -121,7 +118,7 @@ mutable struct Settings
 end
 
 function IC(obj::Settings,x,y)
-    posBeamX = 0.5;
+    posBeamX = 0.05;
     posBeamY = 0.5;
     if obj.problem == "CT"
         #posBeamX = obj.a;

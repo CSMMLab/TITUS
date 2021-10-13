@@ -45,12 +45,6 @@ solver2 = SolverCSD(s)
 u_DLR = Vec2Mat(s.NCellsX,s.NCellsY,u_DLR)
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR)
 
-fig = figure("Dose Difference",figsize=(10,10),dpi=100)
-
-pcolormesh(dose-dose_DLR)
-#colorbar()
-savefig("output/doseDiffNx$(s.Nx)")
-
 fig = figure("Dose, full",figsize=(10,10),dpi=100)
 ax = gca()
 pcolormesh(s.xMid,s.yMid,dose,vmin=0.0,vmax=maximum(dose))

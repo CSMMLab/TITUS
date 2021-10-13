@@ -324,7 +324,7 @@ function SetupIC(obj::SolverCSD)
     
     if obj.settings.problem == "CT" || obj.settings.problem == "2D" || obj.settings.problem == "2DHighD"
         for k = 1:nq
-            if obj.Q.pointsxyz[k][1] > 0.5
+            if obj.Q.pointsxyz[k][1] > 0.85
                 psi[:,:,k] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)
             end
         end
