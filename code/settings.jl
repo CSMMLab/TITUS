@@ -91,7 +91,7 @@ mutable struct Settings
                     density[i,j] = max(2*img[Int(floor(i/NCellsX*nx)),Int(floor(j/NCellsY*ny))],densityMin)
                 end
             end
-            eMax = 15.0
+            eMax = 5.0
         end
         sigmaT = sigmaA + sigmaS;
 
@@ -112,8 +112,8 @@ mutable struct Settings
         dE = cfl*dx*minimum(density);
         
         # number PN moments
-        nPN = 21#13; # use odd number
-        epsAdapt = 5e-2;
+        nPN = 13#13, 21; # use odd number
+        epsAdapt = 1e-2;
 
         # build class
         new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,sigmaT,sigmaS,density,r,epsAdapt);

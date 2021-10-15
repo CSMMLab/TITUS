@@ -17,6 +17,7 @@ struct SolverCSD
     # spatial grid of cell interfaces
     x::Array{Float64};
     y::Array{Float64};
+    xGrid::Array{Float64,2}
 
     # Solver settings
     settings::Settings;
@@ -53,6 +54,7 @@ struct SolverCSD
     L2x::SparseMatrixCSC{Float64, Int64};
     L2y::SparseMatrixCSC{Float64, Int64};
     boundaryIdx::Array{Int,1}
+    boundaryBeam::Array{Int,1}
 
     Q::Quadrature
     O::Array{Float64,2};
@@ -258,6 +260,30 @@ struct SolverCSD
             boundaryIdx[counter] = idx
         end
 
+        boundaryBeam = zeros(Int,2*nx) # boundary indices uncollided particles for beam
+        counter = 0;
+        for i = 1:nx
+            counter += 1;
+            j = 1;
+            idx = (i-1)*nx + j;
+            boundaryBeam[counter] = idx
+            counter += 1;
+            j = 2;
+            idx = (i-1)*nx + j;
+            boundaryBeam[counter] = idx
+        end
+
+        # setup spatial grid
+        xGrid = zeros(nx*ny,2)
+        for i = 1:nx
+            for j = 1:ny
+                # y part
+                index = vectorIndex(nx,i,j);
+                xGrid[index,1] = settings.xMid[i];
+                xGrid[index,2] = settings.yMid[j];
+            end
+        end
+
         # setup quadrature
         qorder = settings.nPN+1; # must be even for standard quadrature
         qtype = 1; # Type must be 1 for "standard" or 2 for "octa" and 3 for "ico".
@@ -314,7 +340,7 @@ struct SolverCSD
             O[q,:] /= v[q]
         end
 
-        new(x,y,settings,outRhs,gamma,AbsAx,AbsAz,P,mu,w,csd,pn,density,vec(density'),dose,L1x,L1y,L2x,L2y,boundaryIdx,Q,O,M);
+        new(x,y,xGrid,settings,outRhs,gamma,AbsAx,AbsAz,P,mu,w,csd,pn,density,vec(density'),dose,L1x,L1y,L2x,L2y,boundaryIdx,boundaryBeam,Q,O,M);
     end
 end
 
@@ -335,6 +361,13 @@ end
 function PsiLeft(obj::SolverCSD,n::Int,mu::Float64)
     E0 = obj.settings.eMax;
     return 10^5*exp(-200.0*(1.0-mu)^2)*exp(-50*(E0-E)^2)
+end
+
+function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,n::Int)
+    E0 = obj.settings.eMax;
+    x0 = 0.5;
+    rho = 0.1;
+    return 10^5*exp(-100.0*(1.0-Omega[1])^2)*exp(-50*(E0-E)^2)*exp(-100*(x-x0)^2)*obj.csd.S[n]*rho;
 end
 
 function BCLeft(obj::SolverCSD,n::Int)
@@ -536,10 +569,20 @@ function SolveFirstCollisionSource(obj::SolverCSD)
 
     uOUnc = zeros(nx*ny);
 
+    psi .= zeros(size(psi));
+
     #loop over energy
     for n=1:nEnergies
         # compute scattering coefficients at current energy
         sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
+
+        # set boundary condition
+        for k = 1:nq
+            for j = 1:ny
+                psi[1,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
+                psi[2,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
+            end
+        end
 
         # stream uncollided particles
         solveFlux!(obj,psi,flux);
@@ -574,17 +617,10 @@ function SolveFirstCollisionSource(obj::SolverCSD)
                 uOUnc[idx] = psiNew[i,j,:]'*obj.M[1,:];
             end
         end
-
-        #println(maximum(psi)," ",maximum(abs.(uOUnc))," ",maximum(abs.(uNew[:,1])))
         
         # update dose
         obj.dose .+= dE * (uNew[:,1]+uOUnc) * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
-        #if n > 1 && n < nEnergies
-        #    obj.dose .+= 0.5 * dE * ( uNew[:,:,1] * S[n] + u[:,:,1] * S[n - 1] ) ./ obj.density;    # update dose with trapezoidal rule
-            #obj.dose .+= dE * uNew[:,:,1] * SMinus[n] ./ obj.density;
-        #else
-        #    obj.dose .+= 0.5*dE * uNew[:,:,1] * S[n] ./ obj.density;
-        #end
+
 
         u .= uNew;
         psi .= psiNew;
@@ -673,11 +709,21 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     MapOrdinates = obj.O*obj.M
 
     uOUnc = zeros(nx*ny);
+    
+    psi .= zeros(size(psi));
 
     #loop over energy
     for n=1:nEnergies
         # compute scattering coefficients at current energy
         sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
+
+        # set boundary condition
+        for k = 1:nq
+            for j = 1:ny
+                psi[1,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
+                psi[2,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
+            end
+        end
 
         # stream uncollided particles
         solveFlux!(obj,psi,flux);
@@ -792,14 +838,14 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         next!(prog) # update progress bar
     end
     # return end time and solution
-    return 0.5*sqrt(obj.gamma[1])*X*S*W',obj.dose;
+    return X, 0.5*sqrt(obj.gamma[1])*S, obj.O*W,obj.dose;
 
 end
-
 
 function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
     # Get rank
     r=10;
+    rmin = 20;
     rMaxTotal = Int(floor(obj.settings.r/2));
 
     eTrafo = obj.csd.eTrafo;
@@ -865,12 +911,22 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
 
     uOUnc = zeros(nx*ny);
 
+    psi .= zeros(size(psi));
+
     #loop over energy
     for n=1:nEnergies
         rankInTime[1,n] = energy[n];
         rankInTime[2,n] = r;
         # compute scattering coefficients at current energy
         sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
+
+        # set boundary condition
+        for k = 1:nq
+            for j = 1:ny
+                psi[1,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
+                psi[2,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
+            end
+        end
 
         # stream uncollided particles
         solveFlux!(obj,psi,flux);
@@ -1001,7 +1057,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         end
         
         rmax = min(rmax,rMaxTotal);
-        rmax = max(rmax,2);
+        rmax = max(rmax,rmin);
 
         for l = 1:rmax
             S[l,l] = D[l];
@@ -1031,7 +1087,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         next!(prog) # update progress bar
     end
     # return end time and solution
-    return 0.5*sqrt(obj.gamma[1])*X*S*W',obj.dose,rankInTime;
+    return X, 0.5*sqrt(obj.gamma[1])*S, obj.O*W,obj.dose,rankInTime;
 
 end
 

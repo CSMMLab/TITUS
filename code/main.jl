@@ -34,15 +34,14 @@ end
 
 ############################
 solver1 = SolverCSD(s)
-@time u, dose, rankInTime = SolveFirstCollisionSourceAdaptiveDLR(solver1);
-u = Vec2Mat(s.NCellsX,s.NCellsY,u)
+@time X,S,W, dose, rankInTime = SolveFirstCollisionSourceAdaptiveDLR(solver1);
+#@time u, dose = SolveFirstCollisionSource(solver1);
 dose = Vec2Mat(s.NCellsX,s.NCellsY,dose)
 
 s = Settings(nx,nx,int(maximum(rankInTime[2,:])));
 solver2 = SolverCSD(s)
-@time u_DLR, dose_DLR = SolveFirstCollisionSourceDLR(solver2);
+@time X_dlr,S_dlr,W_dlr, dose_DLR = SolveFirstCollisionSourceDLR(solver2);
 
-u_DLR = Vec2Mat(s.NCellsX,s.NCellsY,u_DLR)
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR)
 
 fig = figure("Dose Difference",figsize=(10,10),dpi=100)
@@ -91,9 +90,9 @@ plt.ylabel("y", fontsize=20)
 #colorbar()
 savefig("output/densityDLRNx$(s.Nx)")
 
-fig = figure("u Contour",figsize=(10,10),dpi=100)
+fig = figure("X_1",figsize=(10,10),dpi=100)
 ax = gca()
-pcolormesh(u[:,:,1])
+pcolormesh(Vec2Mat(s.NCellsX,s.NCellsY,X_dlr[:,1]))
 ax.tick_params("both",labelsize=20) 
 plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
@@ -133,6 +132,7 @@ vtkfile = vtk_grid("output/dose_csd_nx$(s.NCellsX)ny$(s.NCellsY)", s.xMid, s.yMi
 vtkfile["dose"] = dose
 vtkfile["dose_normalized"] = dose./maximum(dose)
 outfiles = vtk_save(vtkfile)
+#s = surface(x=x, y=y, z=z, colorscale = "Viridis", surfacecolor = F, cmin = -1.0, cmax = 1.0, showscale = false)
 
 writedlm("output/dose_csd_nx$(s.NCellsX)ny$(s.NCellsY).txt", dose)
 
