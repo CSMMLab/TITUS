@@ -324,7 +324,7 @@ function SetupIC(obj::SolverCSD)
     
     if obj.settings.problem == "CT" || obj.settings.problem == "2D" || obj.settings.problem == "2DHighD"
         for k = 1:nq
-            if obj.Q.pointsxyz[k][1] > 0.5
+            if obj.Q.pointsxyz[k][1] > 0.75
                 psi[:,:,k] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)
             end
         end
@@ -400,11 +400,7 @@ function Rhs(obj::SolverCSD,u::Array{Float64,2},t::Float64=0.0)
     return obj.L2x*u*obj.pn.Ax' + obj.L2y*u*obj.pn.Az' + obj.L1x*u*obj.AbsAx' + obj.L1y*u*obj.AbsAz';
 end
 
-# the first minmod code is the fast version of the second minmod  below that is commented
 @inline minmod(x::Float64, y::Float64) = ifelse(x < 0, clamp(y, x, 0.0), clamp(y, 0.0, x))
-#@inline function minmod(x::Float64, y::Float64)
-#    return sign(x) * max(0.0, min(abs(x),y*sign(x) ) );
-#end
 
 @inline function slopefit(left::Float64, center::Float64, right::Float64)
     tmp = minmod(0.5 * (right - left),2.0 * (center - left));

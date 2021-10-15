@@ -91,7 +91,7 @@ mutable struct Settings
                     density[i,j] = max(2*img[Int(floor(i/NCellsX*nx)),Int(floor(j/NCellsY*ny))],densityMin)
                 end
             end
-            eMax = 1.0
+            eMax = 15.0
         end
         sigmaT = sigmaA + sigmaS;
 
@@ -108,11 +108,11 @@ mutable struct Settings
         yMid = y[1:(end-1)].+0.5*dy
 
         # time settings
-        cfl = 1.7#1.7 # CFL condition
+        cfl = 1.4#1.7 # CFL condition
         dE = cfl*dx*minimum(density);
         
         # number PN moments
-        nPN = 13#13; # use odd number
+        nPN = 21#13; # use odd number
         epsAdapt = 5e-2;
 
         # build class
@@ -121,7 +121,7 @@ mutable struct Settings
 end
 
 function IC(obj::Settings,x,y)
-    posBeamX = 0.5;
+    posBeamX = 0.05;
     posBeamY = 0.5;
     if obj.problem == "CT"
         #posBeamX = obj.a;

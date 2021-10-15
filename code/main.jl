@@ -9,7 +9,7 @@ using WriteVTK
 
 close("all")
 
-nx = 151;
+nx = 101;
 s = Settings(nx,nx,100);
 
 if s.problem == "AirCavity"
