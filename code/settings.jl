@@ -88,10 +88,10 @@ mutable struct Settings
             densityMin = 0.5
             for i = 1:NCellsX
                 for j = 1:NCellsY
-                    density[i,j] = max(2*img[Int(floor(i/NCellsX*nx)),Int(floor(j/NCellsY*ny))],densityMin)
+                    density[i,j] = max(1.85*img[Int(floor(i/NCellsX*nx)),Int(floor(j/NCellsY*ny))],densityMin) # 1.85 bone, 1.04 muscle, 0.3 lung
                 end
             end
-            eMax = 5.0
+            eMax = 1.0
         end
         sigmaT = sigmaA + sigmaS;
 
@@ -121,7 +121,7 @@ mutable struct Settings
 end
 
 function IC(obj::Settings,x,y)
-    posBeamX = 0.05;
+    posBeamX = 0.0;
     posBeamY = 0.5;
     if obj.problem == "CT"
         #posBeamX = obj.a;
@@ -129,7 +129,7 @@ function IC(obj::Settings,x,y)
     x0 = x .- posBeamX;
     y0 = y .- posBeamY;
     out = zeros(length(x),length(y));
-    s1 = 0.01
+    s1 = 0.05
     s2 = s1^2
     floor = 1e-4
     for j = 1:length(x);

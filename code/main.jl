@@ -9,7 +9,7 @@ using WriteVTK
 
 close("all")
 
-nx = 101;
+nx = 51;
 s = Settings(nx,nx,100);
 
 if s.problem == "AirCavity"
@@ -33,16 +33,23 @@ else
 end
 
 ############################
-solver1 = SolverCSD(s)
-@time X,S,W, dose, rankInTime = SolveFirstCollisionSourceAdaptiveDLR(solver1);
-#@time u, dose = SolveFirstCollisionSource(solver1);
+solver1 = SolverCSD(s);
+#@time X,S,W, dose, rankInTime = SolveFirstCollisionSourceAdaptiveDLR(solver1);
+#@time X,S,W, dose = SolveMCollisionSourceDLR(solver1);
+u, dose = SolveFirstCollisionSource(solver1);
 dose = Vec2Mat(s.NCellsX,s.NCellsY,dose)
 
-s = Settings(nx,nx,int(maximum(rankInTime[2,:])));
-solver2 = SolverCSD(s)
-@time X_dlr,S_dlr,W_dlr, dose_DLR = SolveFirstCollisionSourceDLR(solver2);
+s = Settings(nx,nx,20);
+#s = Settings(nx,nx,int(maximum(rankInTime[2,:])));
+solver2 = SolverCSD(s);
+X_dlr,S_dlr,W_dlr, dose_DLR = SolveFirstCollisionSourceDLR(solver2);
+#X_dlr,S_dlr,W_dlr, dose_DLR = SolveMCollisionSourceDLR(solver2);
+dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
 
-dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR)
+s = Settings(nx,nx,10);
+solver3 = SolverCSD(s);
+X_dlrM,S_dlrM,W_dlrM, dose_DLRM = SolveMCollisionSourceDLR(solver3);
+dose_DLRM = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLRM);
 
 fig = figure("Dose Difference",figsize=(10,10),dpi=100)
 
@@ -69,6 +76,16 @@ plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
 plt.title(L"dose, DLRA", fontsize=25)
 savefig("output/doseDLRANx$(s.Nx)")
+
+fig = figure("Dose, DLRA-M",figsize=(10,10),dpi=100)
+ax = gca()
+pcolormesh(s.xMid,s.yMid,dose_DLRM,vmin=0.0,vmax=maximum(dose))
+ax.tick_params("both",labelsize=20) 
+#colorbar()
+plt.xlabel("x", fontsize=20)
+plt.ylabel("y", fontsize=20)
+plt.title(L"dose, DLRAM", fontsize=25)
+savefig("output/doseDLRAMNx$(s.Nx)")
 
 fig = figure("Dose countours, full",figsize=(10,10),dpi=100)
 ax = gca()
