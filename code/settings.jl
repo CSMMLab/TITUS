@@ -91,7 +91,7 @@ mutable struct Settings
                     density[i,j] = max(1.85*img[Int(floor(i/NCellsX*nx)),Int(floor(j/NCellsY*ny))],densityMin) # 1.85 bone, 1.04 muscle, 0.3 lung
                 end
             end
-            eMax = 1.0
+            eMax = 2.0
         end
         sigmaT = sigmaA + sigmaS;
 
@@ -113,7 +113,7 @@ mutable struct Settings
         
         # number PN moments
         nPN = 13#13, 21; # use odd number
-        epsAdapt = 1e-2;
+        epsAdapt = 1e-4;
 
         # build class
         new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,sigmaT,sigmaS,density,r,epsAdapt);

@@ -68,3 +68,25 @@ function computeXYZandWeightsProjected2D(_norder::Int64)
     
     return pointsxyz, weights
 end
+
+function computeXYZPlot(_norder::Int64)
+    n = _norder
+    pointsxyz = zeros(Float64,2*n*n,3); # Even though we only need the x and y coordinate 
+                                    # we still store the corresponding z coordinate
+                                    # as our quadrature point actually lives on the sphere
+
+    # Construct Gauss quadrature
+    mu,gaussweights = gausslegendre(n)
+        
+    # around z axis equidistant
+    phi = [(k+0.5)*pi/n for k=0:2*n-1]
+
+    range = 1:Int(ceil(n/1)) # we only use the upper half of the sphere as quadrature point since we do pseudo three d
+
+    # Transform between (mu,phi) and (x,y,z)
+    x = sqrt.(1.0 .- mu[range].^2).*cos.(phi)'
+    y = sqrt.(1.0 .- mu[range].^2).*sin.(phi)'
+    z =           mu[range]    .*ones(size(phi))'
+
+    return x,y,z
+end

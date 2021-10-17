@@ -9,7 +9,7 @@ using WriteVTK
 
 close("all")
 
-nx = 51;
+nx = 71;
 s = Settings(nx,nx,100);
 
 if s.problem == "AirCavity"
@@ -34,22 +34,22 @@ end
 
 ############################
 solver1 = SolverCSD(s);
-#@time X,S,W, dose, rankInTime = SolveFirstCollisionSourceAdaptiveDLR(solver1);
+X,S,W, dose, rankInTime = SolveFirstCollisionSourceAdaptiveDLR(solver1);
 #@time X,S,W, dose = SolveMCollisionSourceDLR(solver1);
-u, dose = SolveFirstCollisionSource(solver1);
-dose = Vec2Mat(s.NCellsX,s.NCellsY,dose)
+#u, dose = SolveFirstCollisionSource(solver1);
+dose = Vec2Mat(s.NCellsX,s.NCellsY,dose);
 
-s = Settings(nx,nx,20);
+s = Settings(nx,nx,100);
 #s = Settings(nx,nx,int(maximum(rankInTime[2,:])));
 solver2 = SolverCSD(s);
 X_dlr,S_dlr,W_dlr, dose_DLR = SolveFirstCollisionSourceDLR(solver2);
 #X_dlr,S_dlr,W_dlr, dose_DLR = SolveMCollisionSourceDLR(solver2);
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
 
-s = Settings(nx,nx,10);
-solver3 = SolverCSD(s);
+s3 = Settings(nx,nx,50);
+solver3 = SolverCSD(s3);
 X_dlrM,S_dlrM,W_dlrM, dose_DLRM = SolveMCollisionSourceDLR(solver3);
-dose_DLRM = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLRM);
+dose_DLRM = Vec2Mat(s3.NCellsX,s3.NCellsY,dose_DLRM);
 
 fig = figure("Dose Difference",figsize=(10,10),dpi=100)
 
@@ -104,12 +104,28 @@ ax.tick_params("both",labelsize=20)
 plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
 
+fig = figure("Dose countours, DLRAM",figsize=(10,10),dpi=100)
+ax = gca()
+pcolormesh(solver2.density,cmap="gray")
+contour(dose_DLRM, 30,cmap="magma")
+ax.tick_params("both",labelsize=20) 
+plt.xlabel("x", fontsize=20)
+plt.ylabel("y", fontsize=20)
+
 #colorbar()
 savefig("output/densityDLRNx$(s.Nx)")
 
 fig = figure("X_1",figsize=(10,10),dpi=100)
 ax = gca()
 pcolormesh(Vec2Mat(s.NCellsX,s.NCellsY,X_dlr[:,1]))
+ax.tick_params("both",labelsize=20) 
+plt.xlabel("x", fontsize=20)
+plt.ylabel("y", fontsize=20)
+#CS = plt.pcolormesh(X, Y, Z)
+
+fig = figure("X_2",figsize=(10,10),dpi=100)
+ax = gca()
+pcolormesh(Vec2Mat(s.NCellsX,s.NCellsY,X_dlr[:,2]))
 ax.tick_params("both",labelsize=20) 
 plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
@@ -136,7 +152,7 @@ ax = gca()
 ax.plot(rankInTime[1,:],rankInTime[2,:], "b--", linewidth=2, label=L"$\bar{\vartheta} = 0.05$", alpha=1.0)
 ax.set_xlim([0.0,s.eMax])
 #ax.set_ylim([0.0,440])
-ax.set_xlabel("time", fontsize=20);
+ax.set_xlabel("energy [MeV]", fontsize=20);
 ax.set_ylabel("rank", fontsize=20);
 ax.tick_params("both",labelsize=20) 
 ax.legend(loc="upper left", fontsize=20)
@@ -149,8 +165,21 @@ vtkfile = vtk_grid("output/dose_csd_nx$(s.NCellsX)ny$(s.NCellsY)", s.xMid, s.yMi
 vtkfile["dose"] = dose
 vtkfile["dose_normalized"] = dose./maximum(dose)
 outfiles = vtk_save(vtkfile)
-#s = surface(x=x, y=y, z=z, colorscale = "Viridis", surfacecolor = F, cmin = -1.0, cmax = 1.0, showscale = false)
 
-writedlm("output/dose_csd_nx$(s.NCellsX)ny$(s.NCellsY).txt", dose)
+rhoMin = minimum(s.density);
+writedlm("output/dose_csd_1stcollision_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax(s.eMax)rhoMin$(rhoMin).txt", dose)
+writedlm("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax(s.eMax)rhoMin$(rhoMin).txt", dose_DLR)
+writedlm("output/dose_csd_1stcollision_DLRAM_Rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax(s.eMax)rhoMin$(rhoMin).txt", dose_DLRM)
+
+writedlm("output/X_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax(s.eMax)rhoMin$(rhoMin).txt", X_dlr)
+writedlm("output/X_csd_1stcollision_DLRAM_Rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax(s.eMax)rhoMin$(rhoMin).txt", X_dlrM)
+
+writedlm("output/S_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax(s.eMax)rhoMin$(rhoMin).txt", S_dlr)
+writedlm("output/S_csd_1stcollision_DLRAM_Rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax(s.eMax)rhoMin$(rhoMin).txt", S_dlrM)
+
+writedlm("output/W_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax(s.eMax)rhoMin$(rhoMin).txt", W_dlr)
+writedlm("output/W_csd_1stcollision_DLRAM_Rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax(s.eMax)rhoMin$(rhoMin).txt", W_dlrM)
+
+writedlm("output/u_csd_1stcollision_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax(s.eMax)rhoMin$(rhoMin).txt", u)
 
 println("main finished")
