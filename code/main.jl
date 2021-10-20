@@ -9,7 +9,7 @@ using WriteVTK
 
 close("all")
 
-nx = 71;
+nx = 51;
 s = Settings(nx,nx,100);
 
 if s.problem == "AirCavity"
@@ -39,7 +39,7 @@ X,S,W, dose, rankInTime = SolveFirstCollisionSourceAdaptiveDLR(solver1);
 #u, dose = SolveFirstCollisionSource(solver1);
 dose = Vec2Mat(s.NCellsX,s.NCellsY,dose);
 
-s = Settings(nx,nx,100);
+s = Settings(nx,nx,50);
 #s = Settings(nx,nx,int(maximum(rankInTime[2,:])));
 solver2 = SolverCSD(s);
 X_dlr,S_dlr,W_dlr, dose_DLR = SolveFirstCollisionSourceDLR(solver2);
@@ -57,7 +57,7 @@ pcolormesh(dose-dose_DLR)
 #colorbar()
 savefig("output/doseDiffNx$(s.Nx)")
 
-fig = figure("Dose, full",figsize=(10,10),dpi=100)
+fig = figure("Dose, adaptive DLRA",figsize=(10,10),dpi=100)
 ax = gca()
 pcolormesh(s.xMid,s.yMid,dose,vmin=0.0,vmax=maximum(dose))
 ax.tick_params("both",labelsize=20) 
@@ -65,7 +65,8 @@ ax.tick_params("both",labelsize=20)
 plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
 plt.title(L"dose, $P_N$", fontsize=25)
-savefig("output/doseNx$(s.Nx)")
+tight_layout()
+savefig("output/dose_csd_1stcollision_adapt_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)$(s.epsAdapt).png")
 
 fig = figure("Dose, DLRA",figsize=(10,10),dpi=100)
 ax = gca()
@@ -75,7 +76,8 @@ ax.tick_params("both",labelsize=20)
 plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
 plt.title(L"dose, DLRA", fontsize=25)
-savefig("output/doseDLRANx$(s.Nx)")
+tight_layout()
+savefig("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
 
 fig = figure("Dose, DLRA-M",figsize=(10,10),dpi=100)
 ax = gca()
@@ -85,51 +87,91 @@ ax.tick_params("both",labelsize=20)
 plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
 plt.title(L"dose, DLRAM", fontsize=25)
-savefig("output/doseDLRAMNx$(s.Nx)")
+tight_layout()
+savefig("output/dose_csd_1stcollision_DLRAM_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
 
 fig = figure("Dose countours, full",figsize=(10,10),dpi=100)
 ax = gca()
-pcolormesh(solver1.density,cmap="gray")
-contour(dose, 30,cmap="magma")
+pcolormesh(s.xMid,s.yMid,solver1.density,cmap="gray")
+contour(s.xMid,s.yMid,dose, 30,cmap="magma",vmin=0.0,vmax=maximum(dose))
 #colorbar()
 ax.tick_params("both",labelsize=20) 
 plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
+tight_layout()
+savefig("output/doseiso_csd_1stcollision_adapt_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)epsAdapt$(s.epsAdapt).png")
 
 fig = figure("Dose countours, DLRA",figsize=(10,10),dpi=100)
 ax = gca()
-pcolormesh(solver2.density,cmap="gray")
-contour(dose_DLR, 30,cmap="magma")
+pcolormesh(s.xMid,s.yMid,solver2.density,cmap="gray")
+contour(s.xMid,s.yMid,dose_DLR, 30,cmap="magma",vmin=0.0,vmax=maximum(dose))
 ax.tick_params("both",labelsize=20) 
 plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
+tight_layout()
+savefig("output/doseiso_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
 
 fig = figure("Dose countours, DLRAM",figsize=(10,10),dpi=100)
 ax = gca()
-pcolormesh(solver2.density,cmap="gray")
-contour(dose_DLRM, 30,cmap="magma")
+pcolormesh(s.xMid,s.yMid,solver2.density,cmap="gray")
+contour(s.xMid,s.yMid,dose_DLRM, 30,cmap="magma",vmin=0.0,vmax=maximum(dose))
 ax.tick_params("both",labelsize=20) 
 plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
+tight_layout()
+savefig("output/doseiso_csd_1stcollision_DLRAM_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
 
-#colorbar()
-savefig("output/densityDLRNx$(s.Nx)")
+fig, (ax1, ax2) = plt.subplots(1, 2,figsize=(23,10),dpi=100)
+ax1.pcolormesh(s.xMid,s.yMid,solver1.density,cmap="gray")
+CS = ax1.contour(s.xMid,s.yMid,dose, 30,cmap="magma",vmin=0.0,vmax=maximum(dose))
+ax2.pcolormesh(s.xMid,s.yMid,solver2.density,cmap="gray")
+ax2.contour(s.xMid,s.yMid,dose_DLR, 30,cmap="magma",vmin=0.0,vmax=maximum(dose))
+ax1.set_title("fixed rank r = $(s.r)", fontsize=25)
+ax2.set_title("adaptive rank", fontsize=25)
+ax1.tick_params("both",labelsize=20) 
+ax2.tick_params("both",labelsize=20) 
+ax1.set_xlabel("x", fontsize=20)
+ax1.set_ylabel("y", fontsize=20)
+ax2.set_xlabel("x", fontsize=20)
+ax2.set_ylabel("y", fontsize=20)
+ax1.set_aspect(1)
+ax2.set_aspect(1)
+#colorbar(CS)
+cb = plt.colorbar(CS,fraction=0.035, pad=0.02)
+cb.ax.tick_params(labelsize=15)
+tight_layout()
+savefig("output/doseiso_compare_csd_1stcollision_DLRAM_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)epsAdapt$(s.epsAdapt).png")
+
 
 fig = figure("X_1",figsize=(10,10),dpi=100)
 ax = gca()
-pcolormesh(Vec2Mat(s.NCellsX,s.NCellsY,X_dlr[:,1]))
+pcolormesh(s.xMid,s.yMid,Vec2Mat(s.NCellsX,s.NCellsY,X_dlr[:,1]))
 ax.tick_params("both",labelsize=20) 
 plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
+tight_layout()
 #CS = plt.pcolormesh(X, Y, Z)
+savefig("output/X1_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
 
 fig = figure("X_2",figsize=(10,10),dpi=100)
 ax = gca()
-pcolormesh(Vec2Mat(s.NCellsX,s.NCellsY,X_dlr[:,2]))
+pcolormesh(s.xMid,s.yMid,Vec2Mat(s.NCellsX,s.NCellsY,X_dlr[:,2]))
 ax.tick_params("both",labelsize=20) 
 plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
+tight_layout()
 #CS = plt.pcolormesh(X, Y, Z)
+savefig("output/X2_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
+
+fig = figure("X_3",figsize=(10,10),dpi=100)
+ax = gca()
+pcolormesh(s.xMid,s.yMid,Vec2Mat(s.NCellsX,s.NCellsY,X_dlr[:,3]))
+ax.tick_params("both",labelsize=20) 
+plt.xlabel("x", fontsize=20)
+plt.ylabel("y", fontsize=20)
+tight_layout()
+#CS = plt.pcolormesh(X, Y, Z)
+savefig("output/X3_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
 
 # line plot dose
 fig, ax = subplots()
@@ -145,6 +187,7 @@ ax.set_xlim([s.c,s.d])
 ax.set_ylim([0,1.05])
 ax.tick_params("both",labelsize=20) 
 show()
+tight_layout()
 savefig("output/DoseCutYNx$(s.Nx)")
 
 fig = figure("rank in energy",figsize=(10, 10), dpi=100)
@@ -158,7 +201,7 @@ ax.tick_params("both",labelsize=20)
 ax.legend(loc="upper left", fontsize=20)
 tight_layout()
 fig.canvas.draw() # Update the figure
-savefig("rank_in_time_euler_nx$(s.NCellsX).png")
+savefig("rank_in_energy_csd_1stcollision_adapt_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)$(s.epsAdapt).png")
 
 # write vtk file
 vtkfile = vtk_grid("output/dose_csd_nx$(s.NCellsX)ny$(s.NCellsY)", s.xMid, s.yMid)
@@ -167,19 +210,20 @@ vtkfile["dose_normalized"] = dose./maximum(dose)
 outfiles = vtk_save(vtkfile)
 
 rhoMin = minimum(s.density);
-writedlm("output/dose_csd_1stcollision_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax(s.eMax)rhoMin$(rhoMin).txt", dose)
-writedlm("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax(s.eMax)rhoMin$(rhoMin).txt", dose_DLR)
-writedlm("output/dose_csd_1stcollision_DLRAM_Rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax(s.eMax)rhoMin$(rhoMin).txt", dose_DLRM)
+writedlm("output/dose_csd_1stcollision_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)$(s.epsAdapt).txt", dose)
+writedlm("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", dose_DLR)
+writedlm("output/dose_csd_1stcollision_DLRAM_Rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", dose_DLRM)
 
-writedlm("output/X_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax(s.eMax)rhoMin$(rhoMin).txt", X_dlr)
-writedlm("output/X_csd_1stcollision_DLRAM_Rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax(s.eMax)rhoMin$(rhoMin).txt", X_dlrM)
+writedlm("output/X_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)$(s.epsAdapt).txt", X_dlr)
+writedlm("output/X_csd_1stcollision_DLRAM_Rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", X_dlrM)
 
-writedlm("output/S_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax(s.eMax)rhoMin$(rhoMin).txt", S_dlr)
-writedlm("output/S_csd_1stcollision_DLRAM_Rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax(s.eMax)rhoMin$(rhoMin).txt", S_dlrM)
+writedlm("output/S_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", S_dlr)
+writedlm("output/S_csd_1stcollision_DLRAM_Rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", S_dlrM)
 
-writedlm("output/W_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax(s.eMax)rhoMin$(rhoMin).txt", W_dlr)
-writedlm("output/W_csd_1stcollision_DLRAM_Rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax(s.eMax)rhoMin$(rhoMin).txt", W_dlrM)
+writedlm("output/W_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", W_dlr)
+writedlm("output/W_csd_1stcollision_DLRAM_Rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", W_dlrM)
 
-writedlm("output/u_csd_1stcollision_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax(s.eMax)rhoMin$(rhoMin).txt", u)
+writedlm("output/rank_csd_1stcollision_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", rankInTime)
+writedlm("output/u_csd_1stcollision_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", u)
 
 println("main finished")

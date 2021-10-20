@@ -697,7 +697,7 @@ function SolveFirstCollisionSource(obj::SolverCSD)
         #uNew = uTilde .- dE*uTilde*D;
         
         # update dose
-        obj.dose .+= dE * (uNew[:,1]+0.0*uOUnc) * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+        obj.dose .+= dE * (uNew[:,1]+uOUnc) * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
 
 
         u .= uNew;
@@ -883,23 +883,11 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
             S .= S .- dE.*(XL2xX*S*WAxW + XL2yX*S*WAzW + XL1xX*S*WAbsAxW + XL1yX*S*WAbsAzW);
         end
 
-        ############## Scattering ##############
+        ############## Out Scattering ##############
         L = W*S';
 
-        XTPsi = zeros(nq,r)
-        for k = 1:nq
-            for l = 1:r
-                for i = 2:(nx-1)
-                    for j = 2:(ny-1)
-                        idx = (i-1)*nx + j
-                        XTPsi[k,l] = XTPsi[k,l] + psiNew[i,j,k]*X[idx,l]
-                    end
-                end
-            end
-        end
-
         for i = 1:r
-            L[:,i] = (Id .+ dE*D)\(L[:,i].+dE*Diagonal(Dvec)*obj.M*XTPsi[:,i])
+            L[:,i] = (Id .+ dE*D)\L[:,i]
         end
 
         W,S = qr(L);
@@ -909,7 +897,40 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         S = S[1:r, 1:r];
 
         S .= S';
-       
+
+        ############## In Scattering ##############
+
+        ################## K-step ##################
+        X[obj.boundaryIdx,:] .= 0.0;
+        K .= X*S;
+        #u = u .+dE*Mat2Vec(psiNew)*M'*Diagonal(Dvec);
+        K = K .+dE*Mat2Vec(psiNew)*obj.M'*Diagonal(Dvec)*W;
+        K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
+
+        XNew,STmp = qr!(K);
+        XNew = Matrix(XNew)
+        XNew = XNew[:,1:r];
+
+        MUp .= XNew' * X;
+
+        ################## L-step ##################
+        L = W*S';
+        L = L .+dE*(Mat2Vec(psiNew)*obj.M'*Diagonal(Dvec))'*X;
+
+        WNew,STmp = qr(L);
+        WNew = Matrix(WNew)
+        WNew = WNew[:,1:r];
+
+        NUp .= WNew' * W;
+
+        W .= WNew;
+        X .= XNew;
+
+        ################## S-step ##################
+        S .= MUp*S*(NUp')
+        S .= S .+dE*X'*Mat2Vec(psiNew)*obj.M'*Diagonal(Dvec)*W;
+
+        ############## Dose Computation ##############
         for i = 1:nx
             for j = 1:ny
                 idx = (i-1)*nx + j
@@ -922,7 +943,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         # update dose
         #obj.dose .+= dE * (uNew[:,1]+uOUnc) * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
         # update dose
-        obj.dose .+= dE * (X*S*W[1,:]+0.0*uOUnc) * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+        obj.dose .+= dE * (X*S*W[1,:]+uOUnc) * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
 
         psi .= psiNew;
         next!(prog) # update progress bar
@@ -937,7 +958,7 @@ end
 function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
     # Get rank
     r=15;
-    rmin = 15;
+    rmin = 2;
     rMaxTotal = Int(floor(obj.settings.r/2));
 
     eTrafo = obj.csd.eTrafo;
@@ -1063,7 +1084,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         end
 
         for i = 1:r
-            L[:,i] = (Id .+ dE*D)\(L[:,i].+dE*Diagonal(Dvec)*obj.M*XTPsi[:,i])
+            L[:,i] = (Id .+ dE*D)\L[:,i];
         end
 
         W,S = qr(L);
@@ -1073,6 +1094,40 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         S = S[1:r, 1:r];
 
         S .= S';
+
+        ############## In Scattering ##############
+
+        ################## K-step ##################
+        X[obj.boundaryIdx,:] .= 0.0;
+        K = X*S;
+        #u = u .+dE*Mat2Vec(psiNew)*M'*Diagonal(Dvec);
+        K = K .+dE*Mat2Vec(psiNew)*obj.M'*Diagonal(Dvec)*W;
+        K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
+
+        XNew,STmp = qr!(K);
+        XNew = Matrix(XNew)
+        XNew = XNew[:,1:r];
+
+        MUp = XNew' * X;
+
+        ################## L-step ##################
+        L = W*S';
+        L = L .+dE*(Mat2Vec(psiNew)*obj.M'*Diagonal(Dvec))'*X;
+
+        WNew,STmp = qr(L);
+        WNew = Matrix(WNew)
+        WNew = WNew[:,1:r];
+
+        NUp = WNew' * W;
+
+        W = WNew;
+        X = XNew;
+
+        ################## S-step ##################
+        S = MUp*S*(NUp')
+        S = S .+dE*X'*Mat2Vec(psiNew)*obj.M'*Diagonal(Dvec)*W;
+
+        ################## Update dose ##################
 
         for i = 1:nx
             for j = 1:ny
@@ -1199,176 +1254,120 @@ function UnconventionalIntegrator!(obj::SolverCSD,Dvec::Array{Float64,1},D,X::Ar
     nq = obj.Q.nquadpoints;
     SigmaT = D+Diagonal(Dvec)
     dE = obj.settings.dE;
+    nEnergies = length(obj.csd.eTrafo);
+    n = eIndex;
 
     N = obj.pn.nTotalEntries
     Id = Diagonal(ones(N));
 
     if eIndex > step
-        ################## K-step ##################
-        K = X*S;
-
-        WAzW = W'*obj.pn.Az'*W
-        WAbsAzW = W'*obj.AbsAz'*W
-        WAbsAxW = W'*obj.AbsAx'*W
-        WAxW = W'*obj.pn.Ax'*W
-
-        K .= K .- dE*(obj.L2x*K*WAxW + obj.L2y*K*WAzW + obj.L1x*K*WAbsAxW + obj.L1y*K*WAbsAzW);
-
-        XNew,STmp = qr!(K);
-        XNew = Matrix(XNew)
-        XNew = XNew[:,1:r];
-
-        # impose boundary condition
-        XNew[obj.boundaryIdx,:] .= 0.0;
-
-        MUp = XNew' * X;
-        ################## L-step ##################
-        L = W*S';
-
-        XL2xX = X'*obj.L2x*X
-        XL2yX = X'*obj.L2y*X
-        XL1xX = X'*obj.L1x*X
-        XL1yX = X'*obj.L1y*X
-
-        L .= L .- dE*(obj.pn.Ax*L*XL2xX' + obj.pn.Az*L*XL2yX' + obj.AbsAx*L*XL1xX' + obj.AbsAz*L*XL1yX');
-                
-        WNew,STmp = qr(L);
-        WNew = Matrix(WNew)
-        WNew = WNew[:,1:r];
-
-        NUp = WNew' * W;
-        W .= WNew;
-        X .= XNew;
-        ################## S-step ##################
-        S .= MUp*S*(NUp')
-
-        XL2xX .= X'*obj.L2x*X
-        XL2yX .= X'*obj.L2y*X
-        XL1xX .= X'*obj.L1x*X
-        XL1yX .= X'*obj.L1y*X
-
-        WAzW .= W'*obj.pn.Az'*W
-        WAbsAzW .= W'*obj.AbsAz'*W
-        WAbsAxW .= W'*obj.AbsAx'*W
-        WAxW .= W'*obj.pn.Ax'*W
-
-        S .= S .- dE.*(XL2xX*S*WAxW + XL2yX*S*WAzW + XL1xX*S*WAbsAxW + XL1yX*S*WAbsAzW);
+        #X,S,W = UpdateUIStreaming(obj,X,S,W);
     end
 
-    ############## Scattering ##############
+    ############## In Scattering ##############
+    sigT = SigmaT[1];
+    ################## K-step ##################
+    X[obj.boundaryIdx,:] .= 0.0;
+    K = X*S;
+    #u = u .+dE*Mat2Vec(psiNew)*M'*Diagonal(Dvec);
+    K .= (K .+dE*Mat2Vec(psiNew)*obj.M'*Diagonal(Dvec)*W)/(1+dE*sigT);
+    K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
+
+    XNew,STmp = qr!(K);
+    XNew = Matrix(XNew)
+    XNew = XNew[:,1:r];
+
+    MUp = XNew' * X;
+
+    ################## L-step ##################
     L = W*S';
+    L .= (L .+dE*(Mat2Vec(psiNew)*obj.M'*Diagonal(Dvec))'*X)/(1+dE*sigT);
 
-    XTPsi = zeros(nq,r)
-    for k = 1:nq
-        for l = 1:r
-            for i = 1:nx
-                for j = 1:ny
-                    idx = (i-1)*nx + j
-                    XTPsi[k,l] = XTPsi[k,l] + psiNew[i,j,k]*X[idx,l]
-                end
-            end
-        end
+    WNew,STmp = qr(L);
+    WNew = Matrix(WNew)
+    WNew = WNew[:,1:r];
+
+    NUp = WNew' * W;
+
+    W .= WNew;
+    X .= XNew;
+
+    ################## S-step ##################
+    S .= MUp*S*(NUp')
+    S .= (S .+dE*X'*Mat2Vec(psiNew)*obj.M'*Diagonal(Dvec)*W)/(1+dE*sigT);
+
+    obj.dose .+= dE * X*S*W[1,:] * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+
+    if eIndex > step
+        X,S,W = UpdateUIStreaming(obj,X,S,W);
     end
-
-    for i = 1:r
-        L[:,i] = (Id .+ dE*SigmaT)\(L[:,i].+dE*Diagonal(Dvec)*obj.M*XTPsi[:,i])
-    end
-
-    W,S = qr(L);
-    W = Matrix(W)
-    W = W[:, 1:r];
-    S = Matrix(S)
-    S = S[1:r, 1:r];
-
-    S .= S';
 
     return X,S,W;
 end
 
-function UnconventionalIntegrator!(obj::SolverCSD,Dvec::Array{Float64,1},D,X::Array{Float64,2},S::Array{Float64,2},W::Array{Float64,2},XPrev::Array{Float64,2},LPrev::Array{Float64,2},step::Int,eIndex::Int)
+function UnconventionalIntegrator!(obj::SolverCSD,Dvec::Array{Float64,1},D,X::Array{Float64,2},S::Array{Float64,2},W::Array{Float64,2},XPrev::Array{Float64,2},SPrev::Array{Float64,2},WPrev::Array{Float64,2},step::Int,eIndex::Int)
     r=obj.settings.r;
     nx = obj.settings.NCellsX;
     ny = obj.settings.NCellsY;
     nq = obj.Q.nquadpoints;
     SigmaT = D+Diagonal(Dvec)
     dE = obj.settings.dE;
+    n = eIndex;
+    nEnergies = length(obj.csd.eTrafo);
 
     N = obj.pn.nTotalEntries
     Id = Diagonal(ones(N));
 
-    if eIndex > step
-        ################## K-step ##################
-        K = X*S;
+    ############## In Scattering ##############
+    sigT = SigmaT[1]
+    ################## K-step ##################
+    X[obj.boundaryIdx,:] .= 0.0;
+    K = X*S;
+    WPrevDW = WPrev'*Diagonal(Dvec)*W;
+    #K .= K .+dE*XPrev*SPrev*WPrevDW;
+    K = (K + dE*XPrev*SPrev*WPrev'*Diagonal(Dvec)*W)/(1+dE*sigT)
+    #u = u + dE*XPrev*SPrev*WPrev'*Diagonal(Dvec)
+    K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
-        WAzW = W'*obj.pn.Az'*W
-        WAbsAzW = W'*obj.AbsAz'*W
-        WAbsAxW = W'*obj.AbsAx'*W
-        WAxW = W'*obj.pn.Ax'*W
+    XNew,STmp = qr!(K);
+    XNew = Matrix(XNew)
+    XNew = XNew[:,1:r];
 
-        K .= K .- dE*(obj.L2x*K*WAxW + obj.L2y*K*WAzW + obj.L1x*K*WAbsAxW + obj.L1y*K*WAbsAzW);
+    MUp = XNew' * X;
 
-        XNew,STmp = qr!(K);
-        XNew = Matrix(XNew)
-        XNew = XNew[:,1:r];
-
-        # impose boundary condition
-        XNew[obj.boundaryIdx,:] .= 0.0;
-
-        MUp = XNew' * X;
-        ################## L-step ##################
-        L = W*S';
-
-        XL2xX = X'*obj.L2x*X
-        XL2yX = X'*obj.L2y*X
-        XL1xX = X'*obj.L1x*X
-        XL1yX = X'*obj.L1y*X
-
-        L .= L .- dE*(obj.pn.Ax*L*XL2xX' + obj.pn.Az*L*XL2yX' + obj.AbsAx*L*XL1xX' + obj.AbsAz*L*XL1yX');
-                
-        WNew,STmp = qr(L);
-        WNew = Matrix(WNew)
-        WNew = WNew[:,1:r];
-
-        NUp = WNew' * W;
-        W .= WNew;
-        X .= XNew;
-        ################## S-step ##################
-        S .= MUp*S*(NUp')
-
-        XL2xX .= X'*obj.L2x*X
-        XL2yX .= X'*obj.L2y*X
-        XL1xX .= X'*obj.L1x*X
-        XL1yX .= X'*obj.L1y*X
-
-        WAzW .= W'*obj.pn.Az'*W
-        WAbsAzW .= W'*obj.AbsAz'*W
-        WAbsAxW .= W'*obj.AbsAx'*W
-        WAxW .= W'*obj.pn.Ax'*W
-
-        S .= S .- dE.*(XL2xX*S*WAxW + XL2yX*S*WAzW + XL1xX*S*WAbsAxW + XL1yX*S*WAbsAzW);
-    end
-
-    ############## Scattering ##############
+    ################## L-step ##################
     L = W*S';
+    XX = XPrev'*X;
+    #L .= L .+dE*Diagonal(Dvec)*WPrev*SPrev'*XX;
+    sigT = SigmaT[1]
+    L .= (L .+ dE*(XPrev*SPrev*WPrev'*Diagonal(Dvec))'*X)/(1+dE*sigT)
 
-    XTXPrev = X'*XPrev;
+    WNew,STmp = qr!(L);
+    WNew = Matrix(WNew)
+    WNew = WNew[:,1:r];
 
-    for i = 1:r
-        L[:,i] = (Id .+ dE*SigmaT)\(L[:,i].+dE*Diagonal(Dvec)*LPrev*XTXPrev[i,:])
+    NUp = WNew' * W;
+    W .= WNew;
+    X .= XNew;
+
+    ################## S-step ##################
+    S .= MUp*S*(NUp')
+    WPrevDW .= WPrev'*Diagonal(Dvec)*W;
+    XX .= X'*XPrev;
+
+    #S .= S .+dE*XX*SPrev*WPrevDW;
+    S .= (S + dE*X'*XPrev*SPrev*WPrev'*Diagonal(Dvec)*W)/(1+dE*sigT)
+
+    obj.dose .+= dE * X*S*W[1,:] * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+
+    if eIndex > step
+        X,S,W = UpdateUIStreaming(obj,X,S,W);
     end
-
-    W,S = qr(L);
-    W = Matrix(W)
-    W = W[:, 1:r];
-    S = Matrix(S)
-    S = S[1:r, 1:r];
-
-    S .= S';
 
     return X,S,W;
 end
 
-function UnconventionalIntegratorCollided!(obj::SolverCSD,Dvec::Array{Float64,1},D,X::Array{Float64,2},S::Array{Float64,2},W::Array{Float64,2},XPrev::Array{Float64,2},LPrev::Array{Float64,2},step::Int,eIndex::Int)
+function UnconventionalIntegratorCollided!(obj::SolverCSD,Dvec::Array{Float64,1},D,X::Array{Float64,2},S::Array{Float64,2},W::Array{Float64,2},XPrev::Array{Float64,2},SPrev::Array{Float64,2},WPrev::Array{Float64,2},step::Int,eIndex::Int)
     r=obj.settings.r;
     nx = obj.settings.NCellsX;
     ny = obj.settings.NCellsY;
@@ -1376,65 +1375,52 @@ function UnconventionalIntegratorCollided!(obj::SolverCSD,Dvec::Array{Float64,1}
     dE = obj.settings.dE;
     N = obj.pn.nTotalEntries
     Id = Diagonal(ones(N));
+    nEnergies = length(obj.csd.eTrafo);
 
-    if eIndex > step
-        ################## K-step ##################
-        K = X*S;
+    ############## In Scattering ##############
 
-        WAzW = W'*obj.pn.Az'*W
-        WAbsAzW = W'*obj.AbsAz'*W
-        WAbsAxW = W'*obj.AbsAx'*W
-        WAxW = W'*obj.pn.Ax'*W
+    ################## K-step ##################
+    X[obj.boundaryIdx,:] .= 0.0;
+    K = X*S;
+    WPrevDW = WPrev'*Diagonal(Dvec)*W;
+    #K .= K .+dE*XPrev*SPrev*WPrevDW;
+    K = K + dE*XPrev*SPrev*WPrev'*Diagonal(Dvec)*W
+    #u = u + dE*XPrev*SPrev*WPrev'*Diagonal(Dvec)
+    K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
-        K .= K .- dE*(obj.L2x*K*WAxW + obj.L2y*K*WAzW + obj.L1x*K*WAbsAxW + obj.L1y*K*WAbsAzW);
+    XNew,STmp = qr!(K);
+    XNew = Matrix(XNew)
+    XNew = XNew[:,1:r];
 
-        XNew,STmp = qr!(K);
-        XNew = Matrix(XNew)
-        XNew = XNew[:,1:r];
+    MUp = XNew' * X;
 
-        # impose boundary condition
-        XNew[obj.boundaryIdx,:] .= 0.0;
+    ################## L-step ##################
+    L = W*S';
+    XX = XPrev'*X;
+    #L .= L .+dE*Diagonal(Dvec)*WPrev*SPrev'*XX;
+    L .= L .+ dE*(XPrev*SPrev*WPrev'*Diagonal(Dvec))'*X
 
-        MUp = XNew' * X;
-        ################## L-step ##################
-        L = W*S';
+    WNew,STmp = qr(L);
+    WNew = Matrix(WNew)
+    WNew = WNew[:,1:r];
 
-        XL2xX = X'*obj.L2x*X
-        XL2yX = X'*obj.L2y*X
-        XL1xX = X'*obj.L1x*X
-        XL1yX = X'*obj.L1y*X
+    NUp = WNew' * W;
+    W .= WNew;
+    X .= XNew;
 
-        L .= L .- dE*(obj.pn.Ax*L*XL2xX' + obj.pn.Az*L*XL2yX' + obj.AbsAx*L*XL1xX' + obj.AbsAz*L*XL1yX');
-                
-        WNew,STmp = qr(L);
-        WNew = Matrix(WNew)
-        WNew = WNew[:,1:r];
+    ################## S-step ##################
+    S .= MUp*S*(NUp')
+    WPrevDW .= WPrev'*Diagonal(Dvec)*W;
+    XX .= X'*XPrev;
 
-        NUp = WNew' * W;
-        W .= WNew;
-        X .= XNew;
-        ################## S-step ##################
-        S .= MUp*S*(NUp')
+    #S .= S .+dE*XX*SPrev*WPrevDW;
+    S = S + dE*X'*XPrev*SPrev*WPrev'*Diagonal(Dvec)*W
 
-        XL2xX .= X'*obj.L2x*X
-        XL2yX .= X'*obj.L2y*X
-        XL1xX .= X'*obj.L1x*X
-        XL1yX .= X'*obj.L1y*X
-
-        WAzW .= W'*obj.pn.Az'*W
-        WAbsAzW .= W'*obj.AbsAz'*W
-        WAbsAxW .= W'*obj.AbsAx'*W
-        WAxW .= W'*obj.pn.Ax'*W
-
-        S .= S .- dE.*(XL2xX*S*WAxW + XL2yX*S*WAzW + XL1xX*S*WAbsAxW + XL1yX*S*WAbsAzW);
-    end
-
-    ############## Scattering ##############
+    ############## Self-In and Out Scattering ##############
     L = W*S';
 
-    XTXPrev = X'*XPrev;
     for i = 1:r
-        L[:,i] = (Id .+ dE*D)\(L[:,i].+dE*Diagonal(Dvec)*LPrev*XTXPrev[i,:])
+        L[:,i] = (Id .+ dE*D)\L[:,i];
     end
 
     W,S = qr(L);
@@ -1445,6 +1431,68 @@ function UnconventionalIntegratorCollided!(obj::SolverCSD,Dvec::Array{Float64,1}
 
     S .= S';
 
+    # update dose
+    obj.dose .+= dE * X*S*W[1,:] * obj.csd.SMid[step] ./ obj.densityVec ./( 1 + (step==1||step==nEnergies));
+
+    if eIndex > step
+        X,S,W = UpdateUIStreaming(obj,X,S,W);
+    end
+
+    return X,S,W;
+end
+
+function UpdateUIStreaming(obj::SolverCSD,X::Array{Float64,2},S::Array{Float64,2},W::Array{Float64,2})
+    dE = obj.settings.dE
+    r=obj.settings.r;
+    ################## K-step ##################
+    K = X*S;
+
+    WAzW = W'*obj.pn.Az'*W
+    WAbsAzW = W'*obj.AbsAz'*W
+    WAbsAxW = W'*obj.AbsAx'*W
+    WAxW = W'*obj.pn.Ax'*W
+
+    K .= K .- dE*(obj.L2x*K*WAxW + obj.L2y*K*WAzW + obj.L1x*K*WAbsAxW + obj.L1y*K*WAbsAzW);
+
+    XNew,STmp = qr!(K);
+    XNew = Matrix(XNew)
+    XNew = XNew[:,1:r];
+
+    # impose boundary condition
+    XNew[obj.boundaryIdx,:] .= 0.0;
+
+    MUp = XNew' * X;
+    ################## L-step ##################
+    L = W*S';
+
+    XL2xX = X'*obj.L2x*X
+    XL2yX = X'*obj.L2y*X
+    XL1xX = X'*obj.L1x*X
+    XL1yX = X'*obj.L1y*X
+
+    L .= L .- dE*(obj.pn.Ax*L*XL2xX' + obj.pn.Az*L*XL2yX' + obj.AbsAx*L*XL1xX' + obj.AbsAz*L*XL1yX');
+            
+    WNew,STmp = qr(L);
+    WNew = Matrix(WNew)
+    WNew = WNew[:,1:r];
+
+    NUp = WNew' * W;
+    W .= WNew;
+    X .= XNew;
+    ################## S-step ##################
+    S .= MUp*S*(NUp')
+
+    XL2xX .= X'*obj.L2x*X
+    XL2yX .= X'*obj.L2y*X
+    XL1xX .= X'*obj.L1x*X
+    XL1yX .= X'*obj.L1y*X
+
+    WAzW .= W'*obj.pn.Az'*W
+    WAbsAzW .= W'*obj.AbsAz'*W
+    WAbsAxW .= W'*obj.AbsAx'*W
+    WAxW .= W'*obj.pn.Ax'*W
+
+    S .= S .- dE.*(XL2xX*S*WAxW + XL2yX*S*WAzW + XL1xX*S*WAbsAxW + XL1yX*S*WAbsAzW);
     return X,S,W;
 end
 
@@ -1468,7 +1516,7 @@ function SolveMCollisionSourceDLR(obj::SolverCSD)
     # set boundary condition
     for k = 1:nq
         for j = 1:ny
-            psi[1:1,j,k] .= 1000*PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[1],obj.settings.xMid[j],1);
+            psi[1:5,j,k] .= 1000*PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[1],obj.settings.xMid[j],1);
         end
     end
 
@@ -1506,24 +1554,6 @@ function SolveMCollisionSourceDLR(obj::SolverCSD)
     X3 = deepcopy(X);
     W3 = deepcopy(W);
     S3 = deepcopy(S);
-
-    K = zeros(size(X));
-
-    WAxW = zeros(r,r)
-    WAzW = zeros(r,r)
-    WAbsAxW = zeros(r,r)
-    WAbsAzW = zeros(r,r)
-
-    XL2xX = zeros(r,r)
-    XL2yX = zeros(r,r)
-    XL1xX = zeros(r,r)
-    XL1yX = zeros(r,r)
-
-    MUp = zeros(r,r)
-    NUp = zeros(r,r)
-
-    XNew = zeros(nx*ny,r)
-    STmp = zeros(r,r)
 
     # impose boundary condition
     X[obj.boundaryIdx,:] .= 0.0;
@@ -1581,12 +1611,16 @@ function SolveMCollisionSourceDLR(obj::SolverCSD)
         D = Diagonal(sigmaS[1] .- Dvec);
 
         X1,S1,W1 = UnconventionalIntegrator!(obj,Dvec,D,X1,S1,W1,psiNew,1,n)
+        X1[obj.boundaryIdx,:] .= 0.0;
 
-        X2,S2,W2 = UnconventionalIntegrator!(obj,Dvec,D,X2,S2,W2,X1,W1*S1',2,n)
+        X2,S2,W2 = UnconventionalIntegrator!(obj,Dvec,D,X2,S2,W2,X1,S1,W1,2,n)
+        X2[obj.boundaryIdx,:] .= 0.0;
 
-        X3,S3,W3 = UnconventionalIntegrator!(obj,Dvec,D,X3,S3,W3,X2,W2*S2',3,n)
+        X3,S3,W3 = UnconventionalIntegrator!(obj,Dvec,D,X3,S3,W3,X2,S2,W2,3,n)
+        X3[obj.boundaryIdx,:] .= 0.0;
 
-        X,S,W = UnconventionalIntegratorCollided!(obj,Dvec,D,X,S,W,X3,W3*S3',4,n)
+        X,S,W = UnconventionalIntegratorCollided!(obj,Dvec,D,X,S,W,X3,S3,W3,4,n)
+        X[obj.boundaryIdx,:] .= 0.0;
        
         for i = 1:nx
             for j = 1:ny
@@ -1596,9 +1630,7 @@ function SolveMCollisionSourceDLR(obj::SolverCSD)
         end
         
         # update dose
-        #obj.dose .+= dE * (uNew[:,1]+uOUnc) * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
-        # update dose
-        obj.dose .+= dE * (X*S*W[1,:]+X1*S1*W1[1,:]+X2*S2*W2[1,:]+X3*S3*W3[1,:]+uOUnc) * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+        #obj.dose .+= dE * (X*S*W[1,:]+X1*S1*W1[1,:]+X2*S2*W2[1,:]+X3*S3*W3[1,:]+uOUnc) * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
 
         psi .= psiNew;
         next!(prog) # update progress bar
@@ -1998,4 +2030,17 @@ function Vec2Mat(nx,ny,v)
         end
     end
     return m;
+end
+
+function Mat2Vec(mat)
+    nx = size(mat,1)
+    ny = size(mat,2)
+    m = size(mat,3)
+    v = zeros(nx*ny,m);
+    for i = 1:nx
+        for j = 1:ny
+            v[(i-1)*nx + j,:] = mat[i,j,:]
+        end
+    end
+    return v;
 end
