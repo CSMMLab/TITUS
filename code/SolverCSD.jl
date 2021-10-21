@@ -1441,9 +1441,11 @@ function UnconventionalIntegratorCollided!(obj::SolverCSD,Dvec::Array{Float64,1}
     return X,S,W;
 end
 
-function UpdateUIStreaming(obj::SolverCSD,X::Array{Float64,2},S::Array{Float64,2},W::Array{Float64,2})
+
+function UpdateUIStreaming(obj::SolverCSD,X::Array{Float64,2},S::Array{Float64,2},W::Array{Float64,2},sigmaT::Float64=0.0)
     dE = obj.settings.dE
     r=obj.settings.r;
+    #Diagonal(ones(size(Dvec))./(1 .- dE*Dvec))*L[:,i];
     ################## K-step ##################
     K = X*S;
 
@@ -1452,7 +1454,7 @@ function UpdateUIStreaming(obj::SolverCSD,X::Array{Float64,2},S::Array{Float64,2
     WAbsAxW = W'*obj.AbsAx'*W
     WAxW = W'*obj.pn.Ax'*W
 
-    K .= K .- dE*(obj.L2x*K*WAxW + obj.L2y*K*WAzW + obj.L1x*K*WAbsAxW + obj.L1y*K*WAbsAzW);
+    K .= (K .- dE*(obj.L2x*K*WAxW + obj.L2y*K*WAzW + obj.L1x*K*WAbsAxW + obj.L1y*K*WAbsAzW))/(1+dE*sigmaT);
 
     XNew,STmp = qr!(K);
     XNew = Matrix(XNew)
@@ -1470,7 +1472,7 @@ function UpdateUIStreaming(obj::SolverCSD,X::Array{Float64,2},S::Array{Float64,2
     XL1xX = X'*obj.L1x*X
     XL1yX = X'*obj.L1y*X
 
-    L .= L .- dE*(obj.pn.Ax*L*XL2xX' + obj.pn.Az*L*XL2yX' + obj.AbsAx*L*XL1xX' + obj.AbsAz*L*XL1yX');
+    L .= (L .- dE*(obj.pn.Ax*L*XL2xX' + obj.pn.Az*L*XL2yX' + obj.AbsAx*L*XL1xX' + obj.AbsAz*L*XL1yX'))/(1+dE*sigmaT);
             
     WNew,STmp = qr(L);
     WNew = Matrix(WNew)
@@ -1492,9 +1494,10 @@ function UpdateUIStreaming(obj::SolverCSD,X::Array{Float64,2},S::Array{Float64,2
     WAbsAxW .= W'*obj.AbsAx'*W
     WAxW .= W'*obj.pn.Ax'*W
 
-    S .= S .- dE.*(XL2xX*S*WAxW + XL2yX*S*WAzW + XL1xX*S*WAbsAxW + XL1yX*S*WAbsAzW);
+    S .= (S .- dE.*(XL2xX*S*WAxW + XL2yX*S*WAzW + XL1xX*S*WAbsAxW + XL1yX*S*WAbsAzW))/(1+dE*sigmaT);
     return X,S,W;
 end
+
 
 function SolveMCollisionSourceDLR(obj::SolverCSD)
     # Get rank
