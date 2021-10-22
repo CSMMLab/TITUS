@@ -9,8 +9,9 @@ using WriteVTK
 
 close("all")
 
-nx = 51;
+nx = 71;
 s = Settings(nx,nx,100);
+rhoMin = minimum(s.density);
 
 if s.problem == "AirCavity"
     smapIn = readdlm("dose_ac.txt", ',', Float64)
@@ -209,7 +210,6 @@ vtkfile["dose"] = dose
 vtkfile["dose_normalized"] = dose./maximum(dose)
 outfiles = vtk_save(vtkfile)
 
-rhoMin = minimum(s.density);
 writedlm("output/dose_csd_1stcollision_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)$(s.epsAdapt).txt", dose)
 writedlm("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", dose_DLR)
 writedlm("output/dose_csd_1stcollision_DLRAM_Rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", dose_DLRM)
