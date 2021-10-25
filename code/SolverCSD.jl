@@ -787,6 +787,9 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     obj.settings.dE = dE
 
     println("CFL = ",dE/obj.settings.dx*maximum(densityInv))
+    println("dE = ",dE)
+    println("dx = ",obj.settings.dx)
+    println("densityInv = ",maximum(densityInv))
 
     flux = zeros(size(psi))
 
@@ -1021,6 +1024,9 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
     obj.settings.dE = dE
 
     println("CFL = ",dE/obj.settings.dx*maximum(densityInv))
+    println("dE = ",dE)
+    println("dx = ",obj.settings.dx)
+    println("densityInv = ",maximum(densityInv))
     
     uNew = deepcopy(u)
     flux = zeros(size(psi))
@@ -1297,7 +1303,7 @@ function UnconventionalIntegrator!(obj::SolverCSD,Dvec::Array{Float64,1},D,X::Ar
 
     ################## S-step ##################
     S .= MUp*S*(NUp')
-    S .= (S .+dE*X'*Mat2Vec(psiNew)*obj.M'*W*W'*Diagonal(Dvec)*W)/(1+dE*sigT);
+    S .= (S .+dE*X'*Mat2Vec(psiNew)*obj.M'*Diagonal(Dvec)*W)/(1+dE*sigT);
 
     #obj.dose .+= dE * X*S*W[1,:] * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
 
@@ -1361,7 +1367,7 @@ function UnconventionalIntegrator!(obj::SolverCSD,Dvec::Array{Float64,1},D,X::Ar
     XX .= X'*XPrev;
 
     #S .= S .+dE*XX*SPrev*WPrevDW;
-    S .= (S + dE*X'*XPrev*SPrev*WPrev'*W*W'*Diagonal(Dvec)*W)/(1+dE*sigT)
+    S .= (S + dE*X'*XPrev*SPrev*WPrev'*Diagonal(Dvec)*W)/(1+dE*sigT)
 
     #obj.dose .+= dE * X*S*W[1,:] * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
 
@@ -1421,7 +1427,7 @@ function UnconventionalIntegratorCollided!(obj::SolverCSD,Dvec::Array{Float64,1}
     XX .= X'*XPrev;
 
     #S .= S .+dE*XX*SPrev*WPrevDW;
-    S = S + dE*X'*XPrev*SPrev*WPrev'*W*W'*Diagonal(Dvec)*W
+    S = S + dE*X'*XPrev*SPrev*WPrev'*Diagonal(Dvec)*W
 
     ############## Self-In and Out Scattering ##############
     L = W*S';
