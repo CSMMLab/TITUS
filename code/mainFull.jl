@@ -9,7 +9,7 @@ using WriteVTK
 
 close("all")
 
-nx = 101;
+nx = 201;
 s = Settings(nx,nx,100);
 rhoMin = minimum(s.density);
 
@@ -49,7 +49,7 @@ solver2 = SolverCSD(s);
 X_dlr,S_dlr,W_dlr, dose_DLR = SolveFirstCollisionSourceDLR(solver2);
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
 
-s3 = Settings(nx,nx,50);
+s3 = Settings(nx,nx,20);
 solver3 = SolverCSD(s3);
 X_dlrM,S_dlrM,W_dlrM, dose_DLRM = SolveMCollisionSourceDLR(solver3);
 dose_DLRM = Vec2Mat(s3.NCellsX,s3.NCellsY,dose_DLRM);

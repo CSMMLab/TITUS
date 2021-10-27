@@ -112,7 +112,7 @@ mutable struct Settings
         dE = cfl*dx*minimum(density);
         
         # number PN moments
-        nPN = 15#13, 21; # use odd number
+        nPN = 21#13, 21; # use odd number
         epsAdapt = 1e-3;
 
         # build class
