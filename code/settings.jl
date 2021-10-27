@@ -82,10 +82,10 @@ mutable struct Settings
             pathlib = pyimport("pathlib")
             path = pathlib.Path(pwd())
             println(path)
-            img = Float64.(Gray.(load("Liver_1.png")))
+            img = Float64.(Gray.(load("liver_cut.jpg")))
             nx = size(img,1)
             ny = size(img,2)
-            densityMin = 0.05
+            densityMin = 0.1
             for i = 1:NCellsX
                 for j = 1:NCellsY
                     density[i,j] = max(1.85*img[Int(floor(i/NCellsX*nx)),Int(floor(j/NCellsY*ny))],densityMin) # 1.85 bone, 1.04 muscle, 0.3 lung
@@ -112,7 +112,7 @@ mutable struct Settings
         dE = cfl*dx*minimum(density);
         
         # number PN moments
-        nPN = 13#13, 21; # use odd number
+        nPN = 15#13, 21; # use odd number
         epsAdapt = 1e-3;
 
         # build class
@@ -121,8 +121,8 @@ mutable struct Settings
 end
 
 function IC(obj::Settings,x,y)
-    posBeamX = 0.0;
-    posBeamY = 0.5;
+    posBeamX = 1.0;
+    posBeamY = 0.035;
     if obj.problem == "CT"
         #posBeamX = obj.a;
     end

@@ -351,7 +351,7 @@ function SetupIC(obj::SolverCSD)
     
     if obj.settings.problem == "CT" || obj.settings.problem == "2D" || obj.settings.problem == "2DHighD"
         for k = 1:nq
-            if obj.Q.pointsxyz[k][1] > 0.75
+            if obj.Q.pointsxyz[k][1] < -0.85
                 psi[:,:,k] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)
             end
         end
@@ -366,9 +366,9 @@ end
 
 function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,n::Int)
     E0 = obj.settings.eMax;
-    x0 = 0.5;
+    x0 = 0.35;
     rho = 0.1;
-    return 10^5*exp(-100.0*(1.0-Omega[1])^2)*exp(-50*(E0-E)^2)*exp(-100*(x-x0)^2)*obj.csd.S[n]*rho;
+    return 10^5*exp(-300.0*(-1.0-Omega[1])^2)*exp(-200*(E0-E)^2)*exp(-300*(x-x0)^2)*obj.csd.S[n]*rho;
 end
 
 function BCLeft(obj::SolverCSD,n::Int)
@@ -731,7 +731,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     # set boundary condition
     for k = 1:nq
         for j = 1:ny
-            psi[1:1,j,k] .= 1000*PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[1],obj.settings.xMid[j],1);
+            psi[end:end,j,k] .= 1000*PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[1],obj.settings.xMid[j],1);
             
         end
     end
@@ -812,7 +812,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         # set boundary condition
         for k = 1:nq
             for j = 1:ny
-                psi[1,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
+                psi[end,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
                 #psi[2,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
             end
         end
@@ -981,7 +981,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
     # set boundary condition
     for k = 1:nq
         for j = 1:ny
-            psi[1:1,j,k] .= 1000*PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[1],obj.settings.xMid[j],1);
+            psi[end:end,j,k] .= 1000*PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[1],obj.settings.xMid[j],1);
             
         end
     end
@@ -1049,7 +1049,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         # set boundary condition
         for k = 1:nq
             for j = 1:ny
-                psi[1,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
+                psi[end,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
                 #psi[2,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
             end
         end
@@ -1527,7 +1527,7 @@ function SolveMCollisionSourceDLR(obj::SolverCSD)
     # set boundary condition
     for k = 1:nq
         for j = 1:ny
-            psi[1:5,j,k] .= 1000*PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[1],obj.settings.xMid[j],1);
+            psi[end:end,j,k] .= 1000*PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[1],obj.settings.xMid[j],1);
         end
     end
 
@@ -1599,7 +1599,7 @@ function SolveMCollisionSourceDLR(obj::SolverCSD)
         # set boundary condition
         for k = 1:nq
             for j = 1:ny
-                psi[1,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
+                psi[end,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
                 #psi[2,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
             end
         end
