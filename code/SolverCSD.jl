@@ -1028,12 +1028,9 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
     println("dx = ",obj.settings.dx)
     println("densityInv = ",maximum(densityInv))
     
-    uNew = deepcopy(u)
     flux = zeros(size(psi))
 
     prog = Progress(nEnergies,1)
-    scatSN = zeros(size(psi))
-    MapOrdinates = obj.O*obj.M
 
     rankInTime = zeros(2,nEnergies);
 
