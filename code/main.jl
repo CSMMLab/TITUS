@@ -10,7 +10,7 @@ using WriteVTK
 close("all")
 
 nx = 151;
-s = Settings(nx,nx,100);
+s = Settings(nx,nx,200);
 rhoMin = minimum(s.density);
 
 if s.problem == "AirCavity"
@@ -40,14 +40,14 @@ X,S,W, dose, rankInTime = SolveFirstCollisionSourceAdaptiveDLR(solver1);
 #u, dose = SolveFirstCollisionSource(solver1);
 dose = Vec2Mat(s.NCellsX,s.NCellsY,dose);
 
-s = Settings(nx,nx,50);
+s = Settings(nx,nx,100);
 #s = Settings(nx,nx,int(maximum(rankInTime[2,:])));
 solver2 = SolverCSD(s);
 X_dlr,S_dlr,W_dlr, dose_DLR = SolveFirstCollisionSourceDLR(solver2);
 #X_dlr,S_dlr,W_dlr, dose_DLR = SolveMCollisionSourceDLR(solver2);
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
 
-s3 = Settings(nx,nx,50);
+s3 = Settings(nx,nx,100);
 solver3 = SolverCSD(s3);
 X_dlrM,S_dlrM,W_dlrM, dose_DLRM = SolveMCollisionSourceDLR(solver3);
 dose_DLRM = Vec2Mat(s3.NCellsX,s3.NCellsY,dose_DLRM);

@@ -366,9 +366,10 @@ end
 
 function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,n::Int)
     E0 = obj.settings.eMax;
-    x0 = 0.35;
+    x0 = 0.4*obj.settings.b;
     rho = 0.1;
-    return 10^5*exp(-300.0*(-1.0-Omega[1])^2)*exp(-200*(E0-E)^2)*exp(-300*(x-x0)^2)*obj.csd.S[n]*rho;
+    Omega0 = -1.0; # -1 means particles travel down
+    return 10^5*exp(-300.0*(Omega0-Omega[1])^2)*exp(-200*(E0-E)^2)*exp(-300*(x-x0)^2)*obj.csd.S[n]*rho;
 end
 
 function BCLeft(obj::SolverCSD,n::Int)
@@ -658,7 +659,7 @@ function SolveFirstCollisionSource(obj::SolverCSD)
         # set boundary condition
         for k = 1:nq
             for j = 1:ny
-                psi[1,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
+                psi[end,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
                 #psi[2,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
             end
         end

@@ -7,7 +7,7 @@ using PyPlot
 using DelimitedFiles
 using WriteVTK
 
-close("all")
+#close("all")
 
 nx = 201;
 s = Settings(nx,nx,100);
