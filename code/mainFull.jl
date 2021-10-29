@@ -9,7 +9,7 @@ using WriteVTK
 
 close("all")
 
-nx = 201;
+nx = 101;
 s = Settings(nx,nx,100);
 rhoMin = minimum(s.density);
 

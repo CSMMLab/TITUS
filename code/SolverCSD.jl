@@ -366,9 +366,9 @@ end
 
 function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,n::Int)
     E0 = obj.settings.eMax;
-    x0 = 0.35;
-    rho = 0.1;
-    return 10^5*exp(-300.0*(-1.0-Omega[1])^2)*exp(-200*(E0-E)^2)*exp(-300*(x-x0)^2)*obj.csd.S[n]*rho;
+    x0 = 0.35*obj.settings.b;
+    rho = 0.3;
+    return 10^5*exp(-10.0*(-1.0-Omega[1])^2)*exp(-10*(E0-E)^2)*exp(-10*(x-x0)^2)*obj.csd.S[n]*rho;
 end
 
 function BCLeft(obj::SolverCSD,n::Int)
@@ -787,22 +787,15 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     obj.settings.dE = dE
 
     println("CFL = ",dE/obj.settings.dx*maximum(densityInv))
-    println("dE = ",dE)
-    println("dx = ",obj.settings.dx)
-    println("densityInv = ",maximum(densityInv))
 
     flux = zeros(size(psi))
 
     prog = Progress(nEnergies,1)
-    scatSN = zeros(size(psi))
-    MapOrdinates = obj.O*obj.M
 
     uOUnc = zeros(nx*ny);
     
     psi .= zeros(size(psi));
     psiNew = zeros(size(psi));
-
-    #return X, 0.5*sqrt(obj.gamma[1])*S, obj.O*W,obj.dose;
 
     #loop over energy
     for n=1:nEnergies
@@ -813,7 +806,6 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         for k = 1:nq
             for j = 1:ny
                 psi[end,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
-                #psi[2,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
             end
         end
 
@@ -1050,7 +1042,6 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         for k = 1:nq
             for j = 1:ny
                 psi[end,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
-                #psi[2,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
             end
         end
 
@@ -1071,21 +1062,11 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
 
         D = Diagonal(sigmaS[1] .- Dvec);
 
+        Wold = W;
+        Xold = X;
+
         ############## Scattering ##############
         L = W*S';
-        WOld = W;
-
-        XTPsi = zeros(nq,r)
-        for k = 1:nq
-            for l = 1:r
-                for i = 1:nx
-                    for j = 1:ny
-                        idx = (i-1)*nx + j
-                        XTPsi[k,l] = XTPsi[k,l] + psiNew[i,j,k]*X[idx,l]
-                    end
-                end
-            end
-        end
 
         for i = 1:r
             L[:,i] = (Id .+ dE*D)\L[:,i];
@@ -1153,7 +1134,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
 
         K .= K .- dE*(obj.L2x*K*WAxW + obj.L2y*K*WAzW + obj.L1x*K*WAbsAxW + obj.L1y*K*WAbsAzW);
 
-        XNew,STmp = qr!([K X]);
+        XNew,STmp = qr!([K Xold]);
         XNew = Matrix(XNew)
         XNew = XNew[:,1:2*r];
 
@@ -1171,7 +1152,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
 
         L .= L .- dE*(obj.pn.Ax*L*XL2xX' + obj.pn.Az*L*XL2yX' + obj.AbsAx*L*XL1xX' + obj.AbsAz*L*XL1yX');
                 
-        WNew,STmp = qr([L WOld]);
+        WNew,STmp = qr([L Wold]);
         WNew = Matrix(WNew)
         WNew = WNew[:,1:2*r];
 

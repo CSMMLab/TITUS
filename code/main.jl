@@ -9,8 +9,8 @@ using WriteVTK
 
 close("all")
 
-nx = 151;
-s = Settings(nx,nx,100);
+nx = 101;
+s = Settings(nx,nx,50);
 rhoMin = minimum(s.density);
 
 if s.problem == "AirCavity"
@@ -40,14 +40,14 @@ X,S,W, dose, rankInTime = SolveFirstCollisionSourceAdaptiveDLR(solver1);
 #u, dose = SolveFirstCollisionSource(solver1);
 dose = Vec2Mat(s.NCellsX,s.NCellsY,dose);
 
-s = Settings(nx,nx,50);
+s = Settings(nx,nx,20);
 #s = Settings(nx,nx,int(maximum(rankInTime[2,:])));
 solver2 = SolverCSD(s);
 X_dlr,S_dlr,W_dlr, dose_DLR = SolveFirstCollisionSourceDLR(solver2);
 #X_dlr,S_dlr,W_dlr, dose_DLR = SolveMCollisionSourceDLR(solver2);
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
 
-s3 = Settings(nx,nx,50);
+s3 = Settings(nx,nx,5);
 solver3 = SolverCSD(s3);
 X_dlrM,S_dlrM,W_dlrM, dose_DLRM = SolveMCollisionSourceDLR(solver3);
 dose_DLRM = Vec2Mat(s3.NCellsX,s3.NCellsY,dose_DLRM);
@@ -94,7 +94,7 @@ savefig("output/dose_csd_1stcollision_DLRAM_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCells
 fig = figure("Dose countours, full",figsize=(10,10),dpi=100)
 ax = gca()
 pcolormesh(s.xMid[2:end],s.yMid[2:end],solver1.density[2:end,2:end],cmap="gray")
-contour(s.xMid[2:end],s.yMid[2:end],dose[2:end,2:end], 30,cmap="magma",vmin=0.0,vmax=maximum(dose[2:end,2:end]))
+contour(s.xMid[2:end],s.yMid[2:end],dose[2:end,2:end], 30,cmap="plasma",vmin=0.0,vmax=maximum(dose[2:end,2:end]))
 #colorbar()
 ax.tick_params("both",labelsize=20) 
 plt.xlabel("x", fontsize=20)
@@ -105,7 +105,7 @@ savefig("output/doseiso_csd_1stcollision_adapt_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(
 fig = figure("Dose countours, DLRA",figsize=(10,10),dpi=100)
 ax = gca()
 pcolormesh(s.xMid[2:end],s.yMid[2:end],solver2.density[2:end,2:end],cmap="gray")
-contour(s.xMid[2:end],s.yMid[2:end],dose_DLR[2:end,2:end], 30,cmap="magma",vmin=0.0,vmax=maximum(dose[2:end,2:end]))
+contour(s.xMid[2:end],s.yMid[2:end],dose_DLR[2:end,2:end], 30,cmap="plasma",vmin=0.0,vmax=maximum(dose[2:end,2:end]))
 ax.tick_params("both",labelsize=20) 
 plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
@@ -115,7 +115,7 @@ savefig("output/doseiso_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCel
 fig = figure("Dose countours, DLRAM",figsize=(10,10),dpi=100)
 ax = gca()
 pcolormesh(s.xMid[2:end],s.yMid[2:end],solver2.density[2:end,2:end],cmap="gray")
-contour(s.xMid[2:end],s.yMid[2:end],dose_DLRM[2:end,2:end], 30,cmap="magma",vmin=0.0,vmax=maximum(dose[2:end,2:end]))
+contour(s.xMid[2:end],s.yMid[2:end],dose_DLRM[2:end,2:end], 30,cmap="plasma",vmin=0.0,vmax=maximum(dose[2:end,2:end]))
 ax.tick_params("both",labelsize=20) 
 plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
@@ -124,9 +124,34 @@ savefig("output/doseiso_csd_1stcollision_DLRAM_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCe
 
 fig, (ax1, ax2) = plt.subplots(1, 2,figsize=(23,10),dpi=100)
 ax1.pcolormesh(s.xMid[2:end],s.yMid[2:end],solver1.density[2:end,2:end],cmap="gray")
-CS = ax1.contour(s.xMid[2:end],s.yMid[2:end],dose_DLR[2:end,2:end], 30,cmap="magma",vmin=0.0,vmax=maximum(dose[2:end,2:end]))
+CS = ax1.contour(s.xMid[2:end],s.yMid[2:end],dose_DLR[2:end,2:end], 30,cmap="plasma",vmin=0.0,vmax=maximum(dose[2:end,2:end]))
 ax2.pcolormesh(s.xMid[2:end],s.yMid[2:end],solver2.density[2:end,2:end],cmap="gray")
-ax2.contour(s.xMid[2:end],s.yMid[2:end],dose[2:end,2:end], 30,cmap="magma",vmin=0.0,vmax=maximum(dose[2:end,2:end]))
+ax2.contour(s.xMid[2:end],s.yMid[2:end],dose[2:end,2:end], 30,cmap="plasma",vmin=0.0,vmax=maximum(dose[2:end,2:end]))
+ax1.set_title("fixed rank r = $(s.r)", fontsize=25)
+ax2.set_title("adaptive rank", fontsize=25)
+ax1.tick_params("both",labelsize=20) 
+ax2.tick_params("both",labelsize=20) 
+ax1.set_xlabel("x", fontsize=20)
+ax1.set_ylabel("y", fontsize=20)
+ax2.set_xlabel("x", fontsize=20)
+ax2.set_ylabel("y", fontsize=20)
+ax1.set_aspect(1)
+ax2.set_aspect(1)
+#colorbar(CS)
+cb = plt.colorbar(CS,fraction=0.035, pad=0.02)
+cb.ax.tick_params(labelsize=15)
+tight_layout()
+savefig("output/doseiso_compare_csd_1stcollision_DLRAM_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)epsAdapt$(s.epsAdapt).png")
+
+# different contours
+doseMax1 = maximum(dose_DLR[2:(end-1),2:(end-1)])
+doseMax2 = maximum(dose[2:(end-1),2:(end-1)])
+levels = [0.025, 0.05, 0.1, 0.3]
+fig, (ax1, ax2) = plt.subplots(1, 2,figsize=(23,10),dpi=100)
+ax1.pcolormesh(s.xMid[2:(end-1)],s.yMid[2:(end-1)],solver1.density[2:(end-1),2:(end-1)],cmap="gray")
+CS = ax1.contour(s.xMid[2:(end-1)],s.yMid[2:(end-1)],dose_DLR[2:(end-1),2:(end-1)]./doseMax1,levels,cmap="plasma",vmin=minimum(levels),vmax=maximum(levels))
+ax2.pcolormesh(s.xMid[2:(end-1)],s.yMid[2:(end-1)],solver2.density[2:(end-1),2:(end-1)],cmap="gray")
+ax2.contour(s.xMid[2:(end-1)],s.yMid[2:(end-1)],dose[2:(end-1),2:(end-1)]./doseMax2,levels,cmap="plasma",vmin=minimum(levels),vmax=maximum(levels))
 ax1.set_title("fixed rank r = $(s.r)", fontsize=25)
 ax2.set_title("adaptive rank", fontsize=25)
 ax1.tick_params("both",labelsize=20) 

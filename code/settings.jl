@@ -59,10 +59,10 @@ mutable struct Settings
         NCellsY = Ny - 1;
 
         a = 0.0; # left boundary
-        b = 1.0; # right boundary
+        b = 35.0; # right boundary
 
         c = 0.0; # lower boundary
-        d = 1.0; # upper boundary
+        d = 35.0; # upper boundary
 
         problem = "CT" # WaterPhantomKerstin, AirCavity, 2D, 2DHighD, CT
 
@@ -85,13 +85,13 @@ mutable struct Settings
             img = Float64.(Gray.(load("liver_cut.jpg")))
             nx = size(img,1)
             ny = size(img,2)
-            densityMin = 0.1
+            densityMin = 0.3
             for i = 1:NCellsX
                 for j = 1:NCellsY
                     density[i,j] = max(1.85*img[Int(floor(i/NCellsX*nx)),Int(floor(j/NCellsY*ny))],densityMin) # 1.85 bone, 1.04 muscle, 0.3 lung
                 end
             end
-            eMax = 2.0
+            eMax = 80.0
         end
         sigmaT = sigmaA + sigmaS;
 
@@ -108,7 +108,7 @@ mutable struct Settings
         yMid = y[1:(end-1)].+0.5*dy
 
         # time settings
-        cfl = 1.4#1.7 # CFL condition
+        cfl = 1.5#1.4 # CFL condition
         dE = cfl*dx*minimum(density);
         
         # number PN moments
