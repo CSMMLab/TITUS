@@ -9,8 +9,8 @@ using WriteVTK
 
 close("all")
 
-nx = 101;
-s = Settings(nx,nx,50);
+nx = 201;
+s = Settings(nx,nx,500);
 rhoMin = minimum(s.density);
 
 if s.problem == "AirCavity"
@@ -36,18 +36,14 @@ end
 ############################
 solver1 = SolverCSD(s);
 X,S,W, dose, rankInTime = SolveFirstCollisionSourceAdaptiveDLR(solver1);
-#@time X,S,W, dose = SolveMCollisionSourceDLR(solver1);
-#u, dose = SolveFirstCollisionSource(solver1);
 dose = Vec2Mat(s.NCellsX,s.NCellsY,dose);
 
-s = Settings(nx,nx,20);
-#s = Settings(nx,nx,int(maximum(rankInTime[2,:])));
+s = Settings(nx,nx,50);
 solver2 = SolverCSD(s);
 X_dlr,S_dlr,W_dlr, dose_DLR = SolveFirstCollisionSourceDLR(solver2);
-#X_dlr,S_dlr,W_dlr, dose_DLR = SolveMCollisionSourceDLR(solver2);
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
 
-s3 = Settings(nx,nx,5);
+s3 = Settings(nx,nx,50);
 solver3 = SolverCSD(s3);
 X_dlrM,S_dlrM,W_dlrM, dose_DLRM = SolveMCollisionSourceDLR(solver3);
 dose_DLRM = Vec2Mat(s3.NCellsX,s3.NCellsY,dose_DLRM);
@@ -146,7 +142,7 @@ savefig("output/doseiso_compare_csd_1stcollision_DLRAM_Rank$(s.r)nx$(s.NCellsX)n
 # different contours
 doseMax1 = maximum(dose_DLR[2:(end-1),2:(end-1)])
 doseMax2 = maximum(dose[2:(end-1),2:(end-1)])
-levels = [0.025, 0.05, 0.1, 0.3]
+levels = [0.025,0.05, 0.1, 0.25, 0.5, 0.7, 0.8, .9, .95, .98];
 fig, (ax1, ax2) = plt.subplots(1, 2,figsize=(23,10),dpi=100)
 ax1.pcolormesh(s.xMid[2:(end-1)],s.yMid[2:(end-1)],solver1.density[2:(end-1),2:(end-1)],cmap="gray")
 CS = ax1.contour(s.xMid[2:(end-1)],s.yMid[2:(end-1)],dose_DLR[2:(end-1),2:(end-1)]./doseMax1,levels,cmap="plasma",vmin=minimum(levels),vmax=maximum(levels))

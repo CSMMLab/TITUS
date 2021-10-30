@@ -59,10 +59,10 @@ mutable struct Settings
         NCellsY = Ny - 1;
 
         a = 0.0; # left boundary
-        b = 35.0; # right boundary
+        b = 14.5; # right boundary
 
         c = 0.0; # lower boundary
-        d = 35.0; # upper boundary
+        d = 14.5; # upper boundary
 
         problem = "CT" # WaterPhantomKerstin, AirCavity, 2D, 2DHighD, CT
 
@@ -82,16 +82,16 @@ mutable struct Settings
             pathlib = pyimport("pathlib")
             path = pathlib.Path(pwd())
             println(path)
-            img = Float64.(Gray.(load("liver_cut.jpg")))
+            img = Float64.(Gray.(load("Lung.png")))
             nx = size(img,1)
             ny = size(img,2)
-            densityMin = 0.3
+            densityMin = 0.05
             for i = 1:NCellsX
                 for j = 1:NCellsY
                     density[i,j] = max(1.85*img[Int(floor(i/NCellsX*nx)),Int(floor(j/NCellsY*ny))],densityMin) # 1.85 bone, 1.04 muscle, 0.3 lung
                 end
             end
-            eMax = 80.0
+            eMax = 21.0
         end
         sigmaT = sigmaA + sigmaS;
 
@@ -113,7 +113,7 @@ mutable struct Settings
         
         # number PN moments
         nPN = 21#13, 21; # use odd number
-        epsAdapt = 1e-3;
+        epsAdapt = 5e-3;
 
         # build class
         new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,sigmaT,sigmaS,density,r,epsAdapt);

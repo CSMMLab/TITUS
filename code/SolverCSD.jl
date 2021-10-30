@@ -364,11 +364,12 @@ function PsiLeft(obj::SolverCSD,n::Int,mu::Float64)
     return 10^5*exp(-200.0*(1.0-mu)^2)*exp(-50*(E0-E)^2)
 end
 
-function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,n::Int)
+function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,n::Int,y::Float64=0.0)
     E0 = obj.settings.eMax;
-    x0 = 0.35*obj.settings.b;
+    x0 = 0.5*obj.settings.b;
+    y0 = 0.0*obj.settings.d;
     rho = 0.3;
-    return 10^5*exp(-10.0*(-1.0-Omega[1])^2)*exp(-10*(E0-E)^2)*exp(-10*(x-x0)^2)*obj.csd.S[n]*rho;
+    return 10^5*exp(-100.0*(-1.0-Omega[3])^2)*exp(-100*(E0-E)^2)*exp(-100*(x-x0)^2)*exp(-100*(y-y0)^2)*obj.csd.S[n]*rho;
 end
 
 function BCLeft(obj::SolverCSD,n::Int)
@@ -651,15 +652,14 @@ function SolveFirstCollisionSource(obj::SolverCSD)
     uTilde = zeros(size(u))
 
     #loop over energy
-    for n=1:nEnergies
+    for n=2:nEnergies
         # compute scattering coefficients at current energy
         sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
 
         # set boundary condition
         for k = 1:nq
-            for j = 1:ny
-                psi[1,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
-                #psi[2,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
+            for j = 1:nx
+                psi[j,end,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.yMid[j],n-1);
             end
         end
        
@@ -798,14 +798,14 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     psiNew = zeros(size(psi));
 
     #loop over energy
-    for n=1:nEnergies
+    for n=2:nEnergies
         # compute scattering coefficients at current energy
         sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
 
         # set boundary condition
         for k = 1:nq
-            for j = 1:ny
-                psi[end,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
+            for j = 1:nx
+                psi[j,end,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.yMid[j],n-1);
             end
         end
 
@@ -970,14 +970,6 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
     # Set up initial condition and store as matrix
     u = zeros(nx*ny,N);
 
-    # set boundary condition
-    for k = 1:nq
-        for j = 1:ny
-            psi[end:end,j,k] .= 1000*PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[1],obj.settings.xMid[j],1);
-            
-        end
-    end
-
     for k = 1:N
         for i = 1:nx
             for j = 1:ny
@@ -1032,7 +1024,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
     psiNew = zeros(size(psi));
 
     #loop over energy
-    for n=1:nEnergies
+    for n=2:nEnergies
         rankInTime[1,n] = energy[n];
         rankInTime[2,n] = r;
         # compute scattering coefficients at current energy
@@ -1040,8 +1032,8 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
 
         # set boundary condition
         for k = 1:nq
-            for j = 1:ny
-                psi[end,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
+            for j = 1:nx
+                psi[j,end,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.yMid[j],n-1);
             end
         end
 
@@ -1573,15 +1565,14 @@ function SolveMCollisionSourceDLR(obj::SolverCSD)
     psiNew = deepcopy(psi)
 
     #loop over energy
-    for n=1:nEnergies
+    for n=2:nEnergies
         # compute scattering coefficients at current energy
         sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
 
         # set boundary condition
         for k = 1:nq
-            for j = 1:ny
-                psi[end,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
-                #psi[2,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],n);
+            for j = 1:nx
+                psi[j,end,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.yMid[j],n-1);
             end
         end
 
