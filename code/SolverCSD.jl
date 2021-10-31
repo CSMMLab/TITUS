@@ -368,8 +368,8 @@ function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,n:
     E0 = obj.settings.eMax;
     x0 = 0.5*obj.settings.b;
     y0 = 0.0*obj.settings.d;
-    rho = 0.3;
-    return 10^5*exp(-750.0*(-1.0-Omega[3])^2)*exp(-100*(E0-E)^2)*exp(-25*(x-x0)^2)*exp(-25*(y-y0)^2)*obj.csd.S[n]*rho;
+    rho = 0.05;
+    return 10^5*exp(-75.0*(-1.0-Omega[3])^2)*exp(-100*(E0-E)^2)*exp(-20*(x-x0)^2)*exp(-20*(y-y0)^2)*obj.csd.S[n]*rho;
 end
 
 function BCLeft(obj::SolverCSD,n::Int)
@@ -1017,6 +1017,8 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
     prog = Progress(nEnergies,1)
 
     rankInTime = zeros(2,nEnergies);
+    rankInTime[1,1] = energy[1];
+    rankInTime[2,1] = r;
 
     uOUnc = zeros(nx*ny);
 
@@ -1025,8 +1027,6 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
 
     #loop over energy
     for n=2:nEnergies
-        rankInTime[1,n] = energy[n-1];
-        rankInTime[2,n] = r;
         # compute scattering coefficients at current energy
         sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
 
@@ -1081,9 +1081,9 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         K = K .+dE*Mat2Vec(psiNew)*obj.M'*Diagonal(Dvec)*W;
         K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
-        XNew,STmp = qr!(K);
+        XNew,STmp = qr!([K Xold]);
         XNew = Matrix(XNew)
-        XNew = XNew[:,1:r];
+        XNew = XNew[:,1:2*r];
 
         MUp = XNew' * X;
 
@@ -1091,9 +1091,9 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         L = W*S';
         L = L .+dE*(Mat2Vec(psiNew)*obj.M'*Diagonal(Dvec))'*X;
 
-        WNew,STmp = qr(L);
+        WNew,STmp = qr([L Wold]);
         WNew = Matrix(WNew)
-        WNew = WNew[:,1:r];
+        WNew = WNew[:,1:2*r];
 
         NUp = WNew' * W;
 
@@ -1103,6 +1103,54 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         ################## S-step ##################
         S = MUp*S*(NUp')
         S = S .+dE*X'*Mat2Vec(psiNew)*obj.M'*Diagonal(Dvec)*W;
+
+        ################## truncate ##################
+
+        # Compute singular values of S1 and decide how to truncate:
+        U,D,V = svd(S);
+        U = Matrix(U); V = Matrix(V)
+        rmax = -1;
+        S .= zeros(size(S));
+
+        tmp = 0.0;
+        tol = obj.settings.epsAdapt*norm(D);
+        
+        rmax = Int(floor(size(D,1)/2));
+        
+        for j=1:2*rmax
+            tmp = sqrt(sum(D[j:2*rmax]).^2);
+            if(tmp<tol)
+                rmax = j;
+                break;
+            end
+        end
+        
+        rmax = min(rmax,rMaxTotal);
+        rmax = max(rmax,rmin);
+
+        for l = 1:rmax
+            S[l,l] = D[l];
+        end
+
+        # if 2*r was actually not enough move to highest possible rank
+        if rmax == -1
+            rmax = rMaxTotal;
+        end
+
+        # update solution with new rank
+        XNew = XNew*U;
+        WNew = WNew*V;
+
+        # update solution with new rank
+        S = S[1:rmax,1:rmax];
+        X = XNew[:,1:rmax];
+        W = WNew[:,1:rmax];
+
+        # impose boundary condition
+        X[obj.boundaryIdx,:] .= 0.0;
+
+        # update rank
+        r = rmax;
 
         ################## Update dose ##################
 
@@ -1126,7 +1174,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
 
         K .= K .- dE*(obj.L2x*K*WAxW + obj.L2y*K*WAzW + obj.L1x*K*WAbsAxW + obj.L1y*K*WAbsAzW);
 
-        XNew,STmp = qr!([K Xold]);
+        XNew,STmp = qr!([K X]);
         XNew = Matrix(XNew)
         XNew = XNew[:,1:2*r];
 
@@ -1144,7 +1192,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
 
         L .= L .- dE*(obj.pn.Ax*L*XL2xX' + obj.pn.Az*L*XL2yX' + obj.AbsAx*L*XL1xX' + obj.AbsAz*L*XL1yX');
                 
-        WNew,STmp = qr([L Wold]);
+        WNew,STmp = qr([L W]);
         WNew = Matrix(WNew)
         WNew = WNew[:,1:2*r];
 
@@ -1215,6 +1263,10 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         r = rmax;
 
         psi .= psiNew;
+
+        rankInTime[1,n] = energy[n];
+        rankInTime[2,n] = r;
+
         next!(prog) # update progress bar
     end
 
@@ -1444,7 +1496,8 @@ function UnconventionalIntegratorCollidedAdaptive!(obj::SolverCSD,Dvec::Array{Fl
     r = size(S,1);
 
     ############## In Scattering ##############
-
+    SigmaT = D+Diagonal(Dvec)
+    sigT = SigmaT[1]
     ################## K-step ##################
     X[obj.boundaryIdx,:] .= 0.0;
     K = X*S;
@@ -1530,7 +1583,7 @@ function UnconventionalIntegratorCollidedAdaptive!(obj::SolverCSD,Dvec::Array{Fl
     L = W*S';
 
     for i = 1:size(L,2)
-        L[:,i] = (Id .+ dE*D)\L[:,i];
+        L[:,i] = L[:,i]./(1 .+dE*sigT.-dE*Dvec);
     end
 
     W,S = qr(L);
@@ -1687,7 +1740,7 @@ function UnconventionalIntegratorCollided!(obj::SolverCSD,Dvec::Array{Float64,1}
     K = X*S;
     WPrevDW = WPrev'*Diagonal(Dvec)*W;
     #K .= K .+dE*XPrev*SPrev*WPrevDW;
-    K = K + dE*XPrev*SPrev*WPrev'*Diagonal(Dvec)*W
+    K .= K + dE*XPrev*SPrev*WPrev'*Diagonal(Dvec)*W
     #u = u + dE*XPrev*SPrev*WPrev'*Diagonal(Dvec)
     K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
@@ -1717,7 +1770,7 @@ function UnconventionalIntegratorCollided!(obj::SolverCSD,Dvec::Array{Float64,1}
     XX .= X'*XPrev;
 
     #S .= S .+dE*XX*SPrev*WPrevDW;
-    S = S + dE*X'*XPrev*SPrev*WPrev'*Diagonal(Dvec)*W
+    S .= S + dE*X'*XPrev*SPrev*WPrev'*Diagonal(Dvec)*W
 
     ############## Self-In and Out Scattering ##############
     L = W*S';
@@ -1989,10 +2042,12 @@ function SolveMCollisionSourceDLR(obj::SolverCSD)
     psiNew = deepcopy(psi)
 
     rankInTime = zeros(1+4,nEnergies);
+    rankInTime[1,1] = energy[1];
+    rankInTime[2:end,1] .= r;
 
     #loop over energy
     for n=2:nEnergies
-        rankInTime[1,n] = energy[n-1];
+        rankInTime[1,n] = energy[n];
         # compute scattering coefficients at current energy
         sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
 

@@ -9,8 +9,8 @@ using WriteVTK
 
 close("all")
 
-nx = 51;
-s = Settings(nx,nx,100);
+nx = 201;
+s = Settings(nx,nx,200);
 rhoMin = minimum(s.density);
 
 if s.problem == "AirCavity"
@@ -34,16 +34,17 @@ else
 end
 
 ############################
+
 solver1 = SolverCSD(s);
 X,S,W, dose, rankInTime = SolveFirstCollisionSourceAdaptiveDLR(solver1);
 dose = Vec2Mat(s.NCellsX,s.NCellsY,dose);
 
-s = Settings(nx,nx,20);
+s = Settings(nx,nx,50);
 solver2 = SolverCSD(s);
 X_dlr,S_dlr,W_dlr, dose_DLR = SolveFirstCollisionSourceDLR(solver2);
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
 
-s3 = Settings(nx,nx,100);
+s3 = Settings(nx,nx,200);
 solver3 = SolverCSD(s3);
 X_dlrM,S_dlrM,W_dlrM, dose_DLRM, rankInTimeML = SolveMCollisionSourceDLR(solver3);
 dose_DLRM = Vec2Mat(s3.NCellsX,s3.NCellsY,dose_DLRM);
@@ -214,7 +215,7 @@ savefig("output/DoseCutYNx$(s.Nx)")
 
 fig = figure("rank in energy",figsize=(10, 10), dpi=100)
 ax = gca()
-ax.plot(rankInTime[1,:],rankInTime[2,:], "b--", linewidth=2, label=L"$\bar{\vartheta} = 0.05$", alpha=1.0)
+ax.plot(rankInTime[1,1:(end-1)],rankInTime[2,1:(end-1)], "b--", linewidth=2, label=L"$\bar{\vartheta} = 0.05$", alpha=1.0)
 ax.set_xlim([0.0,s.eMax])
 #ax.set_ylim([0.0,440])
 ax.set_xlabel("energy [MeV]", fontsize=20);
@@ -227,10 +228,10 @@ savefig("output/rank_in_energy_csd_1stcollision_adapt_nx$(s.NCellsX)ny$(s.NCells
 
 fig = figure("rank in energy, ML",figsize=(10, 10), dpi=100)
 ax = gca()
-ax.plot(rankInTimeML[1,2:end],rankInTimeML[2,1:(end-1)], "b-", linewidth=2, label="1st collision", alpha=1.0)
-ax.plot(rankInTimeML[1,2:end],rankInTimeML[3,1:(end-1)], "r-", linewidth=2, label="2nd collision", alpha=1.0)
-ax.plot(rankInTimeML[1,2:end],rankInTimeML[4,1:(end-1)], "m-", linewidth=2, label="3rd collision", alpha=1.0)
-ax.plot(rankInTimeML[1,2:end],rankInTimeML[5,1:(end-1)], "k-", linewidth=2, label="collided", alpha=1.0)
+ax.plot(rankInTimeML[1,1:(end-1)],rankInTimeML[2,1:(end-1)], "b-", linewidth=2, label="1st collision", alpha=1.0)
+ax.plot(rankInTimeML[1,1:(end-1)],rankInTimeML[3,1:(end-1)], "r-", linewidth=2, label="2nd collision", alpha=1.0)
+ax.plot(rankInTimeML[1,1:(end-1)],rankInTimeML[4,1:(end-1)], "m-", linewidth=2, label="3rd collision", alpha=1.0)
+ax.plot(rankInTimeML[1,1:(end-1)],rankInTimeML[5,1:(end-1)], "k-", linewidth=2, label="collided", alpha=1.0)
 ax.set_xlim([0.0,s.eMax])
 #ax.set_ylim([0.0,440])
 ax.set_xlabel("energy [MeV]", fontsize=20);
