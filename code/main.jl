@@ -9,8 +9,8 @@ using WriteVTK
 
 close("all")
 
-nx = 201;
-s = Settings(nx,nx,500);
+nx = 51;
+s = Settings(nx,nx,100);
 rhoMin = minimum(s.density);
 
 if s.problem == "AirCavity"
@@ -38,14 +38,14 @@ solver1 = SolverCSD(s);
 X,S,W, dose, rankInTime = SolveFirstCollisionSourceAdaptiveDLR(solver1);
 dose = Vec2Mat(s.NCellsX,s.NCellsY,dose);
 
-s = Settings(nx,nx,50);
+s = Settings(nx,nx,20);
 solver2 = SolverCSD(s);
 X_dlr,S_dlr,W_dlr, dose_DLR = SolveFirstCollisionSourceDLR(solver2);
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
 
-s3 = Settings(nx,nx,50);
+s3 = Settings(nx,nx,100);
 solver3 = SolverCSD(s3);
-X_dlrM,S_dlrM,W_dlrM, dose_DLRM = SolveMCollisionSourceDLR(solver3);
+X_dlrM,S_dlrM,W_dlrM, dose_DLRM, rankInTimeML = SolveMCollisionSourceDLR(solver3);
 dose_DLRM = Vec2Mat(s3.NCellsX,s3.NCellsY,dose_DLRM);
 
 fig = figure("Dose Difference",figsize=(10,10),dpi=100)
@@ -224,6 +224,22 @@ ax.legend(loc="upper left", fontsize=20)
 tight_layout()
 fig.canvas.draw() # Update the figure
 savefig("output/rank_in_energy_csd_1stcollision_adapt_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)$(s.epsAdapt).png")
+
+fig = figure("rank in energy, ML",figsize=(10, 10), dpi=100)
+ax = gca()
+ax.plot(rankInTimeML[1,2:end],rankInTimeML[2,1:(end-1)], "b-", linewidth=2, label="1st collision", alpha=1.0)
+ax.plot(rankInTimeML[1,2:end],rankInTimeML[3,1:(end-1)], "r-", linewidth=2, label="2nd collision", alpha=1.0)
+ax.plot(rankInTimeML[1,2:end],rankInTimeML[4,1:(end-1)], "m-", linewidth=2, label="3rd collision", alpha=1.0)
+ax.plot(rankInTimeML[1,2:end],rankInTimeML[5,1:(end-1)], "k-", linewidth=2, label="collided", alpha=1.0)
+ax.set_xlim([0.0,s.eMax])
+#ax.set_ylim([0.0,440])
+ax.set_xlabel("energy [MeV]", fontsize=20);
+ax.set_ylabel("rank", fontsize=20);
+ax.tick_params("both",labelsize=20) 
+ax.legend(loc="upper left", fontsize=20)
+tight_layout()
+fig.canvas.draw() # Update the figure
+savefig("output/rank_in_energy_ML_csd_1stcollision_adapt_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)$(s.epsAdapt).png")
 
 # write vtk file
 vtkfile = vtk_grid("output/dose_csd_nx$(s.NCellsX)ny$(s.NCellsY)", s.xMid, s.yMid)
