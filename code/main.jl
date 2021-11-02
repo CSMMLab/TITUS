@@ -1,6 +1,7 @@
 using Base: Float64
 include("settings.jl")
 include("SolverCSD.jl")
+include("SolverMLCSD.jl")
 
 using PyCall
 using PyPlot
@@ -9,7 +10,7 @@ using WriteVTK
 
 close("all")
 
-nx = 201;
+nx = 51;
 s = Settings(nx,nx,200);
 rhoMin = minimum(s.density);
 
@@ -45,15 +46,10 @@ X_dlr,S_dlr,W_dlr, dose_DLR = SolveFirstCollisionSourceDLR(solver2);
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
 
 s3 = Settings(nx,nx,200);
-solver3 = SolverCSD(s3);
+solver3 = SolverMLCSD(s3,4);
+#solver3 = SolverCSD(s3);
 X_dlrM,S_dlrM,W_dlrM, dose_DLRM, rankInTimeML = SolveMCollisionSourceDLR(solver3);
 dose_DLRM = Vec2Mat(s3.NCellsX,s3.NCellsY,dose_DLRM);
-
-fig = figure("Dose Difference",figsize=(10,10),dpi=100)
-
-pcolormesh(dose-dose_DLR)
-#colorbar()
-savefig("output/doseDiffNx$(s.Nx)")
 
 fig = figure("Dose, adaptive DLRA",figsize=(10,10),dpi=100)
 ax = gca()

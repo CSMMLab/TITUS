@@ -1959,7 +1959,7 @@ end
 
 function SolveMCollisionSourceDLR(obj::SolverCSD)
     # Get rank
-    r=obj.settings.r;
+    r=15;
 
     eTrafo = obj.csd.eTrafo;
     energy = obj.csd.eGrid;
