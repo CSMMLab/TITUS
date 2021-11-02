@@ -10,8 +10,8 @@ using WriteVTK
 
 close("all")
 
-nx = 51;
-s = Settings(nx,nx,200);
+nx = 101;
+s = Settings(nx,nx,50);
 rhoMin = minimum(s.density);
 
 if s.problem == "AirCavity"
@@ -37,16 +37,17 @@ end
 ############################
 
 solver1 = SolverCSD(s);
-X,S,W, dose, rankInTime = SolveFirstCollisionSourceAdaptiveDLR(solver1);
-dose = Vec2Mat(s.NCellsX,s.NCellsY,dose);
-
-s = Settings(nx,nx,50);
-solver2 = SolverCSD(s);
-X_dlr,S_dlr,W_dlr, dose_DLR = SolveFirstCollisionSourceDLR(solver2);
+X_dlr,S_dlr,W_dlr, dose_DLR = SolveFirstCollisionSourceDLR(solver1);
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
 
+s = Settings(nx,nx,200);
+solver2 = SolverMLCSD(s,2);
+X,S,W, dose, rankInTime = SolveMCollisionSourceDLR(solver2);
+dose = Vec2Mat(s.NCellsX,s.NCellsY,dose);
+
+L = 4
 s3 = Settings(nx,nx,200);
-solver3 = SolverMLCSD(s3,4);
+solver3 = SolverMLCSD(s3,L);
 #solver3 = SolverCSD(s3);
 X_dlrM,S_dlrM,W_dlrM, dose_DLRM, rankInTimeML = SolveMCollisionSourceDLR(solver3);
 dose_DLRM = Vec2Mat(s3.NCellsX,s3.NCellsY,dose_DLRM);
@@ -224,10 +225,10 @@ savefig("output/rank_in_energy_csd_1stcollision_adapt_nx$(s.NCellsX)ny$(s.NCells
 
 fig = figure("rank in energy, ML",figsize=(10, 10), dpi=100)
 ax = gca()
-ax.plot(rankInTimeML[1,1:(end-1)],rankInTimeML[2,1:(end-1)], "b-", linewidth=2, label="1st collision", alpha=1.0)
-ax.plot(rankInTimeML[1,1:(end-1)],rankInTimeML[3,1:(end-1)], "r-", linewidth=2, label="2nd collision", alpha=1.0)
-ax.plot(rankInTimeML[1,1:(end-1)],rankInTimeML[4,1:(end-1)], "m-", linewidth=2, label="3rd collision", alpha=1.0)
-ax.plot(rankInTimeML[1,1:(end-1)],rankInTimeML[5,1:(end-1)], "k-", linewidth=2, label="collided", alpha=1.0)
+ltype = ["b-","r-","m-","g-","y-","k-","b--","r--","m--","g--","y--","k--","b-","r-","m-","g-","y-","k-","b--","r--","m--","g--","y--","k--","b-","r-","m-","g-","y-","k-","b--","r--","m--","g--","y--","k--"]
+for l = 1:L
+    ax.plot(rankInTimeML[1,1:(end-1)],rankInTimeML[l+1,1:(end-1)], ltype[l], linewidth=2, label="collision $(l)", alpha=1.0)
+end
 ax.set_xlim([0.0,s.eMax])
 #ax.set_ylim([0.0,440])
 ax.set_xlabel("energy [MeV]", fontsize=20);

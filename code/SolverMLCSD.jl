@@ -368,12 +368,32 @@ function SetupIC(obj::SolverMLCSD)
     return psi;
 end
 
-function PsiBeam(obj::SolverMLCSD,Omega::Array{Float64,1},E::Float64,x::Float64,n::Int,y::Float64=0.0)
+function PsiBeam(obj::SolverMLCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y::Float64,n::Int)
     E0 = obj.settings.eMax;
-    x0 = 0.5*obj.settings.b;
-    y0 = 0.0*obj.settings.d;
-    rho = 0.05;
-    return 10^5*exp(-75.0*(-1.0-Omega[3])^2)*exp(-100*(E0-E)^2)*exp(-20*(x-x0)^2)*exp(-20*(y-y0)^2)*obj.csd.S[n]*rho;
+    if obj.settings.problem == "lung"
+        x0 = 0.5*obj.settings.b;
+        y0 = 1.0*obj.settings.d;
+        rho = 0.05;
+        Omega1 = -1.0;
+        Omega3 = -1.0;
+        sigmaO1Inv = 0.0;
+        sigmaO3Inv = 75.0;
+        sigmaXInv = 20.0;
+        sigmaYInv = 20.0;
+        sigmaEInv = 100.0;
+    elseif obj.settings.problem == "liver"
+        x0 = 1.0*obj.settings.b;
+        y0 = 0.35*obj.settings.d;
+        rho = 0.05;
+        Omega1 = -1.0;
+        Omega3 = -1.0;
+        sigmaO1Inv = 10.0;
+        sigmaO3Inv = 0.0;
+        sigmaXInv = 10.0;
+        sigmaYInv = 10.0;
+        sigmaEInv = 10.0;
+    end
+    return 10^5*exp(-sigmaO1Inv*(-1.0-Omega[1])^2)*exp(-sigmaO3Inv*(Omega3-Omega[3])^2)*exp(-sigmaEInv*(E0-E)^2)*exp(-sigmaXInv*(x-x0)^2)*exp(-sigmaYInv*(y-y0)^2)*obj.csd.S[n]*rho;
 end
 
 function solveFluxUpwind!(obj::SolverMLCSD, phi::Array{Float64,3}, flux::Array{Float64,3})
@@ -962,7 +982,12 @@ function SolveMCollisionSourceDLR(obj::SolverMLCSD)
         # set boundary condition
         for k = 1:nq
             for j = 1:nx
-                psi[j,end,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.yMid[j],n-1);
+                psi[j,1,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
+                psi[j,end,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
+            end
+            for j = 1:ny
+                psi[1,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
+                psi[end,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
             end
         end
 

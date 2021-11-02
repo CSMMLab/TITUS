@@ -64,7 +64,7 @@ mutable struct Settings
         c = 0.0; # lower boundary
         d = 14.5; # upper boundary
 
-        problem = "CT" # WaterPhantomKerstin, AirCavity, 2D, 2DHighD, CT
+        problem = "liver" # WaterPhantomKerstin, AirCavity, 2D, 2DHighD, CT
 
         density = ones(NCellsX,NCellsY);
 
@@ -77,7 +77,7 @@ mutable struct Settings
             sigmaA = 0.0;        
         elseif problem =="2DHighD"
             density[Int(floor(NCellsX*0.56/(b-a))):end,:] .= 5.0;
-        elseif problem =="CT"
+        elseif problem =="lung"
             #img = Float64.(Gray.(load("phantom.png")))
             pathlib = pyimport("pathlib")
             path = pathlib.Path(pwd())
@@ -91,7 +91,26 @@ mutable struct Settings
                     density[i,j] = max(1.85*img[Int(floor(i/NCellsX*nx)),Int(floor(j/NCellsY*ny))],densityMin) # 1.85 bone, 1.04 muscle, 0.3 lung
                 end
             end
+            b = 14.5; # right boundary
+            d = 14.5; # upper boundary
             eMax = 21.0
+        elseif problem =="liver"
+            #img = Float64.(Gray.(load("phantom.png")))
+            pathlib = pyimport("pathlib")
+            path = pathlib.Path(pwd())
+            println(path)
+            img = Float64.(Gray.(load("liver_cut.jpg")))
+            nx = size(img,1)
+            ny = size(img,2)
+            densityMin = 0.05
+            for i = 1:NCellsX
+                for j = 1:NCellsY
+                    density[i,j] = max(1.85*img[Int(floor(i/NCellsX*nx)),Int(floor(j/NCellsY*ny))],densityMin) # 1.85 bone, 1.04 muscle, 0.3 lung
+                end
+            end
+            b = 35.0; # right boundary
+            d = 35.0; # upper boundary
+            eMax = 40.0
         end
         sigmaT = sigmaA + sigmaS;
 

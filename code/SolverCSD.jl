@@ -273,6 +273,8 @@ struct SolverCSD
             boundaryBeam[counter] = idx
         end
 
+        #idx = findall(!iszero, Rtrain);
+
         # setup spatial grid
         xGrid = zeros(nx*ny,2)
         for i = 1:nx
@@ -364,12 +366,32 @@ function PsiLeft(obj::SolverCSD,n::Int,mu::Float64)
     return 10^5*exp(-200.0*(1.0-mu)^2)*exp(-50*(E0-E)^2)
 end
 
-function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,n::Int,y::Float64=0.0)
+function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y::Float64,n::Int)
     E0 = obj.settings.eMax;
-    x0 = 0.5*obj.settings.b;
-    y0 = 0.0*obj.settings.d;
-    rho = 0.05;
-    return 10^5*exp(-75.0*(-1.0-Omega[3])^2)*exp(-100*(E0-E)^2)*exp(-20*(x-x0)^2)*exp(-20*(y-y0)^2)*obj.csd.S[n]*rho;
+    if obj.settings.problem == "lung"
+        x0 = 0.5*obj.settings.b;
+        y0 = 1.0*obj.settings.d;
+        rho = 0.05;
+        Omega1 = -1.0;
+        Omega3 = -1.0;
+        sigmaO1Inv = 0.0;
+        sigmaO3Inv = 75.0;
+        sigmaXInv = 20.0;
+        sigmaYInv = 20.0;
+        sigmaEInv = 100.0;
+    elseif obj.settings.problem == "liver"
+        x0 = 1.0*obj.settings.b;
+        y0 = 0.35*obj.settings.d;
+        rho = 0.05;
+        Omega1 = -1.0;
+        Omega3 = -1.0;
+        sigmaO1Inv = 10.0;
+        sigmaO3Inv = 0.0;
+        sigmaXInv = 5.0;
+        sigmaYInv = 5.0;
+        sigmaEInv = 5.0;
+    end
+    return 10^5*exp(-sigmaO1Inv*(-1.0-Omega[1])^2)*exp(-sigmaO3Inv*(Omega3-Omega[3])^2)*exp(-sigmaEInv*(E0-E)^2)*exp(-sigmaXInv*(x-x0)^2)*exp(-sigmaYInv*(y-y0)^2)*obj.csd.S[n]*rho;
 end
 
 function BCLeft(obj::SolverCSD,n::Int)
@@ -659,7 +681,12 @@ function SolveFirstCollisionSource(obj::SolverCSD)
         # set boundary condition
         for k = 1:nq
             for j = 1:nx
-                psi[j,end,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.yMid[j],n-1);
+                psi[j,1,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
+                psi[j,end,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
+            end
+            for j = 1:ny
+                psi[1,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
+                psi[end,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
             end
         end
        
@@ -728,25 +755,6 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     # Set up initial condition and store as matrix
     u = zeros(nx*ny,N);
 
-    # set boundary condition
-    for k = 1:nq
-        for j = 1:ny
-            psi[end:end,j,k] .= 1000*PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[1],obj.settings.xMid[j],1);
-            
-        end
-    end
-
-    for k = 1:N
-        for i = 1:nx
-            for j = 1:ny
-                idx = (i-1)*nx + j
-                for q = 1:nq
-                    u[idx,k] += obj.M[k,q]*psi[i,j,q];
-                end
-            end
-        end
-    end
-
     # define density matrix
     densityInv = Diagonal(1.0 ./obj.density);
     Id = Diagonal(ones(N));
@@ -805,7 +813,12 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         # set boundary condition
         for k = 1:nq
             for j = 1:nx
-                psi[j,end,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.yMid[j],n-1);
+                psi[j,1,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
+                psi[j,end,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
+            end
+            for j = 1:ny
+                psi[1,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
+                psi[end,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
             end
         end
 
@@ -970,17 +983,6 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
     # Set up initial condition and store as matrix
     u = zeros(nx*ny,N);
 
-    for k = 1:N
-        for i = 1:nx
-            for j = 1:ny
-                idx = (i-1)*nx + j
-                for q = 1:nq
-                    u[idx,k] += obj.M[k,q]*psi[i,j,q];
-                end
-            end
-        end
-    end
-
     # define density matrix
     densityInv = Diagonal(1.0 ./obj.density);
     Id = Diagonal(ones(N));
@@ -1033,7 +1035,12 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         # set boundary condition
         for k = 1:nq
             for j = 1:nx
-                psi[j,end,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.yMid[j],n-1);
+                psi[j,1,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
+                psi[j,end,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
+            end
+            for j = 1:ny
+                psi[1,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
+                psi[end,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
             end
         end
 
@@ -1974,24 +1981,6 @@ function SolveMCollisionSourceDLR(obj::SolverCSD)
     # Set up initial condition and store as matrix
     u = zeros(nx*ny,N);
 
-    # set boundary condition
-    for k = 1:nq
-        for j = 1:ny
-            psi[end:end,j,k] .= 1000*PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[1],obj.settings.xMid[j],1);
-        end
-    end
-
-    for k = 1:N
-        for i = 1:nx
-            for j = 1:ny
-                idx = (i-1)*nx + j
-                for q = 1:nq
-                    u[idx,k] += obj.M[k,q]*psi[i,j,q];
-                end
-            end
-        end
-    end
-
     # define density matrix
     densityInv = Diagonal(1.0 ./obj.density);
     Id = Diagonal(ones(N));
@@ -2054,7 +2043,12 @@ function SolveMCollisionSourceDLR(obj::SolverCSD)
         # set boundary condition
         for k = 1:nq
             for j = 1:nx
-                psi[j,end,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.yMid[j],n-1);
+                psi[j,1,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
+                psi[j,end,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
+            end
+            for j = 1:ny
+                psi[1,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
+                psi[end,j,k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[n],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
             end
         end
 
