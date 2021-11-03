@@ -28,6 +28,13 @@ struct CSD
         E_sigmaTab = param.E_sigmaTab;
         sigma_tab = param.sigma_tab;
 
+        # define constant cross-sections for linesource test
+        if settings.problem == "LineSource"
+            S_tab = ones(size(S_tab));
+            sigma_tab = zeros(size(sigma_tab));
+            sigma_tab[:,1] .= 1.0;
+        end
+
         # compute transformed energy for tabulated energies
         nTab = length(E_tab)
         E_transformed = zeros(nTab)

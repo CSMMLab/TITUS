@@ -356,14 +356,9 @@ end
 
 function SetupIC(obj::SolverMLCSD)
     nq = obj.Q.nquadpoints;
-    psi = zeros(obj.settings.NCellsX,obj.settings.NCellsY,nq);
-    
-    if obj.settings.problem == "CT" || obj.settings.problem == "2D" || obj.settings.problem == "2DHighD"
-        for k = 1:nq
-            if obj.Q.pointsxyz[k][1] < -0.85
-                psi[:,:,k] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)
-            end
-        end
+    psi = zeros(obj.settings.NCellsX,obj.settings.NCellsY,nq); 
+    for k = 1:nq
+        psi[:,:,k] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)
     end
     return psi;
 end
@@ -392,6 +387,8 @@ function PsiBeam(obj::SolverMLCSD,Omega::Array{Float64,1},E::Float64,x::Float64,
         sigmaXInv = 10.0;
         sigmaYInv = 10.0;
         sigmaEInv = 10.0;
+    elseif obj.settings.problem == "LineSource"
+        return 0.0;
     end
     return 10^5*exp(-sigmaO1Inv*(-1.0-Omega[1])^2)*exp(-sigmaO3Inv*(Omega3-Omega[3])^2)*exp(-sigmaEInv*(E0-E)^2)*exp(-sigmaXInv*(x-x0)^2)*exp(-sigmaYInv*(y-y0)^2)*obj.csd.S[n]*rho;
 end
@@ -911,33 +908,12 @@ function SolveMCollisionSourceDLR(obj::SolverMLCSD)
     ny = obj.settings.NCellsY;
     nq = obj.Q.nquadpoints;
     N = obj.pn.nTotalEntries
-    # Set up initial condition and store as matrix
-    u = zeros(nx*ny,N);
-
-    # set boundary condition
-    for k = 1:nq
-        for j = 1:ny
-            psi[end:end,j,k] .= 1000*PsiBeam(obj,obj.Q.pointsxyz[k,:],energy[1],obj.settings.xMid[j],1);
-        end
-    end
-
-    for k = 1:N
-        for i = 1:nx
-            for j = 1:ny
-                idx = (i-1)*nx + j
-                for q = 1:nq
-                    u[idx,k] += obj.M[k,q]*psi[i,j,q];
-                end
-            end
-        end
-    end
 
     # define density matrix
     densityInv = Diagonal(1.0 ./obj.density);
     Id = Diagonal(ones(N));
-
     # Low-rank approx of init data:
-    X1,S1,W1 = svd(u);
+    X1,S1,W1 = svd(zeros(nx*ny,N));
     
     # rank-r truncation:
     X = zeros(L,nx*ny,r);
@@ -956,17 +932,13 @@ function SolveMCollisionSourceDLR(obj::SolverMLCSD)
 
     println("CFL = ",dE/obj.settings.dx*maximum(densityInv))
 
-    uNew = deepcopy(u)
     flux = zeros(size(psi))
 
-    prog = Progress(nEnergies,1)
-    scatSN = zeros(size(psi))
-    MapOrdinates = obj.O*obj.M
+    prog = Progress(nEnergies-1,1)
 
     uOUnc = zeros(nx*ny);
     
-    psi .= zeros(size(psi));
-    psiNew = deepcopy(psi)
+    psiNew = deepcopy(psi);
 
     rankInTime = zeros(L+1,nEnergies);
     rankInTime[1,1] = energy[1];

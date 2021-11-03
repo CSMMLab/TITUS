@@ -351,12 +351,8 @@ function SetupIC(obj::SolverCSD)
     nq = obj.Q.nquadpoints;
     psi = zeros(obj.settings.NCellsX,obj.settings.NCellsY,nq);
     
-    if obj.settings.problem == "CT" || obj.settings.problem == "2D" || obj.settings.problem == "2DHighD"
-        for k = 1:nq
-            if obj.Q.pointsxyz[k][1] < -0.85
-                psi[:,:,k] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)
-            end
-        end
+    for k = 1:nq
+        psi[:,:,k] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)
     end
     return psi;
 end
@@ -385,11 +381,13 @@ function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y:
         rho = 0.05;
         Omega1 = -1.0;
         Omega3 = -1.0;
-        sigmaO1Inv = 10.0;
+        sigmaO1Inv = 7.5;
         sigmaO3Inv = 0.0;
         sigmaXInv = 5.0;
         sigmaYInv = 5.0;
         sigmaEInv = 5.0;
+    elseif obj.settings.problem == "LineSource"
+        return 0.0;
     end
     return 10^5*exp(-sigmaO1Inv*(-1.0-Omega[1])^2)*exp(-sigmaO3Inv*(Omega3-Omega[3])^2)*exp(-sigmaEInv*(E0-E)^2)*exp(-sigmaXInv*(x-x0)^2)*exp(-sigmaYInv*(y-y0)^2)*obj.csd.S[n]*rho;
 end
@@ -663,7 +661,7 @@ function SolveFirstCollisionSource(obj::SolverCSD)
     uNew = deepcopy(u)
     flux = zeros(size(psi))
 
-    prog = Progress(nEnergies,1)
+    prog = Progress(nEnergies-1,1)
     scatSN = zeros(size(psi))
     MapOrdinates = obj.O*obj.M
 
@@ -798,12 +796,11 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
     flux = zeros(size(psi))
 
-    prog = Progress(nEnergies,1)
+    prog = Progress(nEnergies-1,1)
 
     uOUnc = zeros(nx*ny);
     
-    psi .= zeros(size(psi));
-    psiNew = zeros(size(psi));
+    psiNew = deepcopy(psi);
 
     #loop over energy
     for n=2:nEnergies
@@ -1016,7 +1013,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
     
     flux = zeros(size(psi))
 
-    prog = Progress(nEnergies,1)
+    prog = Progress(nEnergies-1,1)
 
     rankInTime = zeros(2,nEnergies);
     rankInTime[1,1] = energy[1];
@@ -2021,7 +2018,7 @@ function SolveMCollisionSourceDLR(obj::SolverCSD)
     uNew = deepcopy(u)
     flux = zeros(size(psi))
 
-    prog = Progress(nEnergies,1)
+    prog = Progress(nEnergies-1,1)
     scatSN = zeros(size(psi))
     MapOrdinates = obj.O*obj.M
 
