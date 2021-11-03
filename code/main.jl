@@ -10,8 +10,8 @@ using WriteVTK
 
 close("all")
 
-nx = 151;
-s = Settings(nx,nx,50);
+nx = 51;
+s = Settings(nx,nx,100);
 rhoMin = minimum(s.density);
 
 if s.problem == "AirCavity"
@@ -40,12 +40,13 @@ solver1 = SolverCSD(s);
 X_dlr,S_dlr,W_dlr, dose_DLR = SolveFirstCollisionSourceDLR(solver1);
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
 
+L1 = 2;
 s = Settings(nx,nx,200);
 solver2 = SolverMLCSD(s,2);
 X,S,W, dose, rankInTime = SolveMCollisionSourceDLR(solver2);
 dose = Vec2Mat(s.NCellsX,s.NCellsY,dose);
 
-L = 4#20
+L = 10#20
 s3 = Settings(nx,nx,200);
 solver3 = SolverMLCSD(s3,L);
 #solver3 = SolverCSD(s3);
@@ -162,37 +163,6 @@ cb.ax.tick_params(labelsize=15)
 tight_layout()
 savefig("output/doseiso_compare_csd_1stcollision_DLRAM_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)epsAdapt$(s.epsAdapt).png")
 
-
-fig = figure("X_1",figsize=(10,10),dpi=100)
-ax = gca()
-pcolormesh(s.xMid[2:end],s.yMid[2:end],Vec2Mat(s.NCellsX,s.NCellsY,X_dlr[:,1])[2:end,2:end])
-ax.tick_params("both",labelsize=20) 
-plt.xlabel("x", fontsize=20)
-plt.ylabel("y", fontsize=20)
-tight_layout()
-#CS = plt.pcolormesh(X, Y, Z)
-savefig("output/X1_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
-
-fig = figure("X_2",figsize=(10,10),dpi=100)
-ax = gca()
-pcolormesh(s.xMid[2:end],s.yMid[2:end],Vec2Mat(s.NCellsX,s.NCellsY,X_dlr[:,2])[2:end,2:end])
-ax.tick_params("both",labelsize=20) 
-plt.xlabel("x", fontsize=20)
-plt.ylabel("y", fontsize=20)
-tight_layout()
-#CS = plt.pcolormesh(X, Y, Z)
-savefig("output/X2_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
-
-fig = figure("X_3",figsize=(10,10),dpi=100)
-ax = gca()
-pcolormesh(s.xMid[2:end],s.yMid[2:end],Vec2Mat(s.NCellsX,s.NCellsY,X_dlr[:,3])[2:end,2:end])
-ax.tick_params("both",labelsize=20) 
-plt.xlabel("x", fontsize=20)
-plt.ylabel("y", fontsize=20)
-tight_layout()
-#CS = plt.pcolormesh(X, Y, Z)
-savefig("output/X3_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
-
 # line plot dose
 fig, ax = subplots()
 #nyRef = length(yRef)
@@ -212,7 +182,10 @@ savefig("output/DoseCutYNx$(s.Nx)")
 
 fig = figure("rank in energy",figsize=(10, 10), dpi=100)
 ax = gca()
-ax.plot(rankInTime[1,1:(end-1)],rankInTime[2,1:(end-1)], "b--", linewidth=2, label=L"$\bar{\vartheta} = 0.05$", alpha=1.0)
+ltype = ["b-","r-","m-","g-","y-","k-","b--","r--","m--","g--","y--","k--","b-","r-","m-","g-","y-","k-","b--","r--","m--","g--","y--","k--","b-","r-","m-","g-","y-","k-","b--","r--","m--","g--","y--","k--"]
+for l = 1:L1
+    ax.plot(rankInTime[1,1:(end-1)],rankInTime[l+1,1:(end-1)], ltype[l], linewidth=2, label="collision $(l)", alpha=1.0)
+end
 ax.set_xlim([0.0,s.eMax])
 #ax.set_ylim([0.0,440])
 ax.set_xlabel("energy [MeV]", fontsize=20);
@@ -238,6 +211,39 @@ ax.legend(loc="upper left", fontsize=20)
 tight_layout()
 fig.canvas.draw() # Update the figure
 savefig("output/rank_in_energy_ML_csd_1stcollision_adapt_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)$(s.epsAdapt).png")
+
+# plot scalar flux
+if s.problem == "LineSource"
+    fig = figure("scalar flux, L = 2",figsize=(10,10),dpi=100)
+    ax = gca()
+    pcolormesh(s.xMid[2:end],s.yMid[2:end],Vec2Mat(s.NCellsX,s.NCellsY,X*diagm(S)*(solver1.M*W)[1,:])[2:end,2:end])
+    ax.tick_params("both",labelsize=20) 
+    plt.xlabel("x", fontsize=20)
+    plt.ylabel("y", fontsize=20)
+    tight_layout()
+    #CS = plt.pcolormesh(X, Y, Z)
+    savefig("output/scalarflux1_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")    
+
+    fig = figure("scalar flux, L = 10",figsize=(10,10),dpi=100)
+    ax = gca()
+    pcolormesh(s.xMid[2:end],s.yMid[2:end],Vec2Mat(s.NCellsX,s.NCellsY,X_dlrM*diagm(S_dlrM)*(solver1.M*W_dlrM)[1,:])[2:end,2:end])
+    ax.tick_params("both",labelsize=20) 
+    plt.xlabel("x", fontsize=20)
+    plt.ylabel("y", fontsize=20)
+    tight_layout()
+    #CS = plt.pcolormesh(X, Y, Z)
+    savefig("output/scalarflux2_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")           
+    
+    fig = figure("scalar flux",figsize=(10,10),dpi=100)
+    ax = gca()
+    pcolormesh(s.xMid[2:end],s.yMid[2:end],Vec2Mat(s.NCellsX,s.NCellsY,X_dlr*diagm(S_dlr)*(solver1.M*W_dlr)[1,:])[2:end,2:end])
+    ax.tick_params("both",labelsize=20) 
+    plt.xlabel("x", fontsize=20)
+    plt.ylabel("y", fontsize=20)
+    tight_layout()
+    #CS = plt.pcolormesh(X, Y, Z)
+    savefig("output/scalarflux2_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")       
+end
 
 # write vtk file
 vtkfile = vtk_grid("output/dose_csd_nx$(s.NCellsX)ny$(s.NCellsY)", s.xMid, s.yMid)
