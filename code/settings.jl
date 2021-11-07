@@ -134,8 +134,8 @@ mutable struct Settings
             d = 35.0; # upper boundary
             eMax = 40.0
             cfl = 1.5
-            x0 = 1.0*obj.settings.b;
-            y0 = 0.35*obj.settings.d;
+            x0 = 1.0*b;
+            y0 = 0.35*d;
             Omega1 = -1.0;
             Omega3 = -1.0;
         end
