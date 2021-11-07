@@ -631,12 +631,31 @@ function SolveFirstCollisionSource(obj::SolverCSD)
     energy = obj.csd.eGrid;
     S = obj.csd.S;
 
-    # Set up initial condition and store as matrix
-    psi = SetupIC(obj);
     nx = obj.settings.NCellsX;
     ny = obj.settings.NCellsY;
     nq = obj.Q.nquadpoints;
     N = obj.pn.nTotalEntries
+
+    # Set up initial condition and store as matrix
+    psi = SetupIC(obj);
+    floorPsiAll = 1e-1;
+    floorPsi = 1e-17;
+    if obj.settings.problem == "LineSource" # determine relevant directions in IC
+        idxFullBeam = findall(psi .> floorPsiAll)
+        idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
+    elseif obj.settings.problem == "lung" || obj.settings.problem == "liver" # determine relevant directions in beam
+        psiBeam = zeros(nq)
+        for k = 1:nq
+            psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)
+        end
+        idxBeam = findall( psiBeam .> floorPsi*maximum(psiBeam) );
+    end
+    psi = psi[:,:,idxBeam]
+    obj.qReduced = obj.Q.pointsxyz[idxBeam,:]
+    obj.MReduced = obj.M[:,idxBeam]
+    obj.OReduced = obj.O[idxBeam,:]
+    println("reduction of ordinates is ",(nq-length(idxBeam))/nq*100.0," percent")
+    nq = length(idxBeam);
 
     # define density matrix
     densityInv = Diagonal(1.0 ./obj.density);
