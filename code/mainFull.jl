@@ -42,7 +42,7 @@ doseFull = Vec2Mat(s.NCellsX,s.NCellsY,doseFull);
 L1 = 2;
 s = Settings(nx,nx,200);
 solver1 = SolverMLCSD(s,L1);
-X,S,W, dose, rankInTime, psi = SolveFirstCollisionSourceAdaptiveDLR(solver1);
+X,S,W, dose, rankInTime, psi = SolveMCollisionSourceAdaptiveDLR(solver1);
 dose = Vec2Mat(s.NCellsX,s.NCellsY,dose);
 
 s = Settings(nx,nx,50);
