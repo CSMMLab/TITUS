@@ -891,6 +891,7 @@ function SolveMCollisionSourceDLR(obj::SolverMLCSD)
     # Get rank
     r=15;
     L = obj.L;
+    remap = 1.0;
 
     eTrafo = obj.csd.eTrafo;
     energy = obj.csd.eGrid;
@@ -1016,12 +1017,24 @@ function SolveMCollisionSourceDLR(obj::SolverMLCSD)
             obj.dose .+= dE * obj.X[l,:,1:ranks[l]]*obj.S[l,1:ranks[l],1:ranks[l]]*obj.W[l,1,1:ranks[l]] * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
         end
 
-        psi .= psiNew;
+        # remap strategy
+        #WOr = obj.W[L,:,1:ranks[L]]'*obj.OReduced';
+        #obj.W[L,:,1:ranks[L]] .= obj.W[L,:,1:ranks[L]] - remap*(WOr*obj.MReduced')';
+
+        #W,S = qr(obj.W[L,:,1:ranks[L]]);
+        #W = Matrix(W)
+        #obj.W[L,:,1:ranks[L]] = W[:, 1:ranks[L]];
+        #S = Matrix(S)
+        #S = S[1:ranks[L], 1:ranks[L]];
+        #obj.S[L,1:ranks[L],1:ranks[L]] .= obj.S[L,1:ranks[L],1:ranks[L]]*S';
+
+        
+        psi .= psiNew;# + remap*Vec2Mat(nx,ny,obj.X[L,:,1:ranks[L]]*obj.S[L,1:ranks[L],1:ranks[L]]*WOr);
         next!(prog) # update progress bar
     end
     U,Sigma,V = svd(obj.S[L,1:ranks[L],1:ranks[L]]);
     # return solution and dose
-    return obj.X[L,:,1:ranks[L]]*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*obj.W[L,:,1:ranks[L]]*V,obj.dose,rankInTime;
+    return obj.X[L,:,1:ranks[L]]*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*obj.W[L,:,1:ranks[L]]*V,obj.dose,rankInTime,psi;
 
 end
 
@@ -1029,11 +1042,22 @@ function vectorIndex(nx,i,j)
     return (i-1)*nx + j;
 end
 
-function Vec2Mat(nx,ny,v)
+function Vec2Mat(nx,ny,v::Array{Float64,1})
     m = zeros(nx,ny);
     for i = 1:nx
         for j = 1:ny
             m[i,j] = v[(i-1)*nx + j]
+        end
+    end
+    return m;
+end
+
+function Vec2Mat(nx,ny,v::Array{Float64,2})
+    n = size(v,2);
+    m = zeros(nx,ny,n);
+    for i = 1:nx
+        for j = 1:ny
+            m[i,j,:] = v[(i-1)*nx + j,:]
         end
     end
     return m;

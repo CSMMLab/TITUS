@@ -966,7 +966,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
     U,Sigma,V = svd(S);
     # return solution and dose
-    return X*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*W*V,obj.dose;
+    return X*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*W*V,obj.dose,psi;
 
 end
 

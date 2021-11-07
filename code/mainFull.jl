@@ -1,6 +1,7 @@
 using Base: Float64
 include("settings.jl")
 include("SolverCSD.jl")
+include("SolverMLCSD.jl")
 
 using PyCall
 using PyPlot
@@ -38,20 +39,22 @@ solver = SolverCSD(s);
 u, doseFull = SolveFirstCollisionSource(solver);
 doseFull = Vec2Mat(s.NCellsX,s.NCellsY,doseFull);
 
-s = Settings(nx,nx,100);
-solver1 = SolverCSD(s);
-X,S,W, dose, rankInTime = SolveFirstCollisionSourceAdaptiveDLR(solver1);
+L1 = 2;
+s = Settings(nx,nx,200);
+solver1 = SolverMLCSD(s,L1);
+X,S,W, dose, rankInTime, psi = SolveFirstCollisionSourceAdaptiveDLR(solver1);
 dose = Vec2Mat(s.NCellsX,s.NCellsY,dose);
 
 s = Settings(nx,nx,50);
 #s = Settings(nx,nx,int(maximum(rankInTime[2,:])));
 solver2 = SolverCSD(s);
-X_dlr,S_dlr,W_dlr, dose_DLR = SolveFirstCollisionSourceDLR(solver2);
+X_dlr,S_dlr,W_dlr, dose_DLR, psi = SolveFirstCollisionSourceDLR(solver2);
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
 
-s3 = Settings(nx,nx,100);
-solver3 = SolverCSD(s3);
-X_dlrM,S_dlrM,W_dlrM, dose_DLRM, rankInTimeML = SolveMCollisionSourceDLR(solver3);
+L = 4
+s3 = Settings(nx,nx,200);
+solver3 = SolverMLCSD(s3,L);
+X_dlrM,S_dlrM,W_dlrM, dose_DLRM, rankInTimeML, psi = SolveMCollisionSourceDLR(solver3);
 dose_DLRM = Vec2Mat(s3.NCellsX,s3.NCellsY,dose_DLRM);
 
 fig = figure("Dose, full",figsize=(10,10),dpi=100)
