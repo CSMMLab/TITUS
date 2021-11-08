@@ -57,6 +57,7 @@ mutable struct Settings
 
     # tolerance for rank adaptivity
     epsAdapt::Float64;  
+    adaptIndex::Float64;
 
     function Settings(Nx::Int=102,Ny::Int=102,r::Int=15,problem::String="LineSource")
 
@@ -82,7 +83,8 @@ mutable struct Settings
         y0 = 1.0*d;
         Omega1 = -1.0;
         Omega3 = -1.0;
-        densityMin = 0.2
+        densityMin = 0.2;
+        adaptIndex = 1;
         if problem =="LineSource"
             a = -1.5
             b = 1.5;
@@ -92,6 +94,7 @@ mutable struct Settings
             sigmaA = 0.0;  
             cfl = 0.99/sqrt(2);    
             eMax = 1.0
+            adaptIndex = 0;
         elseif problem =="2DHighD"
             density[Int(floor(NCellsX*0.56/(b-a))):end,:] .= 5.0;
         elseif problem =="lung"
@@ -162,7 +165,7 @@ mutable struct Settings
         epsAdapt = 5e-2;#5e-2#5e-3;
 
         # build class
-        new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt);
+        new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex);
     end
 end
 

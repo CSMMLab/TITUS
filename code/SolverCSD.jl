@@ -1145,7 +1145,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         S .= zeros(size(S));
 
         tmp = 0.0;
-        tol = obj.settings.epsAdapt*norm(D);
+        tol = obj.settings.epsAdapt*norm(D)^obj.settings.adaptIndex;
         
         rmax = Int(floor(size(D,1)/2));
         
@@ -1255,7 +1255,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         S .= zeros(size(S));
 
         tmp = 0.0;
-        tol = obj.settings.epsAdapt*norm(D);
+        tol = obj.settings.epsAdapt*norm(D)^obj.settings.adaptIndex;
         
         rmax = Int(floor(size(D,1)/2));
         
@@ -1370,7 +1370,7 @@ function UnconventionalIntegratorAdaptive!(obj::SolverCSD,Dvec::Array{Float64,1}
     S .= zeros(size(S));
 
     tmp = 0.0;
-    tol = obj.settings.epsAdapt*norm(D);
+    tol = obj.settings.epsAdapt*norm(D)^obj.settings.adaptIndex;
     
     rmax = Int(floor(size(D,1)/2));
     
@@ -1474,7 +1474,7 @@ function UnconventionalIntegratorAdaptive!(obj::SolverCSD,Dvec::Array{Float64,1}
     S .= zeros(size(S));
 
     tmp = 0.0;
-    tol = obj.settings.epsAdapt*norm(D);
+    tol = obj.settings.epsAdapt*norm(D)^obj.settings.adaptIndex;
     
     rmax = Int(floor(size(D,1)/2));
     
@@ -1950,7 +1950,7 @@ function UpdateUIStreamingAdaptive(obj::SolverCSD,X::Array{Float64,2},S::Array{F
     S .= zeros(size(S));
 
     tmp = 0.0;
-    tol = obj.settings.epsAdapt*norm(D);
+    tol = obj.settings.epsAdapt*norm(D)^obj.settings.adaptIndex;
     
     rmax = Int(floor(size(D,1)/2));
     

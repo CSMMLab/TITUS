@@ -42,7 +42,7 @@ doseFull = Vec2Mat(s.NCellsX,s.NCellsY,doseFull);
 L1 = 2;
 s = Settings(nx,nx,200);
 solver1 = SolverMLCSD(s,L1);
-X,S,W, dose, rankInTime, psi = SolveMCollisionSourceAdaptiveDLR(solver1);
+X,S,W, dose, rankInTime, psi = SolveMCollisionSourceDLR(solver1);
 dose = Vec2Mat(s.NCellsX,s.NCellsY,dose);
 
 s = Settings(nx,nx,50);
@@ -280,7 +280,7 @@ ax.tick_params("both",labelsize=20)
 ax.legend(loc="upper left", fontsize=20)
 tight_layout()
 fig.canvas.draw() # Update the figure
-savefig("output/rank_in_energy_ML_csd_1stcollision_adapt_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)$(s.epsAdapt).png")
+savefig("output/rank_in_energy_ML_csd_1stcollision_adapt_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)epsAdapt$(s.epsAdapt).png")
 
 writedlm("output/dose_csd_1stcollision_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)epsAdapt$(s.epsAdapt).txt", dose)
 writedlm("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", dose_DLR)

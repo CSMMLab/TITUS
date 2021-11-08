@@ -514,7 +514,7 @@ function UnconventionalIntegratorAdaptive!(obj::SolverMLCSD,Dvec::Array{Float64,
     S .= zeros(size(S));
 
     tmp = 0.0;
-    tol = obj.settings.epsAdapt*norm(D);
+    tol = obj.settings.epsAdapt*norm(D)^obj.settings.adaptIndex;
     
     rmax = Int(floor(size(D,1)/2));
     
@@ -618,7 +618,7 @@ function UnconventionalIntegratorAdaptive!(obj::SolverMLCSD,Dvec::Array{Float64,
     S .= zeros(size(S));
 
     tmp = 0.0;
-    tol = obj.settings.epsAdapt*norm(D);
+    tol = obj.settings.epsAdapt*norm(D)^obj.settings.adaptIndex;
     
     rmax = Int(floor(size(D,1)/2));
     
@@ -848,7 +848,7 @@ function UpdateUIStreamingAdaptive(obj::SolverMLCSD,X::Array{Float64,2},S::Array
     S .= zeros(size(S));
 
     tmp = 0.0;
-    tol = obj.settings.epsAdapt*norm(D);
+    tol = obj.settings.epsAdapt*norm(D)^obj.settings.adaptIndex;
     
     rmax = Int(floor(size(D,1)/2));
     
