@@ -71,7 +71,7 @@ mutable struct Settings
         c = 0.0; # lower boundary
         d = 14.5; # upper boundary
 
-        problem = "lung" # LineSource, 2D, 2DHighD, CT
+        problem = "LineSource" # LineSource, 2D, 2DHighD, CT
 
         density = ones(NCellsX,NCellsY);
 
@@ -85,6 +85,7 @@ mutable struct Settings
         Omega3 = -1.0;
         densityMin = 0.2;
         adaptIndex = 1;
+        epsAdapt = 5e-2;
         if problem =="LineSource"
             a = -1.5
             b = 1.5;
@@ -95,6 +96,7 @@ mutable struct Settings
             cfl = 0.99/sqrt(2);    
             eMax = 1.0
             adaptIndex = 0;
+            epsAdapt = 0.5;
         elseif problem =="2DHighD"
             density[Int(floor(NCellsX*0.56/(b-a))):end,:] .= 5.0;
         elseif problem =="lung"
@@ -162,7 +164,6 @@ mutable struct Settings
         
         # number PN moments
         nPN = 21#13, 21; # use odd number
-        epsAdapt = 5e-2;#5e-2#5e-3;
 
         # build class
         new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex);

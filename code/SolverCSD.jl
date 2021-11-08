@@ -678,7 +678,6 @@ function SolveFirstCollisionSource(obj::SolverCSD)
 
     uOUnc = zeros(nx*ny);
 
-    psi .= zeros(size(psi));
     psiNew = zeros(size(psi));
     uTilde = zeros(size(u))
 
@@ -743,7 +742,7 @@ function SolveFirstCollisionSource(obj::SolverCSD)
         next!(prog) # update progress bar
     end
     # return end time and solution
-    return 0.5*sqrt(obj.gamma[1])*u,obj.dose;
+    return 0.5*sqrt(obj.gamma[1])*u,obj.dose,psi;
 
 end
 

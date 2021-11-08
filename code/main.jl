@@ -10,7 +10,7 @@ using WriteVTK
 
 close("all")
 
-nx = 201;
+nx = 21;
 s = Settings(nx,nx,200);
 rhoMin = minimum(s.density);
 
@@ -230,7 +230,7 @@ if s.problem == "LineSource"
     savefig("output/scalarflux1_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")    
 
     scalarFlux = Vec2Mat(s.NCellsX,s.NCellsY,Mat2Vec(psiML)*solver3.M')[2:(end-1),2:(end-1),1];
-    for l = 1:1
+    for l = 1:L
         r = int(rankInTimeML[end,l])
         scalarFlux .+= Vec2Mat(s.NCellsX,s.NCellsY,solver3.X[l,:,1:r]*solver3.S[l,1:r,1:r]*solver3.W[l,1,1:r])[2:(end-1),2:(end-1)];
     end
