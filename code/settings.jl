@@ -71,8 +71,6 @@ mutable struct Settings
         c = 0.0; # lower boundary
         d = 14.5; # upper boundary
 
-        problem = "LineSource" # LineSource, 2D, 2DHighD, CT
-
         density = ones(NCellsX,NCellsY);
 
         # physical parameters
@@ -95,8 +93,9 @@ mutable struct Settings
             sigmaA = 0.0;  
             cfl = 0.99/sqrt(2);    
             eMax = 1.0
-            adaptIndex = 0;
-            epsAdapt = 0.5;
+            #adaptIndex = 0;
+            #epsAdapt = 0.5;
+            epsAdapt = 1e-2;
         elseif problem =="2DHighD"
             density[Int(floor(NCellsX*0.56/(b-a))):end,:] .= 5.0;
         elseif problem =="lung"

@@ -10,8 +10,9 @@ using WriteVTK
 
 close("all")
 
+problem = "lung"
 nx = 201;
-s = Settings(nx,nx,100);
+s = Settings(nx,nx,100,problem);
 rhoMin = minimum(s.density);
 
 if s.problem == "AirCavity"
@@ -39,20 +40,20 @@ solver = SolverCSD(s);
 u, doseFull, psi_full = SolveFirstCollisionSource(solver);
 doseFull = Vec2Mat(s.NCellsX,s.NCellsY,doseFull);
 
-s = Settings(nx,nx,50);
+s = Settings(nx,nx,50,problem);
 #s = Settings(nx,nx,int(maximum(rankInTime[2,:])));
 solver2 = SolverCSD(s);
 X_dlr,S_dlr,W_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR(solver2);
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
 
 L1 = 2;
-s = Settings(nx,nx,200);
-solver1 = SolverMLCSD(s,L1);
+s2 = Settings(nx,nx,200,problem);
+solver1 = SolverMLCSD(s2,L1);
 X,S,W, dose, rankInTime, psi = SolveMCollisionSourceDLR(solver1);
-dose = Vec2Mat(s.NCellsX,s.NCellsY,dose);
+dose = Vec2Mat(s2.NCellsX,s2.NCellsY,dose);
 
-L = 10
-s3 = Settings(nx,nx,200);
+L = 4;
+s3 = Settings(nx,nx,200,problem);
 solver3 = SolverMLCSD(s3,L);
 X_dlrM,S_dlrM,W_dlrM, dose_DLRM, rankInTimeML, psiML = SolveMCollisionSourceDLR(solver3);
 dose_DLRM = Vec2Mat(s3.NCellsX,s3.NCellsY,dose_DLRM);
@@ -340,22 +341,24 @@ if s.problem == "LineSource"
     savefig("output/scalarflux2_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png") 
 end
 
-writedlm("output/dose_csd_1stcollision_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)epsAdapt$(s.epsAdapt).txt", dose)
-writedlm("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", dose_DLR)
-writedlm("output/dose_csd_1stcollision_DLRAM_Rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", dose_DLRM)
 
-writedlm("output/X_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)epsAdapt$(s.epsAdapt).txt", X_dlr)
-writedlm("output/X_csd_1stcollision_DLRAM_Rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", X_dlrM)
+writedlm("output/dose_csd_1stcollision_DLRA_problem$(s.problem)_Rank$(s.r)_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", dose_DLR)
+writedlm("output/dose_csd_1stcollision_DLRA_problem$(s.problem)_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)L$(L1)epsAdapt$(s.epsAdapt).txt", dose)
+writedlm("output/dose_csd_1stcollision_DLRA_problem$(s.problem)_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)L$(L)epsAdapt$(s.epsAdapt).txt", dose_DLRM)
+writedlm("output/dose_csd_1stcollision_problem$(s.problem)_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", doseFull)
 
-writedlm("output/S_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", S_dlr)
-writedlm("output/S_csd_1stcollision_DLRAM_Rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", S_dlrM)
+writedlm("output/X_csd_1stcollision_DLRA_problem$(s.problem)_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", X_dlr)
+writedlm("output/X_csd_1stcollision_DLRA_problem$(s.problem)_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)L$(L)epsAdapt$(s.epsAdapt).txt", X_dlrM)
 
-writedlm("output/W_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", W_dlr)
-writedlm("output/W_csd_1stcollision_DLRAM_Rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", W_dlrM)
+writedlm("output/S_csd_1stcollision_DLRA_problem$(s.problem)_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", S_dlr)
+writedlm("output/S_csd_1stcollision_DLRA_problem$(s.problem)_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)L$(L)epsAdapt$(s.epsAdapt).txt", S_dlrM)
 
-writedlm("output/rank_csd_1stcollision_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", rankInTime)
+writedlm("output/W_csd_1stcollision_DLRA_problem$(s.problem)_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", W_dlr)
+writedlm("output/W_csd_1stcollision_DLRA_problem$(s.problem)_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)L$(L)epsAdapt$(s.epsAdapt).txt", W_dlrM)
 
-writedlm("output/u_csd_1stcollision_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", u)
-writedlm("output/dose_csd_1stcollision_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", doseFull)
+writedlm("output/rank_csd_1stcollision_problem$(s.problem)_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)L$(L1)epsAdapt$(s.epsAdapt).txt", rankInTime)
+writedlm("output/rank_csd_1stcollision_problem$(s.problem)_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)L$(L)epsAdapt$(s.epsAdapt).txt", rankInTimeML)
+
+writedlm("output/u_csd_1stcollision_problem$(s.problem)_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", u)
 
 println("main finished")

@@ -9,13 +9,13 @@ using DelimitedFiles
 close("all")
 
 nx = 201;
-s = Settings(nx,nx,50,"lung");
+s = Settings(nx,nx,50,"liver");
 s.xMid = s.xMid
 s.yMid = s.yMid
 
 rhoMin = minimum(s.density);
 ## read density
-density = Float64.(Gray.(load("Lung.png")))
+density = Float64.(Gray.(load("liver_cut.jpg")))
 nxD = size(density,1)
 nyD = size(density,2)
 y = collect(range(s.a,stop = s.b,length = nxD));
@@ -28,16 +28,16 @@ writedlm("output/muNPN$(s.nPN).txt", solver.Q.pointsmuphi[:,1])
 writedlm("output/phiNPN$(s.nPN).txt", solver.Q.pointsmuphi[:,2])
 
 #dose = readdlm("output/lung/dose_csd_1stcollision_nx200ny200nPN21eMax21.0rhoMin0.050.005.txt", Float64)
-dose_dlra = readdlm("outputLung/dose_csd_1stcollision_DLRA_problemlung_Rank50_nx200ny200nPN21eMax21.0rhoMin0.05.txt", Float64)
-dose_Llow = readdlm("outputLung/dose_csd_1stcollision_DLRA_problemlung_nx200ny200nPN21eMax21.0rhoMin0.05L2epsAdapt0.05.txt", Float64)
-dose_Lhigh = readdlm("outputLung/dose_csd_1stcollision_DLRA_problemlung_nx200ny200nPN21eMax21.0rhoMin0.05L10epsAdapt0.05.txt", Float64)
-dose_full = readdlm("outputLung/dose_csd_1stcollision_problemlung_nx200ny200nPN21eMax21.0rhoMin0.05.txt", Float64)
+dose_dlra = readdlm("outputLiver/dose_csd_1stcollision_DLRA_problemliver_Rank50_nx200ny200nPN21eMax40.0rhoMin0.05.txt", Float64)
+dose_Llow = readdlm("outputLiver/dose_csd_1stcollision_DLRA_problemliver_nx200ny200nPN21eMax40.0rhoMin0.05L2epsAdapt0.05.txt", Float64)
+dose_Lhigh = readdlm("outputLiver/dose_csd_1stcollision_DLRA_problemliver_nx200ny200nPN21eMax40.0rhoMin0.05L10epsAdapt0.05.txt", Float64)
+dose_full = readdlm("outputLiver/dose_csd_1stcollision_problemliver_nx200ny200nPN21eMax40.0rhoMin0.05.txt", Float64)
 
 # all contours magma
-doseMax1 = 1.0#maximum(dose_dlra[2:(end-1),2:(end-1)])
-doseMax2 = 1.0#maximum(dose_Llow[2:(end-1),2:(end-1)])
-doseMax3 = 1.0#maximum(dose_Lhigh[2:(end-1),2:(end-1)])
-doseMax4 = 1.0#maximum(dose_full[2:(end-1),2:(end-1)])
+doseMax1 = maximum(dose_dlra[2:(end-1),2:(end-1)])
+doseMax2 = maximum(dose_Llow[2:(end-1),2:(end-1)])
+doseMax3 = maximum(dose_Lhigh[2:(end-1),2:(end-1)])
+doseMax4 = maximum(dose_full[2:(end-1),2:(end-1)])
 levels = 40;
 fig, (ax1, ax2, ax3, ax4) = plt.subplots(2, 2,figsize=(15,15),dpi=100)
 ax1.pcolormesh(x[2:(end-1)],y[2:(end-1)],density[2:(end-1),2:(end-1)],cmap="gray")
