@@ -136,7 +136,7 @@ mutable struct Settings
             end
             b = 35.0; # right boundary
             d = 35.0; # upper boundary
-            eMax = 40.0
+            eMax = 60.0
             cfl = 1.5
             x0 = 1.0*b;
             y0 = 0.35*d;

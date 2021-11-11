@@ -375,7 +375,7 @@ function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y:
         sigmaYInv = 20.0;
         sigmaEInv = 100.0;
     elseif obj.settings.problem == "liver"
-        sigmaO1Inv = 10.0;
+        sigmaO1Inv = 75.0;
         sigmaO3Inv = 0.0;
         sigmaXInv = 10.0;
         sigmaYInv = 10.0;
