@@ -733,7 +733,7 @@ function SolveFirstCollisionSource(obj::SolverCSD)
         #uNew = uTilde .- dE*uTilde*D;
         
         # update dose
-        obj.dose .+= dE * (uNew[:,1]+uOUnc) * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+        obj.dose .+= dE * (uNew[:,1]+uOUnc) * obj.csd.SMid[n-1] ./ obj.densityVec ./( 1 + (n==2||n==nEnergies));
 
 
         u .= uNew;
@@ -974,9 +974,9 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         #println(maximum(psi)," ",maximum(abs.(uOUnc))," ",maximum(abs.(uNew[:,1])))
         
         # update dose
-        #obj.dose .+= dE * (uNew[:,1]+uOUnc) * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+        #obj.dose .+= dE * (uNew[:,1]+uOUnc) * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==2||n==nEnergies));
         # update dose
-        obj.dose .+= dE * (X*S*W[1,:]+uOUnc) * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+        obj.dose .+= dE * (X*S*W[1,:]+uOUnc) * obj.csd.SMid[n-1] ./ obj.densityVec ./( 1 + (n==2||n==nEnergies));
 
         psi .= psiNew;
         next!(prog) # update progress bar
@@ -1193,7 +1193,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         end
         
         # update dose
-        obj.dose .+= dE * (X*S*W[1,:]+uOUnc) * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+        obj.dose .+= dE * (X*S*W[1,:]+uOUnc) * obj.csd.SMid[n-1] ./ obj.densityVec ./( 1 + (n==2||n==nEnergies));
 
         ################## K-step ##################
         K = X*S;
@@ -1679,7 +1679,7 @@ function UnconventionalIntegrator!(obj::SolverCSD,Dvec::Array{Float64,1},D,X::Ar
     S .= MUp*S*(NUp')
     S .= (S .+dE*X'*Mat2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec)*W)/(1+dE*sigT);
 
-    #obj.dose .+= dE * X*S*W[1,:] * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+    #obj.dose .+= dE * X*S*W[1,:] * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==2||n==nEnergies));
 
     if eIndex > 0#step
         #X,S,W = UpdateUIStreaming(obj,X,S,W);
@@ -1743,7 +1743,7 @@ function UnconventionalIntegrator!(obj::SolverCSD,Dvec::Array{Float64,1},D,X::Ar
     #S .= S .+dE*XX*SPrev*WPrevDW;
     S .= (S + dE*X'*XPrev*SPrev*WPrev'*Diagonal(Dvec)*W)/(1+dE*sigT)
 
-    #obj.dose .+= dE * X*S*W[1,:] * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+    #obj.dose .+= dE * X*S*W[1,:] * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==2||n==nEnergies));
 
     if eIndex > 0#step
         #X,S,W = UpdateUIStreaming(obj,X,S,W);
@@ -2116,7 +2116,7 @@ function SolveMCollisionSourceDLR(obj::SolverCSD)
         end
         
         # update dose
-        obj.dose .+= dE * (X*S*W[1,:]+X1*S1*W1[1,:]+X2*S2*W2[1,:]+X3*S3*W3[1,:]+uOUnc) * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+        obj.dose .+= dE * (X*S*W[1,:]+X1*S1*W1[1,:]+X2*S2*W2[1,:]+X3*S3*W3[1,:]+uOUnc) * obj.csd.SMid[n-1] ./ obj.densityVec ./( 1 + (n==2||n==nEnergies));
 
         psi .= psiNew;
         next!(prog) # update progress bar
@@ -2207,7 +2207,7 @@ function Solve(obj::SolverCSD)
         end
         
         # update dose
-        obj.dose .+= dE * uNew[:,1] * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+        obj.dose .+= dE * uNew[:,1] * obj.csd.SMid[n-1] ./ obj.densityVec ./( 1 + (n==2||n==nEnergies));
 
         u .= uNew;
         next!(prog) # update progress bar
@@ -2338,7 +2338,7 @@ function SolveNaiveUnconventional(obj::SolverCSD)
         next!(prog) # update progress bar
                
         # update dose
-        obj.dose .+= dE * uNew[:,1] * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+        obj.dose .+= dE * uNew[:,1] * obj.csd.SMid[n-1] ./ obj.densityVec ./( 1 + (n==2||n==nEnergies));
     end
 
     # return end time and solution
@@ -2494,7 +2494,7 @@ function SolveUnconventional(obj::SolverCSD)
 
         next!(prog) # update progress bar
         # update dose
-        obj.dose .+= dE * X*S*W[1,:] * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+        obj.dose .+= dE * X*S*W[1,:] * obj.csd.SMid[n-1] ./ obj.densityVec ./( 1 + (n==2||n==nEnergies));
 
     end
 

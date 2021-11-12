@@ -65,7 +65,10 @@ struct CSD
 
         # compute stopping power at intermediate time points
         dE = eTrafo[2]-eTrafo[1];
-        SMid = E2S(eGrid.+0.5*dE)
+        #SMid = E2S(eGrid.+0.5*dE)
+
+        eGridMid = ETrafo2ETab(eMaxTrafo .- (eTrafo[1:(end-1)].+0.5*dE))
+        SMid = E2S(eGridMid)
 
         new(eGrid,eTrafo,S,SMid,E_sigmaTab,sigma_tab,param.StarMAPmoments,settings);
     end

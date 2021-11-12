@@ -1011,10 +1011,10 @@ function SolveMCollisionSourceDLR(obj::SolverMLCSD)
         end
         
         # update dose
-        obj.dose .+= dE * uOUnc * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+        obj.dose .+= dE * uOUnc * obj.csd.SMid[n-1] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
 
         for l = 1:L
-            obj.dose .+= dE * obj.X[l,:,1:ranks[l]]*obj.S[l,1:ranks[l],1:ranks[l]]*obj.W[l,1,1:ranks[l]] * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+            obj.dose .+= dE * obj.X[l,:,1:ranks[l]]*obj.S[l,1:ranks[l],1:ranks[l]]*obj.W[l,1,1:ranks[l]] * obj.csd.SMid[n-1] ./ obj.densityVec ./( 1 + (n==2||n==nEnergies));
         end
 
         # remap strategy
