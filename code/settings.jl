@@ -190,6 +190,20 @@ function IC(obj::Settings,x,y)
     y0 = y .- posBeamY;
     
     s1 = 0.05
+    if obj.problem == "2DHighD"
+        s1 = 0.01
+    end
+
+    s2 = s1^2
+    floor = 1e-4
+    for j = 1:length(x);
+        for i = 1:length(y);
+            out[j,i] = 1/(s1*sqrt(2*pi))^2*exp.(-(x0[j].^2+y0[i].^2) ./ 2.0./s2)
+        end
+    end
+
+
+    s1 = 0.01
     s2 = s1^2
     floor = 1e-4
     for j = 1:length(x);

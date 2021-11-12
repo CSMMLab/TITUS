@@ -906,7 +906,7 @@ function SolveMCollisionSourceDLR(obj::SolverMLCSD)
     psi = SetupIC(obj);
     floorPsiAll = 1e-1;
     floorPsi = 1e-17;
-    if obj.settings.problem == "LineSource" # determine relevant directions in IC
+    if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD"# determine relevant directions in IC
         idxFullBeam = findall(psi .> floorPsiAll)
         idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
     elseif obj.settings.problem == "lung" || obj.settings.problem == "liver" # determine relevant directions in beam

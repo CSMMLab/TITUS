@@ -10,7 +10,7 @@ using WriteVTK
 
 close("all")
 
-problem = "2DHighD"
+problem = "LineSource"
 nx = 201;
 s = Settings(nx,nx,100,problem);
 rhoMin = minimum(s.density);
@@ -39,8 +39,8 @@ end
 
 ############################
 solver = SolverCSD(s);
-#u, doseFull, psi_full = SolveFirstCollisionSource(solver);
-#doseFull = Vec2Mat(s.NCellsX,s.NCellsY,doseFull);
+u, doseFull, psi_full = SolveFirstCollisionSource(solver);
+doseFull = Vec2Mat(s.NCellsX,s.NCellsY,doseFull);
 doseFull = doseRef;
 
 s = Settings(nx,nx,50,problem);

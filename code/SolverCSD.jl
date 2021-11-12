@@ -361,6 +361,29 @@ function SetupIC(obj::SolverCSD)
     return psi;
 end
 
+function SetupICMoments(obj::SolverCSD)
+    u = zeros(obj.settings.NCellsX,obj.settings.NCellsY,obj.pn.nTotalEntries);
+    
+    if obj.settings.problem == "CT"
+        PCurrent = collectPl(1,lmax=obj.settings.nPN);
+        for l = 0:obj.settings.nPN
+            for k=-l:l
+                i = GlobalIndex( l, k )+1;
+                #u[:,:,i] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)*Y[i];#obj.csd.StarMAPmoments[i]# .* PCurrent[l]/sqrt(obj.gamma[l+1])
+                u[:,:,i] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)*obj.csd.StarMAPmoments[i]
+            end
+        end
+    elseif obj.settings.problem == "2D" || obj.settings.problem == "2DHighD"
+        for l = 0:obj.settings.nPN
+            for k=-l:l
+                i = GlobalIndex( l, k )+1;
+                u[:,:,i] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)*obj.csd.StarMAPmoments[i]
+            end
+        end
+    end
+    return u;
+end
+
 function PsiLeft(obj::SolverCSD,n::Int,mu::Float64)
     E0 = obj.settings.eMax;
     return 10^5*exp(-200.0*(1.0-mu)^2)*exp(-50*(E0-E)^2)
@@ -2353,8 +2376,9 @@ function SolveUnconventional(obj::SolverCSD)
     eTrafo = obj.csd.eTrafo;
     energy = obj.csd.eGrid;
 
+
     # Set up initial condition and store as matrix
-    v = SetupIC(obj);
+    v = SetupICMoments(obj);
     nx = obj.settings.NCellsX;
     ny = obj.settings.NCellsY;
     N = obj.pn.nTotalEntries
@@ -2388,12 +2412,6 @@ function SolveUnconventional(obj::SolverCSD)
 
     uNew = deepcopy(u)
 
-    out = zeros(nx*ny,N);
-    vout = RhsMatrix(obj,v)
-    for k = 1:N
-        out[:,k] = vec(vout[:,:,k]');
-    end
-
     WAxW = zeros(r,r)
     WAzW = zeros(r,r)
     WAbsAxW = zeros(r,r)
@@ -2410,16 +2428,12 @@ function SolveUnconventional(obj::SolverCSD)
     XNew = zeros(nx*ny,r)
     STmp = zeros(r,r)
 
-    println("error rhs = ",norm(Rhs(obj,u) - out))
-    println("norm rhs = ",norm(Rhs(obj,u)))
-    println("norm rhs = ",norm(out))
+    prog = Progress(nEnergies-1,1)
 
-    prog = Progress(nEnergies,1)
-
-    for n=1:nEnergies
+    for n=2:nEnergies
 
         # compute scattering coefficients at current energy
-        sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
+        sigmaS = SigmaAtEnergy(obj.csd,energy[n-1])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
        
         Dvec = zeros(obj.pn.nTotalEntries)
         for l = 0:obj.pn.N
@@ -2481,7 +2495,7 @@ function SolveUnconventional(obj::SolverCSD)
         L .= W*S';
         for i = 1:r
             L[:,i] = (Id .+ dE*D)\L[:,i]
-            LNew = L - dt*LNew*D
+            #LNew = L - dE*LNew*D
         end
 
         W,S = qr(L);
