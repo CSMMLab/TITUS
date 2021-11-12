@@ -83,7 +83,7 @@ mutable struct Settings
         Omega3 = -1.0;
         densityMin = 0.2;
         adaptIndex = 1;
-        epsAdapt = 5e-2;
+        epsAdapt = 1e-2;
         if problem =="LineSource"
             a = -1.5
             b = 1.5;
