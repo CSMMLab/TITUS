@@ -97,6 +97,16 @@ mutable struct Settings
             epsAdapt = 0.3;#0.5;
             #epsAdapt = 1e-2;
         elseif problem =="2DHighD"
+            a = 0.0
+            b = 1.0;
+            c = 0.0;
+            d = 1.0;
+            sigmaS = 1.0;
+            sigmaA = 0.0;  
+            cfl = 0.99/sqrt(2);    
+            eMax = 1.0
+            adaptIndex = 0;
+            epsAdapt = 0.3;#0.5;
             density[Int(floor(NCellsX*0.56/(b-a))):end,:] .= 5.0;
         elseif problem =="lung"
             #img = Float64.(Gray.(load("phantom.png")))
@@ -173,7 +183,7 @@ function IC(obj::Settings,x,y)
     out = zeros(length(x),length(y));
     posBeamX = (obj.b+obj.a)/2;
     posBeamY = (obj.d+obj.c)/2;
-    if obj.problem != "LineSource"
+    if obj.problem != "LineSource" && obj.problem != "2DHighD"
         return out;
     end
     x0 = x .- posBeamX;

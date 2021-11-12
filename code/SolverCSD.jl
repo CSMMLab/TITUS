@@ -380,7 +380,7 @@ function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y:
         sigmaXInv = 10.0;
         sigmaYInv = 10.0;
         sigmaEInv = 10.0;
-    elseif obj.settings.problem == "LineSource"
+    elseif obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD"
         return 0.0;
     end
     return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*exp(-sigmaEInv*(E0-E)^2)*exp(-sigmaXInv*(x-obj.settings.x0)^2)*exp(-sigmaYInv*(y-obj.settings.y0)^2)*obj.csd.S[n]*obj.settings.densityMin;
@@ -763,7 +763,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     psi = SetupIC(obj);
     floorPsiAll = 1e-1;
     floorPsi = 1e-17;
-    if obj.settings.problem == "LineSource" # determine relevant directions in IC
+    if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" # determine relevant directions in IC
         idxFullBeam = findall(psi .> floorPsiAll)
         idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
     elseif obj.settings.problem == "lung" || obj.settings.problem == "liver" # determine relevant directions in beam

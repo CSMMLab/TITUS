@@ -10,7 +10,7 @@ using WriteVTK
 
 close("all")
 
-problem = "lung"
+problem = "2DHighD"
 nx = 201;
 s = Settings(nx,nx,100,problem);
 rhoMin = minimum(s.density);
@@ -31,14 +31,17 @@ elseif s.problem == "2DHighD"
     doseRef = readdlm("validationData/dose_starmap_full301_inhomogenity.txt", Float64)
     xRef = readdlm("validationData/x_starmap_nx301.txt", Float64)
     yRef = readdlm("validationData/y_starmap_ny301.txt", Float64)
+    nxRef = length(xRef)
+    nyRef = length(yRef)
 else
     xRef = 0; doseRef = 1;
 end
 
 ############################
 solver = SolverCSD(s);
-u, doseFull, psi_full = SolveFirstCollisionSource(solver);
-doseFull = Vec2Mat(s.NCellsX,s.NCellsY,doseFull);
+#u, doseFull, psi_full = SolveFirstCollisionSource(solver);
+#doseFull = Vec2Mat(s.NCellsX,s.NCellsY,doseFull);
+doseFull = doseRef;
 
 s = Settings(nx,nx,50,problem);
 #s = Settings(nx,nx,int(maximum(rankInTime[2,:])));
@@ -48,14 +51,14 @@ dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
 
 L1 = 2;
 s2 = Settings(nx,nx,400,problem);
-s2.epsAdapt = 0.01
+#s2.epsAdapt = 0.01
 solver1 = SolverMLCSD(s2,L1);
 X,S,W, dose, rankInTime, psi = SolveMCollisionSourceDLR(solver1);
 dose = Vec2Mat(s2.NCellsX,s2.NCellsY,dose);
 
-L = 2;
+L = 5;
 s3 = Settings(nx,nx,400,problem);
-s3.epsAdapt = 0.001
+#s3.epsAdapt = 0.001
 solver3 = SolverMLCSD(s3,L);
 X_dlrM,S_dlrM,W_dlrM, dose_DLRM, rankInTimeML, psiML = SolveMCollisionSourceDLR(solver3);
 dose_DLRM = Vec2Mat(s3.NCellsX,s3.NCellsY,dose_DLRM);
@@ -242,10 +245,10 @@ savefig("output/X3_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)n
 # line plot dose
 fig, ax = subplots()
 #nyRef = length(yRef)
-ax.plot(s.xMid,dose[:,Int(floor(s.NCellsY/2))]./maximum(dose[:,Int(floor(s.NCellsY/2))]), "r--", linewidth=2, label="CSD", alpha=0.8)
+#ax.plot(s.xMid,dose[:,Int(floor(s.NCellsY/2))]./maximum(dose[:,Int(floor(s.NCellsY/2))]), "r--", linewidth=2, label="CSD", alpha=0.8)
 ax.plot(s.xMid,dose_DLR[:,Int(floor(s.NCellsY/2))]./maximum(dose_DLR[:,Int(floor(s.NCellsY/2))]), "b--", linewidth=2, label="CSD_DLR", alpha=0.8)
 if s.problem == "2DHighD"
- #   ax.plot(xRef',doseRef[:,Int(floor(nyRef/2))]./maximum(doseRef[:,Int(floor(nyRef/2))]), "k-", linewidth=2, label="Starmap", alpha=0.6)
+   ax.plot(xRef',doseRef[:,Int(floor(nyRef/2))]./maximum(doseRef[:,Int(floor(nyRef/2))]), "k-", linewidth=2, label="Starmap", alpha=0.6)
 end
 #ax.plot(csd.eGrid,csd.S, "r--o", linewidth=2, label="S", alpha=0.6)
 ax.legend(loc="upper left")
