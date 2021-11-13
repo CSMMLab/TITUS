@@ -15,36 +15,12 @@ nx = 201;
 s = Settings(nx,nx,100,problem);
 rhoMin = minimum(s.density);
 
-if s.problem == "AirCavity"
-    smapIn = readdlm("dose_ac.txt", ',', Float64)
-    xRef = smapIn[:,1]
-    doseRef = smapIn[:,2]
-elseif s.problem == "WaterPhantomKerstin"
-    smapIn = readdlm("doseStarmapWaterPhantom.txt", ',', Float64)
-    xRef = smapIn[:,1]
-    doseRef = smapIn[:,2]
-elseif s.problem == "2D"
-    doseRef = readdlm("validationData/dose_starmap_full301.txt", Float64)
-    xRef = readdlm("validationData/x_starmap_nx301.txt", Float64)
-    yRef = readdlm("validationData/y_starmap_ny301.txt", Float64)
-elseif s.problem == "2DHighD"
-    doseRef = readdlm("validationData/dose_starmap_full301_inhomogenity.txt", Float64)
-    xRef = readdlm("validationData/x_starmap_nx301.txt", Float64)
-    yRef = readdlm("validationData/y_starmap_ny301.txt", Float64)
-    nxRef = length(xRef)
-    nyRef = length(yRef)
-else
-    xRef = 0; doseRef = 1;
-end
-
 ############################
 solver = SolverCSD(s);
 u, doseFull, psi_full = SolveFirstCollisionSource(solver);
 doseFull = Vec2Mat(s.NCellsX,s.NCellsY,doseFull);
-#doseFull = doseRef;
 
-s = Settings(nx,nx,50,problem);
-#s = Settings(nx,nx,int(maximum(rankInTime[2,:])));
+s = Settings(nx,nx,100,problem);
 solver2 = SolverCSD(s);
 X_dlr,S_dlr,W_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR(solver2);
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);

@@ -28,10 +28,10 @@ writedlm("output/muNPN$(s.nPN).txt", solver.Q.pointsmuphi[:,1])
 writedlm("output/phiNPN$(s.nPN).txt", solver.Q.pointsmuphi[:,2])
 
 #dose = readdlm("output/lung/dose_csd_1stcollision_nx200ny200nPN21eMax21.0rhoMin0.050.005.txt", Float64)
-dose_dlra = readdlm("outputLiver/dose_csd_1stcollision_DLRA_problemliver_Rank50_nx200ny200nPN21eMax40.0rhoMin0.05.txt", Float64)
-dose_Llow = readdlm("outputLiver/dose_csd_1stcollision_DLRA_problemliver_nx200ny200nPN21eMax40.0rhoMin0.05L2epsAdapt0.05.txt", Float64)
-dose_Lhigh = readdlm("outputLiver/dose_csd_1stcollision_DLRA_problemliver_nx200ny200nPN21eMax40.0rhoMin0.05L10epsAdapt0.05.txt", Float64)
-dose_full = readdlm("outputLiver/dose_csd_1stcollision_problemliver_nx200ny200nPN21eMax40.0rhoMin0.05.txt", Float64)
+dose_dlra = readdlm("outputLiver/dose_csd_1stcollision_DLRA_problemliver_Rank50_nx200ny200nPN21eMax60.0rhoMin0.05.txt", Float64)
+dose_Llow = readdlm("outputLiver/dose_csd_1stcollision_DLRA_problemliver_nx200ny200nPN21eMax60.0rhoMin0.05L2epsAdapt0.05.txt", Float64)
+dose_Lhigh = readdlm("outputLiver/dose_csd_1stcollision_DLRA_problemliver_nx200ny200nPN21eMax60.0rhoMin0.05L10epsAdapt0.05.txt", Float64)
+dose_full = readdlm("outputLiver/dose_csd_1stcollision_problemliver_nx200ny200nPN21eMax60.0rhoMin0.05.txt", Float64)
 
 # all contours magma
 doseMax1 = maximum(dose_dlra[2:(end-1),2:(end-1)])

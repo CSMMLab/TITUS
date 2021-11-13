@@ -93,9 +93,9 @@ mutable struct Settings
             sigmaA = 0.0;  
             cfl = 0.99/sqrt(2);    
             eMax = 1.0
-            adaptIndex = 0;
-            epsAdapt = 0.3;#0.5;
-            #epsAdapt = 1e-2;
+            #adaptIndex = 0;
+            #epsAdapt = 0.3;#0.5;
+            epsAdapt = 1e-2;
         elseif problem =="2DHighD"
             a = 0.0
             b = 1.0;
@@ -194,16 +194,6 @@ function IC(obj::Settings,x,y)
         s1 = 0.01
     end
 
-    s2 = s1^2
-    floor = 1e-4
-    for j = 1:length(x);
-        for i = 1:length(y);
-            out[j,i] = 1/(s1*sqrt(2*pi))^2*exp.(-(x0[j].^2+y0[i].^2) ./ 2.0./s2)
-        end
-    end
-
-
-    s1 = 0.01
     s2 = s1^2
     floor = 1e-4
     for j = 1:length(x);
