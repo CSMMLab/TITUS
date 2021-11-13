@@ -11,7 +11,7 @@ using WriteVTK
 close("all")
 
 problem = "2DHighD"
-nx = 201;
+nx = 501;
 s = Settings(nx,nx,100,problem);
 rhoMin = minimum(s.density);
 
@@ -69,7 +69,7 @@ fig, ax = subplots()
 #nyRef = length(yRef)
 #ax.plot(s.xMid,dose[:,Int(floor(s.NCellsY/2))]./maximum(dose[:,Int(floor(s.NCellsY/2))]), "r--", linewidth=2, label="CSD", alpha=0.8)
 ax.plot(s.xMid,dose_dlra[:,Int(floor(s.NCellsY/2))]./maximum(dose_dlra[:,Int(floor(s.NCellsY/2))]), "b--", linewidth=2, label="CSD_DLR", alpha=0.8)
-ax.plot(s.xMid,dose_fc[:,Int(floor(s.NCellsY/2))]./maximum(dose_fc[:,Int(floor(s.NCellsY/2))]), "b--", linewidth=2, label="CSD_DLR", alpha=0.8)
+ax.plot(s.xMid,dose_fc[:,Int(floor(s.NCellsY/2))]./maximum(dose_fc[:,Int(floor(s.NCellsY/2))]), "r-.", linewidth=2, label="CSD_DLR, collision source", alpha=0.8)
 if s.problem == "2DHighD"
    ax.plot(xRef',doseRef[:,Int(floor(nyRef/2))]./maximum(doseRef[:,Int(floor(nyRef/2))]), "k-", linewidth=2, label="Starmap", alpha=0.6)
 end
