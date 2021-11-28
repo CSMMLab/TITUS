@@ -41,7 +41,6 @@ u, doseFull, psi_full = SolveFirstCollisionSource(solver);
 doseFull = Vec2Mat(s.NCellsX,s.NCellsY,doseFull);
 
 s = Settings(nx,nx,50,problem);
-#s = Settings(nx,nx,int(maximum(rankInTime[2,:])));
 solver2 = SolverCSD(s);
 X_dlr,S_dlr,W_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR(solver2);
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);

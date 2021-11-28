@@ -470,7 +470,7 @@ function UnconventionalIntegratorAdaptive!(obj::SolverMLCSD,Dvec::Array{Float64,
     SigmaT = D+Diagonal(Dvec)
     dE = obj.settings.dE;
 
-    X,S,W = UpdateUIStreamingAdaptive(obj,X,S,W);
+    X,S,W = UpdateUIStreamingAdaptiveEfficient(obj,X,S,W);
 
     r = size(S,1)
 
@@ -567,7 +567,7 @@ function UnconventionalIntegratorAdaptive!(obj::SolverMLCSD,Dvec::Array{Float64,
     N = obj.pn.nTotalEntries
     Id = Diagonal(ones(N));
 
-    X,S,W = UpdateUIStreamingAdaptive(obj,X,S,W);
+    X,S,W = UpdateUIStreamingAdaptiveEfficient(obj,X,S,W);
     r = size(S,1);
 
     ############## In Scattering ##############
@@ -575,10 +575,7 @@ function UnconventionalIntegratorAdaptive!(obj::SolverMLCSD,Dvec::Array{Float64,
     ################## K-step ##################
     X[obj.boundaryIdx,:] .= 0.0;
     K = X*S;
-    WPrevDW = WPrev'*Diagonal(Dvec)*W;
-    #K .= K .+dE*XPrev*SPrev*WPrevDW;
-    K = (K + dE*XPrev*SPrev*WPrev'*Diagonal(Dvec)*W)/(1+dE*sigT)
-    #u = u + dE*XPrev*SPrev*WPrev'*Diagonal(Dvec)
+    K = (K + dE*XPrev*SPrev*WPrevDW)/(1+dE*sigT)
     K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
     XNew,STmp = qr!([K X]);
@@ -590,9 +587,8 @@ function UnconventionalIntegratorAdaptive!(obj::SolverMLCSD,Dvec::Array{Float64,
     ################## L-step ##################
     L = W*S';
     XX = XPrev'*X;
-    #L .= L .+dE*Diagonal(Dvec)*WPrev*SPrev'*XX;
     sigT = SigmaT[1]
-    L .= (L .+ dE*(XPrev*SPrev*WPrev'*Diagonal(Dvec))'*X)/(1+dE*sigT)
+    L .= (L .+ dE*Diagonal(Dvec)*WPrev*SPrev'*XX)/(1+dE*sigT)
 
     WNew,STmp = qr([L W]);
     WNew = Matrix(WNew)
@@ -607,7 +603,7 @@ function UnconventionalIntegratorAdaptive!(obj::SolverMLCSD,Dvec::Array{Float64,
     WPrevDW = WPrev'*Diagonal(Dvec)*W;
     XX = X'*XPrev;
 
-    S .= (S + dE*X'*XPrev*SPrev*WPrev'*Diagonal(Dvec)*W)/(1+dE*sigT)
+    S .= (S + dE*XX*SPrev*WPrevDW)/(1+dE*sigT)
 
     ################## truncate ##################
 
@@ -662,6 +658,120 @@ function UnconventionalIntegratorAdaptive!(obj::SolverMLCSD,Dvec::Array{Float64,
     return rmax;
 end
 
+function UnconventionalIntegratorCollidedAdaptive!(obj::SolverMLCSD,Dvec::Array{Float64,1},D,X::Array{Float64,2},S::Array{Float64,2},W::Array{Float64,2},psiNew::Array{Float64,3},step::Int,eIndex::Int)
+    nx = obj.settings.NCellsX;
+    ny = obj.settings.NCellsY;
+    nq = obj.Q.nquadpoints;
+    rmin = 2;
+    rMaxTotal = Int(floor(obj.settings.r/2));
+    dE = obj.settings.dE;
+    N = obj.pn.nTotalEntries
+    Id = Diagonal(ones(N));
+    nEnergies = length(obj.csd.eTrafo);
+
+    X,S,W = UpdateUIStreamingAdaptiveEfficient(obj,X,S,W);
+    r = size(S,1);
+
+    ############## In Scattering ##############
+    SigmaT = D+Diagonal(Dvec)
+    sigT = SigmaT[1]
+    ################## K-step ##################
+    X[obj.boundaryIdx,:] .= 0.0;
+    K = X*S;
+    WPrevDW = WPrev'*Diagonal(Dvec)*W;
+    K = K + dE*Mat2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec)*W
+    K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
+
+    XNew,STmp = qr!([K X]);
+    XNew = Matrix(XNew)
+    XNew = XNew[:,1:2*r];
+
+    MUp = XNew' * X;
+
+    ################## L-step ##################
+    L = W*S';
+    L .= L .+ dE*(Mat2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec))'*X
+
+    WNew,STmp = qr([L W]);
+    WNew = Matrix(WNew)
+    WNew = WNew[:,1:2*r];
+
+    NUp = WNew' * W;
+    W = WNew;
+    X = XNew;
+
+    ################## S-step ##################
+    S = MUp*S*(NUp')
+
+    S = S + dE*X'*Mat2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec)*W
+
+    ################## truncate ##################
+
+    # Compute singular values of S1 and decide how to truncate:
+    U,DS,V = svd(S);
+    U = Matrix(U); V = Matrix(V)
+    rmax = -1;
+    S .= zeros(size(S));
+
+    tmp = 0.0;
+    tol = obj.settings.epsAdapt*norm(DS);
+    
+    rmax = Int(floor(size(DS,1)/2));
+    
+    for j=1:2*rmax
+        tmp = sqrt(sum(DS[j:2*rmax]).^2);
+        if(tmp<tol)
+            rmax = j;
+            break;
+        end
+    end
+    
+    rmax = min(rmax,rMaxTotal);
+    rmax = max(rmax,rmin);
+
+    for l = 1:rmax
+        S[l,l] = DS[l];
+    end
+
+    # if 2*r was actually not enough move to highest possible rank
+    if rmax == -1
+        rmax = rMaxTotal;
+    end
+
+    # update solution with new rank
+    XNew = XNew*U;
+    WNew = WNew*V;
+
+    # update solution with new rank
+    S = S[1:rmax,1:rmax];
+    X = XNew[:,1:rmax];
+    W = WNew[:,1:rmax];
+
+    r = rmax;
+
+    ############## Self-In and Out Scattering ##############
+    L = W*S';
+
+    for i = 1:size(L,2)
+        L[:,i] = L[:,i]./(1 .+dE*sigT.-dE*Dvec);
+    end
+
+    W,S = qr(L);
+    W = Matrix(W)
+    W = W[:, 1:r];
+    S = Matrix(S)
+    S = S[1:r, 1:r];
+
+    S .= S';
+
+    # update solution with new rank
+    obj.S[step,1:r,1:r] = S;
+    obj.X[step,:,1:r] = X;
+    obj.W[step,:,1:r] = W;
+
+    return r;
+end
+
 function UnconventionalIntegratorCollidedAdaptive!(obj::SolverMLCSD,Dvec::Array{Float64,1},D,X::Array{Float64,2},S::Array{Float64,2},W::Array{Float64,2},XPrev::Array{Float64,2},SPrev::Array{Float64,2},WPrev::Array{Float64,2},step::Int,eIndex::Int)
     nx = obj.settings.NCellsX;
     ny = obj.settings.NCellsY;
@@ -673,7 +783,7 @@ function UnconventionalIntegratorCollidedAdaptive!(obj::SolverMLCSD,Dvec::Array{
     Id = Diagonal(ones(N));
     nEnergies = length(obj.csd.eTrafo);
 
-    X,S,W = UpdateUIStreamingAdaptive(obj,X,S,W);
+    X,S,W = UpdateUIStreamingAdaptiveEfficient(obj,X,S,W);
     r = size(S,1);
 
     ############## In Scattering ##############
@@ -683,9 +793,7 @@ function UnconventionalIntegratorCollidedAdaptive!(obj::SolverMLCSD,Dvec::Array{
     X[obj.boundaryIdx,:] .= 0.0;
     K = X*S;
     WPrevDW = WPrev'*Diagonal(Dvec)*W;
-    #K .= K .+dE*XPrev*SPrev*WPrevDW;
-    K = K + dE*XPrev*SPrev*WPrev'*Diagonal(Dvec)*W
-    #u = u + dE*XPrev*SPrev*WPrev'*Diagonal(Dvec)
+    K = K + dE*XPrev*SPrev*WPrevDW
     K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
     XNew,STmp = qr!([K X]);
@@ -697,8 +805,7 @@ function UnconventionalIntegratorCollidedAdaptive!(obj::SolverMLCSD,Dvec::Array{
     ################## L-step ##################
     L = W*S';
     XX = XPrev'*X;
-    #L .= L .+dE*Diagonal(Dvec)*WPrev*SPrev'*XX;
-    L .= L .+ dE*(XPrev*SPrev*WPrev'*Diagonal(Dvec))'*X
+    L .= L .+ dE*Diagonal(Dvec)*WPrev*SPrev'*XX
 
     WNew,STmp = qr([L W]);
     WNew = Matrix(WNew)
@@ -713,8 +820,7 @@ function UnconventionalIntegratorCollidedAdaptive!(obj::SolverMLCSD,Dvec::Array{
     WPrevDW = WPrev'*Diagonal(Dvec)*W;
     XX = X'*XPrev;
 
-    #S .= S .+dE*XX*SPrev*WPrevDW;
-    S = S + dE*X'*XPrev*SPrev*WPrev'*Diagonal(Dvec)*W
+    S = S + dE*XX*SPrev*WPrevDW
 
     ################## truncate ##################
 
@@ -887,6 +993,109 @@ function UpdateUIStreamingAdaptive(obj::SolverMLCSD,X::Array{Float64,2},S::Array
     return X,S,W;
 end
 
+function UpdateUIStreamingAdaptiveEfficient(obj::SolverMLCSD,X::Array{Float64,2},S::Array{Float64,2},W::Array{Float64,2},sigmaT::Float64=0.0)
+    dE = obj.settings.dE
+    r=size(X,2);
+    rmin = 2;
+    rMaxTotal = Int(floor(obj.settings.r/2));
+    #Diagonal(ones(size(Dvec))./(1 .- dE*Dvec))*L[:,i];
+    ################## K-step ##################
+    K = X*S;
+
+    WAzW = W'*obj.pn.Az'*W
+    WAbsAzW = W'*obj.AbsAz'*W
+    WAbsAxW = W'*obj.AbsAx'*W
+    WAxW = W'*obj.pn.Ax'*W
+
+    K .= (K .- dE*(obj.L2x*K*WAxW + obj.L2y*K*WAzW + obj.L1x*K*WAbsAxW + obj.L1y*K*WAbsAzW))/(1+dE*sigmaT);
+
+    XNew,STmp = qr!([K X]);
+    XNew = Matrix(XNew)
+    XNew = XNew[:,1:2*r];
+
+    # impose boundary condition
+    XNew[obj.boundaryIdx,:] .= 0.0;
+
+    MUp = XNew' * X;
+    ################## L-step ##################
+    L = W*S';
+
+    XL2xX = X'*obj.L2x*X
+    XL2yX = X'*obj.L2y*X
+    XL1xX = X'*obj.L1x*X
+    XL1yX = X'*obj.L1y*X
+
+    L .= (L .- dE*(obj.pn.Ax*L*XL2xX' + obj.pn.Az*L*XL2yX' + obj.AbsAx*L*XL1xX' + obj.AbsAz*L*XL1yX'))/(1+dE*sigmaT);
+            
+    WNew,STmp = qr([L W]);
+    WNew = Matrix(WNew)
+    WNew = WNew[:,1:2*r];
+
+    NUp = WNew' * W;
+    ################## S-step ##################
+    XL2xX = XNew'*obj.L2x*X
+    XL2yX = XNew'*obj.L2y*X
+    XL1xX = XNew'*obj.L1x*X
+    XL1yX = XNew'*obj.L1y*X
+
+    WAzW = W'*obj.pn.Az'*WNew
+    WAbsAzW = W'*obj.AbsAz'*WNew
+    WAbsAxW = W'*obj.AbsAx'*WNew
+    WAxW = W'*obj.pn.Ax'*WNew
+
+    S = (MUp*S*(NUp') .- dE.*(XL2xX*S*WAxW + XL2yX*S*WAzW + XL1xX*S*WAbsAxW + XL1yX*S*WAbsAzW))/(1+dE*sigmaT);
+
+    W = WNew;
+    X = XNew;
+
+    ################## truncate ##################
+
+    # Compute singular values of S1 and decide how to truncate:
+    U,D,V = svd(S);
+    U = Matrix(U); V = Matrix(V)
+    rmax = -1;
+    S .= zeros(size(S));
+
+    tmp = 0.0;
+    tol = obj.settings.epsAdapt*norm(D)^obj.settings.adaptIndex;
+    
+    rmax = Int(floor(size(D,1)/2));
+    
+    for j=1:2*rmax
+        tmp = sqrt(sum(D[j:2*rmax]).^2);
+        if(tmp<tol)
+            rmax = j;
+            break;
+        end
+    end
+    
+    rmax = min(rmax,rMaxTotal);
+    rmax = max(rmax,rmin);
+
+    for l = 1:rmax
+        S[l,l] = D[l];
+    end
+
+    # if 2*r was actually not enough move to highest possible rank
+    if rmax == -1
+        rmax = rMaxTotal;
+    end
+
+    # update solution with new rank
+    XNew = XNew*U;
+    WNew = WNew*V;
+
+    # update solution with new rank
+    S = S[1:rmax,1:rmax];
+    X = XNew[:,1:rmax];
+    W = WNew[:,1:rmax];
+
+    # impose boundary condition
+    X[obj.boundaryIdx,:] .= 0.0;
+    
+    return X,S,W;
+end
+
 function SolveMCollisionSourceDLR(obj::SolverMLCSD)
     # Get rank
     r=15;
@@ -988,8 +1197,11 @@ function SolveMCollisionSourceDLR(obj::SolverMLCSD)
         end
 
         D = Diagonal(sigmaS[1] .- Dvec);
-
-        ranks[1] = UnconventionalIntegratorAdaptive!(obj,Dvec,D,obj.X[1,:,1:ranks[1]],obj.S[1,1:ranks[1],1:ranks[1]],obj.W[1,:,1:ranks[1]],psiNew,1,n)
+        if L > 1
+            ranks[1] = UnconventionalIntegratorAdaptive!(obj,Dvec,D,obj.X[1,:,1:ranks[1]],obj.S[1,1:ranks[1],1:ranks[1]],obj.W[1,:,1:ranks[1]],psiNew,1,n)
+        else
+            ranks[1] = UnconventionalIntegratorCollidedAdaptive!(obj,Dvec,D,obj.X[1,:,1:ranks[1]],obj.S[1,1:ranks[1],1:ranks[1]],obj.W[1,:,1:ranks[1]],psiNew,1,n)
+        end
         obj.X[1,obj.boundaryIdx,:] .= 0.0;
         rankInTime[2,n] = ranks[1];
 
@@ -999,9 +1211,11 @@ function SolveMCollisionSourceDLR(obj::SolverMLCSD)
             rankInTime[l+1,n] = ranks[l];
         end
 
-        ranks[L] = UnconventionalIntegratorCollidedAdaptive!(obj,Dvec,D,obj.X[L,:,1:ranks[L]],obj.S[L,1:ranks[L],1:ranks[L]],obj.W[L,:,1:ranks[L]],obj.X[L-1,:,1:ranks[L-1]],obj.S[L-1,1:ranks[L-1],1:ranks[L-1]],obj.W[L-1,:,1:ranks[L-1]],L,n)
-        obj.X[L,obj.boundaryIdx,:] .= 0.0;
-        rankInTime[L+1,n] = ranks[L];
+        if L > 1
+            ranks[L] = UnconventionalIntegratorCollidedAdaptive!(obj,Dvec,D,obj.X[L,:,1:ranks[L]],obj.S[L,1:ranks[L],1:ranks[L]],obj.W[L,:,1:ranks[L]],obj.X[L-1,:,1:ranks[L-1]],obj.S[L-1,1:ranks[L-1],1:ranks[L-1]],obj.W[L-1,:,1:ranks[L-1]],L,n)
+            obj.X[L,obj.boundaryIdx,:] .= 0.0;
+            rankInTime[L+1,n] = ranks[L];
+        end
 
         for i = 1:nx
             for j = 1:ny

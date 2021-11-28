@@ -93,9 +93,9 @@ mutable struct Settings
             sigmaA = 0.0;  
             cfl = 0.99/sqrt(2);    
             eMax = 1.0
-            #adaptIndex = 0;
-            #epsAdapt = 0.3;#0.5;
-            epsAdapt = 1e-2;
+            adaptIndex = 0;
+            epsAdapt = 0.3;#0.5;
+            #epsAdapt = 1e-1;
         elseif problem =="2DHighD"
             a = 0.0
             b = 1.0;
