@@ -575,6 +575,7 @@ function UnconventionalIntegratorAdaptive!(obj::SolverMLCSD,Dvec::Array{Float64,
     ################## K-step ##################
     X[obj.boundaryIdx,:] .= 0.0;
     K = X*S;
+    WPrevDW = WPrev'*Diagonal(Dvec)*W;
     K = (K + dE*XPrev*SPrev*WPrevDW)/(1+dE*sigT)
     K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
