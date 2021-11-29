@@ -142,9 +142,9 @@ mutable struct SolverMLCSD
             for j = 2:ny-1
                 counter = counter + 3;
                 # x part
-                index = vectorIndex(nx,i,j);
-                indexPlus = vectorIndex(nx,i+1,j);
-                indexMinus = vectorIndex(nx,i-1,j);
+                index = vectorIndex(ny,i,j);
+                indexPlus = vectorIndex(ny,i+1,j);
+                indexMinus = vectorIndex(ny,i-1,j);
 
                 II[counter+1] = index;
                 J[counter+1] = index;
@@ -170,9 +170,9 @@ mutable struct SolverMLCSD
             for j = 2:ny-1
                 counter = counter + 3;
                 # y part
-                index = vectorIndex(nx,i,j);
-                indexPlus = vectorIndex(nx,i,j+1);
-                indexMinus = vectorIndex(nx,i,j-1);
+                index = vectorIndex(ny,i,j);
+                indexPlus = vectorIndex(ny,i,j+1);
+                indexMinus = vectorIndex(ny,i,j-1);
 
                 II[counter+1] = index;
                 J[counter+1] = index;
@@ -199,9 +199,9 @@ mutable struct SolverMLCSD
             for j = 2:ny-1
                 counter = counter + 2;
                 # x part
-                index = vectorIndex(nx,i,j);
-                indexPlus = vectorIndex(nx,i+1,j);
-                indexMinus = vectorIndex(nx,i-1,j);
+                index = vectorIndex(ny,i,j);
+                indexPlus = vectorIndex(ny,i+1,j);
+                indexMinus = vectorIndex(ny,i-1,j);
 
                 if i > 1
                     II[counter] = index;
@@ -224,9 +224,9 @@ mutable struct SolverMLCSD
             for j = 2:ny-1
                 counter = counter + 2;
                 # y part
-                index = vectorIndex(nx,i,j);
-                indexPlus = vectorIndex(nx,i,j+1);
-                indexMinus = vectorIndex(nx,i,j-1);
+                index = vectorIndex(ny,i,j);
+                indexPlus = vectorIndex(ny,i,j+1);
+                indexMinus = vectorIndex(ny,i,j-1);
 
                 if j > 1
                     II[counter] = index;
@@ -248,22 +248,22 @@ mutable struct SolverMLCSD
         for i = 1:nx
             counter +=1;
             j = 1;
-            idx = (i-1)*nx + j;
+            idx = (i-1)*ny + j;
             boundaryIdx[counter] = idx
             counter +=1;
             j = ny;
-            idx = (i-1)*nx + j;
+            idx = (i-1)*ny + j;
             boundaryIdx[counter] = idx
         end
 
         for j = 1:ny
             counter +=1;
             i = 1;
-            idx = (i-1)*nx + j;
+            idx = (i-1)*ny + j;
             boundaryIdx[counter] = idx
             counter +=1;
             i = nx;
-            idx = (i-1)*nx + j;
+            idx = (i-1)*ny + j;
             boundaryIdx[counter] = idx
         end
 
@@ -272,11 +272,11 @@ mutable struct SolverMLCSD
         for i = 1:nx
             counter += 1;
             j = 1;
-            idx = (i-1)*nx + j;
+            idx = (i-1)*ny + j;
             boundaryBeam[counter] = idx
             counter += 1;
             j = 2;
-            idx = (i-1)*nx + j;
+            idx = (i-1)*ny + j;
             boundaryBeam[counter] = idx
         end
 
@@ -285,7 +285,7 @@ mutable struct SolverMLCSD
         for i = 1:nx
             for j = 1:ny
                 # y part
-                index = vectorIndex(nx,i,j);
+                index = vectorIndex(ny,i,j);
                 xGrid[index,1] = settings.xMid[i];
                 xGrid[index,2] = settings.yMid[j];
             end
@@ -369,7 +369,7 @@ end
 
 function PsiBeam(obj::SolverMLCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y::Float64,n::Int)
     E0 = obj.settings.eMax;
-    if obj.settings.problem == "lung"
+    if obj.settings.problem == "lung" || obj.settings.problem == "lungOrig"
         sigmaO1Inv = 0.0;
         sigmaO3Inv = 75.0;
         sigmaXInv = 20.0;
@@ -401,7 +401,7 @@ function solveFluxUpwind!(obj::SolverMLCSD, phi::Array{Float64,3}, flux::Array{F
     ny = collect(2:(obj.settings.NCellsY-1));
 
     # PosPos
-    for j=nx,i=ny, q = idxPosPos
+    for j=ny,i=nx, q = idxPosPos
         s2 = phi[i,j-1,q]
         s3 = phi[i,j,q]
         northflux = s3
@@ -416,7 +416,7 @@ function solveFluxUpwind!(obj::SolverMLCSD, phi::Array{Float64,3}, flux::Array{F
         obj.qReduced[q,2]./obj.settings.dy .* (northflux-southflux)
     end
     #PosNeg
-    for j=nx,i=ny,q = idxPosNeg
+    for j=ny,i=nx,q = idxPosNeg
         s2 = phi[i,j,q]
         s3 = phi[i,j+1,q]
         northflux = s3
@@ -432,7 +432,7 @@ function solveFluxUpwind!(obj::SolverMLCSD, phi::Array{Float64,3}, flux::Array{F
     end
 
     # NegPos
-    for j=nx,i=ny,q = idxNegPos
+    for j=ny,i=nx,q = idxNegPos
         s2 = phi[i,j-1,q]
         s3 = phi[i,j,q]
         northflux = s3
@@ -448,7 +448,7 @@ function solveFluxUpwind!(obj::SolverMLCSD, phi::Array{Float64,3}, flux::Array{F
     end
 
     # NegNeg
-    for j=nx,i=ny,q = idxNegNeg
+    for j=ny,i=nx,q = idxNegNeg
         s2 = phi[i,j,q]
         s3 = phi[i,j+1,q]
         northflux = s3
@@ -1118,7 +1118,7 @@ function SolveMCollisionSourceDLR(obj::SolverMLCSD)
     if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD"# determine relevant directions in IC
         idxFullBeam = findall(psi .> floorPsiAll)
         idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
-    elseif obj.settings.problem == "lung" || obj.settings.problem == "liver" # determine relevant directions in beam
+    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" # determine relevant directions in beam
         psiBeam = zeros(nq)
         for k = 1:nq
             psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)
@@ -1148,7 +1148,7 @@ function SolveMCollisionSourceDLR(obj::SolverMLCSD)
     dE = eTrafo[2]-eTrafo[1];
     obj.settings.dE = dE
 
-    println("CFL = ",dE/obj.settings.dx*maximum(Diagonal(1.0 ./obj.density)))
+    println("CFL = ",dE/min(obj.settings.dx,obj.settings.dy)*maximum(Diagonal(1.0 ./obj.density)))
 
     flux = zeros(size(psi))
 
@@ -1219,7 +1219,7 @@ function SolveMCollisionSourceDLR(obj::SolverMLCSD)
 
         for i = 1:nx
             for j = 1:ny
-                idx = (i-1)*nx + j
+                idx = (i-1)*ny + j
                 uOUnc[idx] = psiNew[i,j,:]'*obj.MReduced[1,:];
             end
         end
@@ -1252,15 +1252,15 @@ function SolveMCollisionSourceDLR(obj::SolverMLCSD)
 
 end
 
-function vectorIndex(nx,i,j)
-    return (i-1)*nx + j;
+function vectorIndex(ny,i,j)
+    return (i-1)*ny + j;
 end
 
 function Vec2Mat(nx,ny,v::Array{Float64,1})
     m = zeros(nx,ny);
     for i = 1:nx
         for j = 1:ny
-            m[i,j] = v[(i-1)*nx + j]
+            m[i,j] = v[(i-1)*ny + j]
         end
     end
     return m;
@@ -1271,7 +1271,7 @@ function Vec2Mat(nx,ny,v::Array{Float64,2})
     m = zeros(nx,ny,n);
     for i = 1:nx
         for j = 1:ny
-            m[i,j,:] = v[(i-1)*nx + j,:]
+            m[i,j,:] = v[(i-1)*ny + j,:]
         end
     end
     return m;
@@ -1284,7 +1284,7 @@ function Mat2Vec(mat)
     v = zeros(nx*ny,m);
     for i = 1:nx
         for j = 1:ny
-            v[(i-1)*nx + j,:] = mat[i,j,:]
+            v[(i-1)*ny + j,:] = mat[i,j,:]
         end
     end
     return v;
