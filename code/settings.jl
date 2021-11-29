@@ -113,10 +113,10 @@ mutable struct Settings
             pathlib = pyimport("pathlib")
             path = pathlib.Path(pwd())
             println(path)
-            img = Float64.(Gray.(load("Lung.png")))
+            img = Float64.(Gray.(load("LungOrig.png")))
             nx = size(img,1)
             ny = size(img,2)
-            densityMin = 0.05
+            densityMin = 0.2
             for i = 1:NCellsX
                 for j = 1:NCellsY
                     density[i,j] = max(1.85*img[Int(floor(i/NCellsX*nx)),Int(floor(j/NCellsY*ny))],densityMin) # 1.85 bone, 1.04 muscle, 0.3 lung
@@ -135,9 +135,10 @@ mutable struct Settings
             pathlib = pyimport("pathlib")
             path = pathlib.Path(pwd())
             println(path)
-            img = Float64.(Gray.(load("LungOrig.png")))
+            img = Float64.(Gray.(load("Lung.png")))
             nx = size(img,1)
             ny = size(img,2)
+            println(size(img))
             densityMin = 0.05
             for i = 1:NCellsX
                 for j = 1:NCellsY
