@@ -183,7 +183,6 @@ counter = 1;
 YY = zeros(Norder,nq)
 @polyvar xx yy zz
 count = 0;
-println(counter)
 for l=0:s.nPN
     for m=-l:l
         

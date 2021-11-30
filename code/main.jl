@@ -10,10 +10,11 @@ using WriteVTK
 
 close("all")
 
-nx = 101;
-ny = 121;
-problem = "lungOrig"
-s = Settings(nx,ny,200,problem);
+nx = 21;
+ny = 21;
+nz = 10;
+problem = "LineSource"
+s = Settings(nx,ny,nz,200,problem);
 rhoMin = minimum(s.density);
 
 if s.problem == "AirCavity"
@@ -38,15 +39,16 @@ end
 
 ############################
 
-solver1 = SolverCSD(s);
-X_dlr,S_dlr,W_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR(solver1);
-dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
-
 L1 = 1;
-s = Settings(nx,ny,200,problem);
+s = Settings(nx,ny,nz,200,problem);
 solver2 = SolverMLCSD(s,L1);
 X,S,W, dose, rankInTime, psi = SolveMCollisionSourceDLR(solver2);
 dose = Vec2Mat(s.NCellsX,s.NCellsY,dose);
+
+s = Settings(nx,ny,nz,200,problem);
+solver1 = SolverCSD(s);
+X_dlr,S_dlr,W_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR(solver1);
+dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
 
 L = 2#20
 s3 = Settings(nx,ny,200,problem);

@@ -26,6 +26,7 @@ mutable struct SolverMLCSD
     gamma::Array{Float64,1};
     # Roe matrix
     AbsAx::Array{Float64,2};
+    AbsAy::Array{Float64,2};
     AbsAz::Array{Float64,2};
     # normalized Legendre Polynomials
     P::Array{Float64,2};
@@ -40,7 +41,7 @@ mutable struct SolverMLCSD
     pn::PNSystem;
 
     # material density
-    density::Array{Float64,2};
+    density::Array{Float64,3};
     densityVec::Array{Float64,1};
 
     # dose vector
@@ -48,10 +49,11 @@ mutable struct SolverMLCSD
 
     L1x::SparseMatrixCSC{Float64, Int64};
     L1y::SparseMatrixCSC{Float64, Int64};
+    L1z::SparseMatrixCSC{Float64, Int64};
     L2x::SparseMatrixCSC{Float64, Int64};
     L2y::SparseMatrixCSC{Float64, Int64};
-    boundaryIdx::Array{Int,1}
-    boundaryBeam::Array{Int,1}
+    L2z::SparseMatrixCSC{Float64, Int64};
+    boundaryIdx::Array{Int,1} # boundary indices
 
     Q::Quadrature
     O::Array{Float64,2};
@@ -78,17 +80,6 @@ mutable struct SolverMLCSD
             n = i-1;
             gamma[i] = 2/(2*n+1);
         end
-        A = zeros(settings.nPN,settings.nPN);
-            # setup flux matrix (alternative analytic computation)
-        for i = 1:(settings.nPN-1)
-            n = i-1;
-            A[i,i+1] = (n+1)/(2*n+1)*sqrt(gamma[i+1])/sqrt(gamma[i]);
-        end
-
-        for i = 2:settings.nPN
-            n = i-1;
-            A[i,i-1] = n/(2*n+1)*sqrt(gamma[i-1])/sqrt(gamma[i]);
-        end
 
         # construct CSD fields
         csd = CSD(settings);
@@ -103,6 +94,10 @@ mutable struct SolverMLCSD
         S = eigvals(pn.Ax)
         V = eigvecs(pn.Ax)
         AbsAx = V*abs.(diagm(S))*inv(V)
+
+        S = eigvals(pn.Ay)
+        V = eigvecs(pn.Ay)
+        AbsAy = V*abs.(diagm(S))*inv(V)
 
         S = eigvals(pn.Az)
         V = eigvecs(pn.Az)
@@ -128,156 +123,223 @@ mutable struct SolverMLCSD
         # setupt stencil matrix
         nx = settings.NCellsX;
         ny = settings.NCellsY;
+        nz = settings.NCellsZ;
         N = pn.nTotalEntries;
-        L1x = spzeros(nx*ny,nx*ny);
-        L1y = spzeros(nx*ny,nx*ny);
-        L2x = spzeros(nx*ny,nx*ny);
-        L2y = spzeros(nx*ny,nx*ny);
+        L1x = spzeros(nx*ny*nz,nx*ny*nz);
+        L1y = spzeros(nx*ny*nz,nx*ny*nz);
+        L1z = spzeros(nx*ny*nz,nx*ny*nz);
+        L2x = spzeros(nx*ny*nz,nx*ny*nz);
+        L2y = spzeros(nx*ny*nz,nx*ny*nz);
+        L2z = spzeros(nx*ny*nz,nx*ny*nz);
 
         # setup index arrays and values for allocation of stencil matrices
-        II = zeros(3*(nx-2)*(ny-2)); J = zeros(3*(nx-2)*(ny-2)); vals = zeros(3*(nx-2)*(ny-2));
+        II = zeros(3*(nx-2)*(ny-2)*(nz-2)); J = zeros(3*(nx-2)*(ny-2)*(nz-2)); vals = zeros(3*(nx-2)*(ny-2)*(nz-2));
         counter = -2;
 
         for i = 2:nx-1
             for j = 2:ny-1
-                counter = counter + 3;
-                # x part
-                index = vectorIndex(ny,i,j);
-                indexPlus = vectorIndex(ny,i+1,j);
-                indexMinus = vectorIndex(ny,i-1,j);
+                for k = 2:nz-1
+                    counter = counter + 3;
+                    # x part
+                    index = vectorIndex(nx,ny,i,j,k);
+                    indexPlus = vectorIndex(nx,ny,i+1,j,k);
+                    indexMinus = vectorIndex(nx,ny,i-1,j,k);
 
-                II[counter+1] = index;
-                J[counter+1] = index;
-                vals[counter+1] = 2.0/2/settings.dx/density[i,j]; 
-                if i > 1
-                    II[counter] = index;
-                    J[counter] = indexMinus;
-                    vals[counter] = -1/2/settings.dx/density[i-1,j];
-                end
-                if i < nx
-                    II[counter+2] = index;
-                    J[counter+2] = indexPlus;
-                    vals[counter+2] = -1/2/settings.dx/density[i+1,j]; 
+                    II[counter+1] = index;
+                    J[counter+1] = index;
+                    vals[counter+1] = 2.0/2/settings.dx/density[i,j,k]; 
+                    if i > 1
+                        II[counter] = index;
+                        J[counter] = indexMinus;
+                        vals[counter] = -1/2/settings.dx/density[i-1,j,k];
+                    end
+                    if i < nx
+                        II[counter+2] = index;
+                        J[counter+2] = indexPlus;
+                        vals[counter+2] = -1/2/settings.dx/density[i+1,j,k]; 
+                    end
                 end
             end
         end
-        L1x = sparse(II,J,vals,nx*ny,nx*ny);
+        L1x = sparse(II,J,vals,nx*ny*nz,nx*ny*nz);
 
-        II .= zeros(3*(nx-2)*(ny-2)); J .= zeros(3*(nx-2)*(ny-2)); vals .= zeros(3*(nx-2)*(ny-2));
+        II = zeros(3*(nx-2)*(ny-2)*(nz-2)); J = zeros(3*(nx-2)*(ny-2)*(nz-2)); vals = zeros(3*(nx-2)*(ny-2)*(nz-2));
         counter = -2;
 
         for i = 2:nx-1
             for j = 2:ny-1
-                counter = counter + 3;
-                # y part
-                index = vectorIndex(ny,i,j);
-                indexPlus = vectorIndex(ny,i,j+1);
-                indexMinus = vectorIndex(ny,i,j-1);
+                for k = 2:nz-1
+                    counter = counter + 3;
+                    # y part
+                    index = vectorIndex(nx,ny,i,j,k);
+                    indexPlus = vectorIndex(nx,ny,i,j+1,k);
+                    indexMinus = vectorIndex(nx,ny,i,j-1,k);
 
-                II[counter+1] = index;
-                J[counter+1] = index;
-                vals[counter+1] = 2.0/2/settings.dy/density[i,j]; 
+                    II[counter+1] = index;
+                    J[counter+1] = index;
+                    vals[counter+1] = 2.0/2/settings.dy/density[i,j,k]; 
 
-                if j > 1
-                    II[counter] = index;
-                    J[counter] = indexMinus;
-                    vals[counter] = -1/2/settings.dy/density[i,j-1];
-                end
-                if j < ny
-                    II[counter+2] = index;
-                    J[counter+2] = indexPlus;
-                    vals[counter+2] = -1/2/settings.dy/density[i,j+1]; 
+                    if j > 1
+                        II[counter] = index;
+                        J[counter] = indexMinus;
+                        vals[counter] = -1/2/settings.dy/density[i,j-1,k];
+                    end
+                    if j < ny
+                        II[counter+2] = index;
+                        J[counter+2] = indexPlus;
+                        vals[counter+2] = -1/2/settings.dy/density[i,j+1,k]; 
+                    end
                 end
             end
         end
-        L1y = sparse(II,J,vals,nx*ny,nx*ny);
+        L1y = sparse(II,J,vals,nx*ny*nz,nx*ny*nz);
 
-        II = zeros(2*(nx-2)*(ny-2)); J = zeros(2*(nx-2)*(ny-2)); vals = zeros(2*(nx-2)*(ny-2));
+        II = zeros(3*(nx-2)*(ny-2)*(nz-2)); J = zeros(3*(nx-2)*(ny-2)*(nz-2)); vals = zeros(3*(nx-2)*(ny-2)*(nz-2));
+        counter = -2;
+
+        for i = 2:nx-1
+            for j = 2:ny-1
+                for k = 2:nz-1
+                    counter = counter + 3;
+                    # y part
+                    index = vectorIndex(nx,ny,i,j,k);
+                    indexPlus = vectorIndex(nx,ny,i,j,k+1);
+                    indexMinus = vectorIndex(nx,ny,i,j,k-1);
+
+                    II[counter+1] = index;
+                    J[counter+1] = index;
+                    vals[counter+1] = 2.0/2/settings.dz/density[i,j,k]; 
+
+                    if k > 1
+                        II[counter] = index;
+                        J[counter] = indexMinus;
+                        vals[counter] = -1/2/settings.dz/density[i,j,k-1];
+                    end
+                    if k < nz
+                        II[counter+2] = index;
+                        J[counter+2] = indexPlus;
+                        vals[counter+2] = -1/2/settings.dz/density[i,j,k+1]; 
+                    end
+                end
+            end
+        end
+        L1z = sparse(II,J,vals,nx*ny*nz,nx*ny*nz);
+
+        II = zeros(2*(nx-2)*(ny-2)*(nz-2)); J = zeros(2*(nx-2)*(ny-2)*(nz-2)); vals = zeros(2*(nx-2)*(ny-2)*(nz-2));
         counter = -1;
 
         for i = 2:nx-1
             for j = 2:ny-1
-                counter = counter + 2;
-                # x part
-                index = vectorIndex(ny,i,j);
-                indexPlus = vectorIndex(ny,i+1,j);
-                indexMinus = vectorIndex(ny,i-1,j);
+                for k = 2:nz-1
+                    counter = counter + 2;
+                    # x part
+                    index = vectorIndex(nx,ny,i,j,k);
+                    indexPlus = vectorIndex(nx,ny,i+1,j,k);
+                    indexMinus = vectorIndex(nx,ny,i-1,j,k);
 
-                if i > 1
-                    II[counter] = index;
-                    J[counter] = indexMinus;
-                    vals[counter] = -1/2/settings.dx/density[i-1,j];
-                end
-                if i < nx
-                    II[counter+1] = index;
-                    J[counter+1] = indexPlus;
-                    vals[counter+1] = 1/2/settings.dx/density[i+1,j];
+                    if i > 1
+                        II[counter] = index;
+                        J[counter] = indexMinus;
+                        vals[counter] = -1/2/settings.dx/density[i-1,j,k];
+                    end
+                    if i < nx
+                        II[counter+1] = index;
+                        J[counter+1] = indexPlus;
+                        vals[counter+1] = 1/2/settings.dx/density[i+1,j,k];
+                    end
                 end
             end
         end
-        L2x = sparse(II,J,vals,nx*ny,nx*ny);
+        L2x = sparse(II,J,vals,nx*ny*nz,nx*ny*nz);
 
-        II .= zeros(2*(nx-2)*(ny-2)); J .= zeros(2*(nx-2)*(ny-2)); vals .= zeros(2*(nx-2)*(ny-2));
+        II = zeros(2*(nx-2)*(ny-2)*(nz-2)); J = zeros(2*(nx-2)*(ny-2)*(nz-2)); vals = zeros(2*(nx-2)*(ny-2)*(nz-2));
         counter = -1;
 
         for i = 2:nx-1
             for j = 2:ny-1
-                counter = counter + 2;
-                # y part
-                index = vectorIndex(ny,i,j);
-                indexPlus = vectorIndex(ny,i,j+1);
-                indexMinus = vectorIndex(ny,i,j-1);
+                for k = 2:nz-1
+                    counter = counter + 2;
+                    # y part
+                    index = vectorIndex(nx,ny,i,j,k);
+                    indexPlus = vectorIndex(nx,ny,i,j+1,k);
+                    indexMinus = vectorIndex(nx,ny,i,j-1,k);
 
-                if j > 1
-                    II[counter] = index;
-                    J[counter] = indexMinus;
-                    vals[counter] = -1/2/settings.dy/density[i,j-1];
-                end
-                if j < ny
-                    II[counter+1] = index;
-                    J[counter+1] = indexPlus;
-                    vals[counter+1] = 1/2/settings.dy/density[i,j+1];
+                    if j > 1
+                        II[counter] = index;
+                        J[counter] = indexMinus;
+                        vals[counter] = -1/2/settings.dy/density[i,j-1,k];
+                    end
+                    if j < ny
+                        II[counter+1] = index;
+                        J[counter+1] = indexPlus;
+                        vals[counter+1] = 1/2/settings.dy/density[i,j+1,k];
+                    end
                 end
             end
         end
-        L2y = sparse(II,J,vals,nx*ny,nx*ny);
+        L2y = sparse(II,J,vals,nx*ny*nz,nx*ny*nz);
+
+        II = zeros(2*(nx-2)*(ny-2)*(nz-2)); J = zeros(2*(nx-2)*(ny-2)*(nz-2)); vals = zeros(2*(nx-2)*(ny-2)*(nz-2));
+        counter = -1;
+
+        for i = 2:nx-1
+            for j = 2:ny-1
+                for k = 2:nz-1
+                    counter = counter + 2;
+                    # y part
+                    index = vectorIndex(nx,ny,i,j,k);
+                    indexPlus = vectorIndex(nx,ny,i,j,k+1);
+                    indexMinus = vectorIndex(nx,ny,i,j,k-1);
+
+                    if k > 1
+                        II[counter] = index;
+                        J[counter] = indexMinus;
+                        vals[counter] = -1/2/settings.dz/density[i,j,k-1];
+                    end
+                    if k < nz
+                        II[counter+1] = index;
+                        J[counter+1] = indexPlus;
+                        vals[counter+1] = 1/2/settings.dz/density[i,j,k+1];
+                    end
+                end
+            end
+        end
+        L2z = sparse(II,J,vals,nx*ny*nz,nx*ny*nz);
 
         # collect boundary indices
-        boundaryIdx = zeros(Int,2*nx+2*ny)
+        boundaryIdx = zeros(Int,2*nx*ny+2*ny*nz + 2*nx*nz)
         counter = 0;
         for i = 1:nx
-            counter +=1;
-            j = 1;
-            idx = (i-1)*ny + j;
-            boundaryIdx[counter] = idx
-            counter +=1;
-            j = ny;
-            idx = (i-1)*ny + j;
-            boundaryIdx[counter] = idx
+            for k = 1:nz
+                counter +=1;
+                j = 1;
+                boundaryIdx[counter] = vectorIndex(nx,ny,i,j,k)
+                counter +=1;
+                j = ny;
+                boundaryIdx[counter] = vectorIndex(nx,ny,i,j,k)
+            end
+        end
+
+        for i = 1:nx
+            for j = 1:ny
+                counter +=1;
+                k = 1;
+                boundaryIdx[counter] = vectorIndex(nx,ny,i,j,k)
+                counter +=1;
+                k = nz;
+                boundaryIdx[counter] = vectorIndex(nx,ny,i,j,k)
+            end
         end
 
         for j = 1:ny
-            counter +=1;
-            i = 1;
-            idx = (i-1)*ny + j;
-            boundaryIdx[counter] = idx
-            counter +=1;
-            i = nx;
-            idx = (i-1)*ny + j;
-            boundaryIdx[counter] = idx
-        end
-
-        boundaryBeam = zeros(Int,2*nx) # boundary indices uncollided particles for beam
-        counter = 0;
-        for i = 1:nx
-            counter += 1;
-            j = 1;
-            idx = (i-1)*ny + j;
-            boundaryBeam[counter] = idx
-            counter += 1;
-            j = 2;
-            idx = (i-1)*ny + j;
-            boundaryBeam[counter] = idx
+            for k = 1:nz
+                counter +=1;
+                i = 1;
+                boundaryIdx[counter] = vectorIndex(nx,ny,i,j,k)
+                counter +=1;
+                i = nx;
+                boundaryIdx[counter] = vectorIndex(nx,ny,i,j,k)
+            end
         end
 
         # setup spatial grid
@@ -354,20 +416,25 @@ mutable struct SolverMLCSD
         W = zeros(L,N,rMax);
         S = zeros(L,rMax,rMax);
 
-        new(x,y,xGrid,settings,gamma,AbsAx,AbsAz,P,mu,w,csd,pn,density,vec(density'),dose,L1x,L1y,L2x,L2y,boundaryIdx,boundaryBeam,Q,O,M,rMax,L,X,S,W);
+        println(size(AbsAx))
+        println(size(AbsAy))
+        println(size(AbsAz))
+        densityVec = Ten2Vec(density);
+
+        new(x,y,xGrid,settings,gamma,AbsAx,AbsAy,AbsAz,P,mu,w,csd,pn,density,densityVec,dose,L1x,L1y,L1z,L2x,L2y,L2z,boundaryIdx,Q,O,M,rMax,L,X,S,W);
     end
 end
 
 function SetupIC(obj::SolverMLCSD)
     nq = obj.Q.nquadpoints;
-    psi = zeros(obj.settings.NCellsX,obj.settings.NCellsY,nq); 
+    psi = zeros(obj.settings.NCellsX,obj.settings.NCellsY,obj.settings.NCellsZ,nq); 
     for k = 1:nq
-        psi[:,:,k] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)
+        psi[:,:,:,k] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid,obj.settings.zMid)
     end
     return psi;
 end
 
-function PsiBeam(obj::SolverMLCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y::Float64,n::Int)
+function PsiBeam(obj::SolverMLCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y::Float64,z::Float64,n::Int)
     E0 = obj.settings.eMax;
     if obj.settings.problem == "lung" || obj.settings.problem == "lungOrig"
         sigmaO1Inv = 0.0;
@@ -387,84 +454,173 @@ function PsiBeam(obj::SolverMLCSD,Omega::Array{Float64,1},E::Float64,x::Float64,
     return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*exp(-sigmaEInv*(E0-E)^2)*exp(-sigmaXInv*(x-obj.settings.x0)^2)*exp(-sigmaYInv*(y-obj.settings.y0)^2)*obj.csd.S[n]*obj.settings.densityMin;
 end
 
-function solveFluxUpwind!(obj::SolverMLCSD, phi::Array{Float64,3}, flux::Array{Float64,3})
+function solveFluxUpwind!(obj::SolverMLCSD, phi::Array{Float64,4}, flux::Array{Float64,4})
     # computes the numerical flux over cell boundaries for each ordinate
     # for faster computation, we split the iteration over quadrature points
     # into four different blocks: North West, Nort East, Sout West, South East
     # this corresponds to the direction the ordinates point to
-    idxPosPos = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,2].>=0.0))
-    idxPosNeg = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,2].<0.0))
-    idxNegPos = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,2].>=0.0))
-    idxNegNeg = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,2].<0.0))
+    idxPosPosPos = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,2].>=0.0) .&(obj.qReduced[:,3].>=0.0))
+    idxPosNegPos = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,2].<0.0) .&(obj.qReduced[:,3].>=0.0))
+    idxNegPosPos = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,2].>=0.0) .&(obj.qReduced[:,3].>=0.0))
+    idxNegNegPos = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,2].<0.0) .&(obj.qReduced[:,3].>=0.0))
+
+    idxPosPosNeg = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,2].>=0.0) .&(obj.qReduced[:,3].<0.0))
+    idxPosNegNeg = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,2].<0.0) .&(obj.qReduced[:,3].<0.0))
+    idxNegPosNeg = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,2].>=0.0) .&(obj.qReduced[:,3].<0.0))
+    idxNegNegNeg = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,2].<0.0) .&(obj.qReduced[:,3].<0.0))
 
     nx = collect(2:(obj.settings.NCellsX-1));
     ny = collect(2:(obj.settings.NCellsY-1));
+    nz = collect(2:(obj.settings.NCellsZ-1));
 
     # PosPos
-    for j=ny,i=nx, q = idxPosPos
-        s2 = phi[i,j-1,q]
-        s3 = phi[i,j,q]
+    for j=ny,i=nx,k=nz, q = idxPosPosPos
+        s2 = phi[i,j-1,k,q]
+        s3 = phi[i,j,k,q]
         northflux = s3
         southflux = s2
 
-        s2 = phi[i-1,j,q]
-        s3 = phi[i,j,q]
-        eastflux = s3
-        westflux = s2
+        westflux = phi[i-1,j,k,q]
+        eastflux = phi[i,j,k,q]
 
-        flux[i,j,q] = obj.qReduced[q,1] ./obj.settings.dx .* (eastflux-westflux) +
-        obj.qReduced[q,2]./obj.settings.dy .* (northflux-southflux)
+        downflux = phi[i,j,k-1,q]
+        upflux = phi[i,j,k,q]
+
+        flux[i,j,k,q] = obj.qReduced[q,1] ./obj.settings.dx .* (eastflux-westflux) +
+        obj.qReduced[q,2]./obj.settings.dy .* (northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (downflux-upflux)
     end
     #PosNeg
-    for j=ny,i=nx,q = idxPosNeg
-        s2 = phi[i,j,q]
-        s3 = phi[i,j+1,q]
+    for j=ny,i=nx,k=nz,q = idxPosNegPos
+        s2 = phi[i,j,k,q]
+        s3 = phi[i,j+1,k,q]
         northflux = s3
         southflux = s2
 
-        s2 = phi[i-1,j,q]
-        s3 = phi[i,j,q]
+        s2 = phi[i-1,j,k,q]
+        s3 = phi[i,j,k,q]
         eastflux = s3
         westflux = s2
 
-        flux[i,j,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
-        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux)
+        downflux = phi[i,j,k-1,q]
+        upflux = phi[i,j,k,q]
+
+        flux[i,j,k,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
+        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (downflux-upflux)
     end
 
     # NegPos
-    for j=ny,i=nx,q = idxNegPos
-        s2 = phi[i,j-1,q]
-        s3 = phi[i,j,q]
+    for j=ny,i=nx,k=nz,q = idxNegPosPos
+        s2 = phi[i,j-1,k,q]
+        s3 = phi[i,j,k,q]
         northflux = s3
         southflux = s2
 
-        s2 = phi[i,j,q]
-        s3 = phi[i+1,j,q]
+        s2 = phi[i,j,k,q]
+        s3 = phi[i+1,j,k,q]
         eastflux = s3
         westflux = s2
 
-        flux[i,j,q] = obj.qReduced[q,1]./obj.settings.dx .*(eastflux-westflux) +
-        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux)
+        downflux = phi[i,j,k-1,q]
+        upflux = phi[i,j,k,q]
+
+        flux[i,j,k,q] = obj.qReduced[q,1]./obj.settings.dx .*(eastflux-westflux) +
+        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (downflux-upflux)
     end
 
     # NegNeg
-    for j=ny,i=nx,q = idxNegNeg
-        s2 = phi[i,j,q]
-        s3 = phi[i,j+1,q]
+    for j=ny,i=nx,k=nz,q = idxNegNegPos
+        s2 = phi[i,j,k,q]
+        s3 = phi[i,j+1,k,q]
         northflux = s3
         southflux = s2
 
-        s2 = phi[i,j,q]
-        s3 = phi[i+1,j,q]
+        s2 = phi[i,j,k,q]
+        s3 = phi[i+1,j,k,q]
         eastflux = s3
         westflux = s2
 
-        flux[i,j,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
-        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux)
+        downflux = phi[i,j,k-1,q]
+        upflux = phi[i,j,k,q]
+
+        flux[i,j,k,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
+        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (downflux-upflux)
+    end
+
+    # PosPos
+    for j=ny,i=nx,k=nz, q = idxPosNegNeg
+        s2 = phi[i,j-1,k,q]
+        s3 = phi[i,j,k,q]
+        northflux = s3
+        southflux = s2
+
+        westflux = phi[i-1,j,k,q]
+        eastflux = phi[i,j,k,q]
+
+        downflux = phi[i,j,k,q]
+        upflux = phi[i,j,k+1,q]
+
+        flux[i,j,k,q] = obj.qReduced[q,1] ./obj.settings.dx .* (eastflux-westflux) +
+        obj.qReduced[q,2]./obj.settings.dy .* (northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (downflux-upflux)
+    end
+    #PosNeg
+    for j=ny,i=nx,k=nz,q = idxPosNegNeg
+        s2 = phi[i,j,k,q]
+        s3 = phi[i,j+1,k,q]
+        northflux = s3
+        southflux = s2
+
+        s2 = phi[i-1,j,k,q]
+        s3 = phi[i,j,k,q]
+        eastflux = s3
+        westflux = s2
+
+        downflux = phi[i,j,k,q]
+        upflux = phi[i,j,k+1,q]
+
+        flux[i,j,k,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
+        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (downflux-upflux)
+    end
+
+    # NegPos
+    for j=ny,i=nx,k=nz,q = idxNegPosNeg
+        s2 = phi[i,j-1,k,q]
+        s3 = phi[i,j,k,q]
+        northflux = s3
+        southflux = s2
+
+        s2 = phi[i,j,k,q]
+        s3 = phi[i+1,j,k,q]
+        eastflux = s3
+        westflux = s2
+
+        downflux = phi[i,j,k,q]
+        upflux = phi[i,j,k+1,q]
+
+        flux[i,j,k,q] = obj.qReduced[q,1]./obj.settings.dx .*(eastflux-westflux) +
+        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (downflux-upflux)
+    end
+
+    # NegNeg
+    for j=ny,i=nx,k=nz,q = idxNegNegNeg
+        s2 = phi[i,j,k,q]
+        s3 = phi[i,j+1,k,q]
+        northflux = s3
+        southflux = s2
+
+        s2 = phi[i,j,k,q]
+        s3 = phi[i+1,j,k,q]
+        eastflux = s3
+        westflux = s2
+
+        downflux = phi[i,j,k,q]
+        upflux = phi[i,j,k+1,q]
+
+        flux[i,j,k,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
+        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (downflux-upflux)
     end
 end
 
-function UnconventionalIntegratorAdaptive!(obj::SolverMLCSD,Dvec::Array{Float64,1},D,X::Array{Float64,2},S::Array{Float64,2},W::Array{Float64,2},psiNew::Array{Float64,3},step::Int,eIndex::Int)
+function UnconventionalIntegratorAdaptive!(obj::SolverMLCSD,Dvec::Array{Float64,1},D,X::Array{Float64,2},S::Array{Float64,2},W::Array{Float64,2},psiNew::Array{Float64,4},step::Int,eIndex::Int)
     rmin = 2;
     rMaxTotal = Int(floor(obj.settings.r/2));
     SigmaT = D+Diagonal(Dvec)
@@ -479,7 +635,7 @@ function UnconventionalIntegratorAdaptive!(obj::SolverMLCSD,Dvec::Array{Float64,
     ################## K-step ##################
     X[obj.boundaryIdx,:] .= 0.0;
     K = X*S;
-    K .= (K .+dE*Mat2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec)*W)/(1+dE*sigT);
+    K .= (K .+dE*Ten2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec)*W)/(1+dE*sigT);
     K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
     XNew,STmp = qr!([K X]);
@@ -490,7 +646,7 @@ function UnconventionalIntegratorAdaptive!(obj::SolverMLCSD,Dvec::Array{Float64,
 
     ################## L-step ##################
     L = W*S';
-    L .= (L .+dE*(Mat2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec))'*X)/(1+dE*sigT);
+    L .= (L .+dE*(Ten2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec))'*X)/(1+dE*sigT);
 
     WNew,STmp = qr([L W]);
     WNew = Matrix(WNew)
@@ -503,7 +659,7 @@ function UnconventionalIntegratorAdaptive!(obj::SolverMLCSD,Dvec::Array{Float64,
 
     ################## S-step ##################
     S = MUp*S*(NUp')
-    S .= (S .+dE*X'*Mat2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec)*W)/(1+dE*sigT);
+    S .= (S .+dE*X'*Ten2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec)*W)/(1+dE*sigT);
 
     ################## truncate ##################
 
@@ -659,7 +815,7 @@ function UnconventionalIntegratorAdaptive!(obj::SolverMLCSD,Dvec::Array{Float64,
     return rmax;
 end
 
-function UnconventionalIntegratorCollidedAdaptive!(obj::SolverMLCSD,Dvec::Array{Float64,1},D,X::Array{Float64,2},S::Array{Float64,2},W::Array{Float64,2},psiNew::Array{Float64,3},step::Int,eIndex::Int)
+function UnconventionalIntegratorCollidedAdaptive!(obj::SolverMLCSD,Dvec::Array{Float64,1},D,X::Array{Float64,2},S::Array{Float64,2},W::Array{Float64,2},psiNew::Array{Float64,4},step::Int,eIndex::Int)
     nx = obj.settings.NCellsX;
     ny = obj.settings.NCellsY;
     nq = obj.Q.nquadpoints;
@@ -679,7 +835,7 @@ function UnconventionalIntegratorCollidedAdaptive!(obj::SolverMLCSD,Dvec::Array{
     ################## K-step ##################
     X[obj.boundaryIdx,:] .= 0.0;
     K = X*S;
-    K = K + dE*Mat2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec)*W
+    K = K + dE*Ten2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec)*W
     K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
     XNew,STmp = qr!([K X]);
@@ -690,7 +846,7 @@ function UnconventionalIntegratorCollidedAdaptive!(obj::SolverMLCSD,Dvec::Array{
 
     ################## L-step ##################
     L = W*S';
-    L .= L .+ dE*(Mat2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec))'*X
+    L .= L .+ dE*(Ten2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec))'*X
 
     WNew,STmp = qr([L W]);
     WNew = Matrix(WNew)
@@ -703,7 +859,7 @@ function UnconventionalIntegratorCollidedAdaptive!(obj::SolverMLCSD,Dvec::Array{
     ################## S-step ##################
     S = MUp*S*(NUp')
 
-    S = S + dE*X'*Mat2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec)*W
+    S = S + dE*X'*Ten2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec)*W
 
     ################## truncate ##################
 
@@ -1096,6 +1252,33 @@ function UpdateUIStreamingAdaptiveEfficient(obj::SolverMLCSD,X::Array{Float64,2}
     return X,S,W;
 end
 
+function SetBC(obj::SolverMLCSD,nq,psi::Array{Float64,4},n::Int)        # set boundary conditio
+    nx = obj.settings.NCellsX;
+    ny = obj.settings.NCellsY;
+    nz = obj.settings.NCellsZ;
+
+    # loop over boundary cells and set Dirichlet conditions
+    for q = 1:nq
+        for k = 1:nz
+            for j = 1:ny
+                psi[1,j,k,q] = PsiBeam(obj,obj.qReduced[q,:],obj.csd.eGrid[n],obj.settings.xMid[1],obj.settings.yMid[j],obj.settings.zMid[k],n-1);
+                psi[end,j,k,q] = PsiBeam(obj,obj.qReduced[q,:],obj.csd.eGrid[n],obj.settings.xMid[end],obj.settings.yMid[j],obj.settings.zMid[k],n-1);
+            end
+            for i = 1:nx
+                psi[i,1,k,q] = PsiBeam(obj,obj.qReduced[q,:],obj.csd.eGrid[n],obj.settings.xMid[i],obj.settings.yMid[1],obj.settings.zMid[k],n-1);
+                psi[i,end,k,q] = PsiBeam(obj,obj.qReduced[q,:],obj.csd.eGrid[n],obj.settings.xMid[i],obj.settings.yMid[end],obj.settings.zMid[k],n-1);
+            end
+        end
+        for i = 1:nx
+            for j = 1:ny
+                psi[i,j,1,q] = PsiBeam(obj,obj.qReduced[q,:],obj.csd.eGrid[n],obj.settings.xMid[i],obj.settings.yMid[j],obj.settings.zMid[1],n-1);
+                psi[i,j,end,q] = PsiBeam(obj,obj.qReduced[q,:],obj.csd.eGrid[n],obj.settings.xMid[i],obj.settings.yMid[j],obj.settings.zMid[end],n-1);
+            end
+        end
+    end
+    return psi;
+end
+    
 function SolveMCollisionSourceDLR(obj::SolverMLCSD)
     # Get rank
     r=15;
@@ -1108,6 +1291,7 @@ function SolveMCollisionSourceDLR(obj::SolverMLCSD)
 
     nx = obj.settings.NCellsX;
     ny = obj.settings.NCellsY;
+    nz = obj.settings.NCellsZ;
     nq = obj.Q.nquadpoints;
     N = obj.pn.nTotalEntries
 
@@ -1117,7 +1301,7 @@ function SolveMCollisionSourceDLR(obj::SolverMLCSD)
     floorPsi = 1e-17;
     if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD"# determine relevant directions in IC
         idxFullBeam = findall(psi .> floorPsiAll)
-        idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
+        idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],idxFullBeam[1][3],:] .> floorPsi)
     elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" # determine relevant directions in beam
         psiBeam = zeros(nq)
         for k = 1:nq
@@ -1125,7 +1309,7 @@ function SolveMCollisionSourceDLR(obj::SolverMLCSD)
         end
         idxBeam = findall( psiBeam .> floorPsi*maximum(psiBeam) );
     end
-    psi = psi[:,:,idxBeam]
+    psi = psi[:,:,:,idxBeam]
     obj.qReduced = obj.Q.pointsxyz[idxBeam,:]
     obj.MReduced = obj.M[:,idxBeam]
     obj.OReduced = obj.O[idxBeam,:]
@@ -1133,10 +1317,10 @@ function SolveMCollisionSourceDLR(obj::SolverMLCSD)
     nq = length(idxBeam);
 
     # Low-rank approx of init data:
-    X1,S1,W1 = svd(zeros(nx*ny,N));
+    X1,S1,W1 = svd(zeros(nx*ny*nz,N));
     
     # rank-r truncation:
-    X = zeros(L,nx*ny,r);
+    X = zeros(L,nx*ny*nz,r);
     W = zeros(L,N,r);
     for l = 1:L
         X[l,:,:] = X1[:,1:r];
@@ -1148,13 +1332,13 @@ function SolveMCollisionSourceDLR(obj::SolverMLCSD)
     dE = eTrafo[2]-eTrafo[1];
     obj.settings.dE = dE
 
-    println("CFL = ",dE/min(obj.settings.dx,obj.settings.dy)*maximum(Diagonal(1.0 ./obj.density)))
+    println("CFL = ",dE/min(obj.settings.dx,obj.settings.dy,obj.settings.dz)*maximum(1.0 ./obj.density))
 
     flux = zeros(size(psi))
 
     prog = Progress(nEnergies-1,1)
 
-    uOUnc = zeros(nx*ny);
+    uOUnc = zeros(nx*ny*nz);
     
     psiNew = deepcopy(psi);
 
@@ -1170,16 +1354,7 @@ function SolveMCollisionSourceDLR(obj::SolverMLCSD)
         sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
 
         # set boundary condition
-        for k = 1:nq
-            for j = 1:nx
-                psi[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
-                psi[j,end,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
-            end
-            for j = 1:ny
-                psi[1,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
-                psi[end,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
-            end
-        end
+        psi .= SetBC(obj,nq,psi,n)
 
         # stream uncollided particles
         solveFluxUpwind!(obj,psi,flux);
@@ -1256,11 +1431,27 @@ function vectorIndex(ny,i,j)
     return (i-1)*ny + j;
 end
 
+function vectorIndex(nx,ny,i,j,k)
+    return (k-1)*nx*ny + vectorIndex(ny,i,j);
+end
+
 function Vec2Mat(nx,ny,v::Array{Float64,1})
     m = zeros(nx,ny);
     for i = 1:nx
         for j = 1:ny
             m[i,j] = v[(i-1)*ny + j]
+        end
+    end
+    return m;
+end
+
+function Vec2Ten(nx,ny,nz,v::Array{Float64,1})
+    m = zeros(nx,ny,nz);
+    for i = 1:nx
+        for j = 1:ny
+            for k = 1:nz
+                m[i,j,k] = v[vectorIndex(nx,ny,i,j,k)]
+            end
         end
     end
     return m;
@@ -1277,6 +1468,19 @@ function Vec2Mat(nx,ny,v::Array{Float64,2})
     return m;
 end
 
+function Vec2Ten(nx,ny,nz,v::Array{Float64,2})
+    n = size(v,2);
+    m = zeros(nx,ny,nz,n);
+    for i = 1:nx
+        for j = 1:ny
+            for k = 1:nz
+                m[i,j,k,:] = v[vectorIndex(nx,ny,i,j,k),:]
+            end
+        end
+    end
+    return m;
+end
+
 function Mat2Vec(mat)
     nx = size(mat,1)
     ny = size(mat,2)
@@ -1285,6 +1489,37 @@ function Mat2Vec(mat)
     for i = 1:nx
         for j = 1:ny
             v[(i-1)*ny + j,:] = mat[i,j,:]
+        end
+    end
+    return v;
+end
+
+function Ten2Vec(mat::Array{Float64,4})
+    nx = size(mat,1)
+    ny = size(mat,2)
+    nz = size(mat,3)
+    m = size(mat,4)
+    v = zeros(nx*ny*nz,m);
+    for i = 1:nx
+        for j = 1:ny
+            for k = 1:nz
+                v[vectorIndex(nx,ny,i,j,k),:] = mat[i,j,k,:]
+            end
+        end
+    end
+    return v;
+end
+
+function Ten2Vec(mat::Array{Float64,3})
+    nx = size(mat,1)
+    ny = size(mat,2)
+    nz = size(mat,3)
+    v = zeros(nx*ny*nz);
+    for i = 1:nx
+        for j = 1:ny
+            for k = 1:nz
+                v[vectorIndex(nx,ny,i,j,k)] = mat[i,j,k]
+            end
         end
     end
     return v;

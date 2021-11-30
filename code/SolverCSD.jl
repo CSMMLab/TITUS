@@ -132,7 +132,7 @@ mutable struct SolverCSD
         L2y = spzeros(nx*ny,nx*ny);
 
         # setup index arrays and values for allocation of stencil matrices
-        II = zeros(3*(nx-2)*(ny-2)); J = zeros(3*(nx-2)*(ny-2)); vals = zeros(3*(nx-2)*(ny-2));
+        II = zeros(3*(nx-2)*(ny-2)*(nz-2)); J = zeros(3*(nx-2)*(ny-2)*(nz-2)); vals = zeros(3*(nx-2)*(ny-2)*(nz-2));
         counter = -2;
 
         for i = 2:nx-1
@@ -160,7 +160,7 @@ mutable struct SolverCSD
         end
         L1x = sparse(II,J,vals,nx*ny,nx*ny);
 
-        II .= zeros(3*(nx-2)*(ny-2)); J .= zeros(3*(nx-2)*(ny-2)); vals .= zeros(3*(nx-2)*(ny-2));
+        II = zeros(3*(nx-2)*(ny-2)*(nz-2)); J = zeros(3*(nx-2)*(ny-2)*(nz-2)); vals = zeros(3*(nx-2)*(ny-2)*(nz-2));
         counter = -2;
 
         for i = 2:nx-1
