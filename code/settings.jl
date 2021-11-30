@@ -130,6 +130,7 @@ mutable struct Settings
             y0 = 1.0*d;
             Omega1 = -1.0;
             Omega3 = -1.0;
+            epsAdapt = 1e-3;
         elseif problem =="lung"
             #img = Float64.(Gray.(load("phantom.png")))
             pathlib = pyimport("pathlib")

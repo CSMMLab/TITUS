@@ -44,7 +44,7 @@ dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
 
 L1 = 1;
 s = Settings(nx,ny,200,problem);
-solver2 = SolverMLCSD(s,2);
+solver2 = SolverMLCSD(s,L1);
 X,S,W, dose, rankInTime, psi = SolveMCollisionSourceDLR(solver2);
 dose = Vec2Mat(s.NCellsX,s.NCellsY,dose);
 
@@ -81,7 +81,7 @@ plt.title(L"dose, DLRA", fontsize=25)
 tight_layout()
 savefig("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
 
-fig = figure("Dose, DLRA-M",figsize=(10*(s.d/s.b),10),dpi=100)
+fig = figure("Dose, DLRA-M=2",figsize=(10*(s.d/s.b),10),dpi=100)
 ax = gca()
 pcolormesh(Y,X,dose_DLRM[2:end-1,2:end-1]',vmin=0.0,vmax=maximum(dose[2:end,2:end]))
 ax.tick_params("both",labelsize=20) 
@@ -92,7 +92,7 @@ plt.title(L"dose, DLRAM", fontsize=25)
 tight_layout()
 savefig("output/dose_csd_1stcollision_DLRAM_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
 
-fig = figure("Dose countours, full",figsize=(10*(s.d/s.b),10),dpi=100)
+fig = figure("Dose countours, DLRA-M=1",figsize=(10*(s.d/s.b),10),dpi=100)
 ax = gca()
 pcolormesh(Y,X,solver1.density[2:end-1,2:end-1]',cmap="gray")
 contour(Y,X,dose[2:end-1,2:end-1]', levels,cmap="plasma",vmin=0.0,vmax=maximum(dose[2:end,2:end]))
@@ -113,7 +113,7 @@ plt.ylabel("y", fontsize=20)
 tight_layout()
 savefig("output/doseiso_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
 
-fig = figure("Dose countours, DLRAM",figsize=(10*(s.d/s.b),10),dpi=100)
+fig = figure("Dose countours, DLRA-M=2",figsize=(10*(s.d/s.b),10),dpi=100)
 ax = gca()
 pcolormesh(Y,X,solver2.density[2:end-1,2:end-1]',cmap="gray")
 contour(Y,X,dose_DLRM[2:end-1,2:end-1]', levels,cmap="plasma",vmin=0.0,vmax=maximum(dose[2:end,2:end]))
