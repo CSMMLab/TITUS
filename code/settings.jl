@@ -1,6 +1,6 @@
 __precompile__
 
-using Images, FileIO
+using Images, FileIO, DICOM
 
 mutable struct Settings
     # grid settings
@@ -127,20 +127,15 @@ mutable struct Settings
             adaptIndex = 0;
             epsAdapt = 0.3;#0.5;
             density[Int(floor(NCellsX*0.56/(b-a))):end,:] .= 5.0;
-        elseif problem =="lungOrig"
+        elseif problem =="DICOM"
             #img = Float64.(Gray.(load("phantom.png")))
             pathlib = pyimport("pathlib")
             path = pathlib.Path(pwd())
             println(path)
-            img = Float64.(Gray.(load("LungOrig.png")))
-            nx = size(img,1)
-            ny = size(img,2)
+            dcm_data = dcm_parse("brain_010.dcm")
+            density = Float64.(dcm_data[tag"PixelData"])
+            density .= 1.85*density./maximum(density)
             densityMin = 0.2
-            for i = 1:NCellsX
-                for j = 1:NCellsY
-                    density[i,j] = max(1.85*img[Int(floor(i/NCellsX*nx)),Int(floor(j/NCellsY*ny))],densityMin) # 1.85 bone, 1.04 muscle, 0.3 lung
-                end
-            end
             b = 14.5; # right boundary
             d = 18.5; # upper boundary
             eMax = 21.0
@@ -155,6 +150,7 @@ mutable struct Settings
             pathlib = pyimport("pathlib")
             path = pathlib.Path(pwd())
             println(path)
+            
             img = Float64.(Gray.(load("Lung.png")))
             nx = size(img,1)
             ny = size(img,2)

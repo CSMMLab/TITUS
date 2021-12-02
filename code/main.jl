@@ -10,9 +10,9 @@ using WriteVTK
 
 close("all")
 
-nx = 71;
-ny = 71;
-nz = 71;
+nx = 51;
+ny = 51;
+nz = 51;
 problem = "LineSource"
 s = Settings(nx,ny,nz,200,problem);
 rhoMin = minimum(s.density);
