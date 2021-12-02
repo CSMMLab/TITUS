@@ -32,7 +32,7 @@ struct CSD
         if settings.problem == "LineSource"
             S_tab = ones(size(S_tab));
             sigma_tab = zeros(size(sigma_tab));
-            sigma_tab[:,1] .= 1.0;
+            sigma_tab[:,1] .= settings.sigmaS;
         end
 
         # compute transformed energy for tabulated energies

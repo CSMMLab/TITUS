@@ -10,9 +10,9 @@ using WriteVTK
 
 close("all")
 
-nx = 21;
-ny = 21;
-nz = 10;
+nx = 71;
+ny = 71;
+nz = 71;
 problem = "LineSource"
 s = Settings(nx,ny,nz,200,problem);
 rhoMin = minimum(s.density);
@@ -43,27 +43,19 @@ L1 = 1;
 s = Settings(nx,ny,nz,200,problem);
 solver2 = SolverMLCSD(s,L1);
 X,S,W, dose, rankInTime, psi = SolveMCollisionSourceDLR(solver2);
-dose = Vec2Mat(s.NCellsX,s.NCellsY,dose);
+doseTensor = Vec2Ten(s.NCellsX,s.NCellsY,s.NCellsZ,dose);
 
-s = Settings(nx,ny,nz,200,problem);
-solver1 = SolverCSD(s);
-X_dlr,S_dlr,W_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR(solver1);
-dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
-
-L = 2#20
-s3 = Settings(nx,ny,200,problem);
-solver3 = SolverMLCSD(s3,L);
-#solver3 = SolverCSD(s3);
-X_dlrM,S_dlrM,W_dlrM, dose_DLRM, rankInTimeML, psiML = SolveMCollisionSourceDLR(solver3);
-dose_DLRM = Vec2Mat(s3.NCellsX,s3.NCellsY,dose_DLRM);
+dose = doseTensor[:,:,int(floor(s.NCellsZ/2))]
+zMid = int(floor(s.NCellsZ/2));
+density = solver2.density[2:end-1,2:end-1,zMid]'
 
 X = (s.xMid[2:end-1]'.*ones(size(s.yMid[2:end-1])))
 Y = (s.yMid[2:end-1]'.*ones(size(s.xMid[2:end-1])))'
-levels = 40;
+levels = 100;
 
 fig = figure("Dose, adaptive DLRA",figsize=(10*(s.d/s.b),10),dpi=100)
 ax = gca()
-pcolormesh(Y,X,dose[2:end-1,2:end-1]',vmin=0.0,vmax=maximum(dose[2:end,2:end]))
+pcolormesh(Y,X,dose[2:end-1,2:end-1]',vmin=0.0,vmax=maximum(dose[2:end-1,2:end-1]))
 ax.tick_params("both",labelsize=20) 
 #colorbar()
 plt.xlabel("x", fontsize=20)
@@ -72,32 +64,10 @@ plt.title(L"dose, $P_N$", fontsize=25)
 tight_layout()
 savefig("output/dose_csd_1stcollision_adapt_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)$(s.epsAdapt).png")
 
-fig = figure("Dose, DLRA",figsize=(10*(s.d/s.b),10),dpi=100)
-ax = gca()
-pcolormesh(Y,X,dose_DLR[2:end-1,2:end-1]',vmin=0.0,vmax=maximum(dose[2:end,2:end]))
-ax.tick_params("both",labelsize=20) 
-#colorbar()
-plt.xlabel("x", fontsize=20)
-plt.ylabel("y", fontsize=20)
-plt.title(L"dose, DLRA", fontsize=25)
-tight_layout()
-savefig("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
-
-fig = figure("Dose, DLRA-M=2",figsize=(10*(s.d/s.b),10),dpi=100)
-ax = gca()
-pcolormesh(Y,X,dose_DLRM[2:end-1,2:end-1]',vmin=0.0,vmax=maximum(dose[2:end,2:end]))
-ax.tick_params("both",labelsize=20) 
-#colorbar()
-plt.xlabel("x", fontsize=20)
-plt.ylabel("y", fontsize=20)
-plt.title(L"dose, DLRAM", fontsize=25)
-tight_layout()
-savefig("output/dose_csd_1stcollision_DLRAM_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
-
 fig = figure("Dose countours, DLRA-M=1",figsize=(10*(s.d/s.b),10),dpi=100)
 ax = gca()
-pcolormesh(Y,X,solver1.density[2:end-1,2:end-1]',cmap="gray")
-contour(Y,X,dose[2:end-1,2:end-1]', levels,cmap="plasma",vmin=0.0,vmax=maximum(dose[2:end,2:end]))
+pcolormesh(Y,X,density,cmap="gray")
+contour(Y,X,dose[2:end-1,2:end-1]', levels,cmap="plasma")
 #colorbar()
 ax.tick_params("both",labelsize=20) 
 plt.xlabel("x", fontsize=20)
@@ -105,79 +75,10 @@ plt.ylabel("y", fontsize=20)
 tight_layout()
 savefig("output/doseiso_csd_1stcollision_adapt_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)epsAdapt$(s.epsAdapt).png")
 
-fig = figure("Dose countours, DLRA",figsize=(10*(s.d/s.b),10),dpi=100)
-ax = gca()
-pcolormesh(Y,X,solver2.density[2:end-1,2:end-1]',cmap="gray")
-contour(Y,X,dose_DLR[2:end-1,2:end-1]', levels,cmap="plasma",vmin=0.0,vmax=maximum(dose[2:end,2:end]))
-ax.tick_params("both",labelsize=20) 
-plt.xlabel("x", fontsize=20)
-plt.ylabel("y", fontsize=20)
-tight_layout()
-savefig("output/doseiso_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
-
-fig = figure("Dose countours, DLRA-M=2",figsize=(10*(s.d/s.b),10),dpi=100)
-ax = gca()
-pcolormesh(Y,X,solver2.density[2:end-1,2:end-1]',cmap="gray")
-contour(Y,X,dose_DLRM[2:end-1,2:end-1]', levels,cmap="plasma",vmin=0.0,vmax=maximum(dose[2:end,2:end]))
-ax.tick_params("both",labelsize=20) 
-plt.xlabel("x", fontsize=20)
-plt.ylabel("y", fontsize=20)
-tight_layout()
-savefig("output/doseiso_csd_1stcollision_DLRAM_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
-
-fig, (ax1, ax2) = plt.subplots(1, 2,figsize=(23*(s.d/s.b),10),dpi=100)
-ax1.pcolormesh(Y,X,solver1.density[2:end-1,2:end-1]',cmap="gray")
-CS = ax1.contour(Y,X,dose_DLR[2:end-1,2:end-1]', levels,cmap="plasma",vmin=0.0,vmax=maximum(dose[2:end,2:end]))
-ax2.pcolormesh(Y,X,solver2.density[2:end-1,2:end-1]',cmap="gray")
-ax2.contour(Y,X,dose[2:end-1,2:end-1]', levels,cmap="plasma",vmin=0.0,vmax=maximum(dose[2:end,2:end]))
-ax1.set_title("fixed rank r = $(s.r)", fontsize=25)
-ax2.set_title("adaptive rank", fontsize=25)
-ax1.tick_params("both",labelsize=20) 
-ax2.tick_params("both",labelsize=20) 
-ax1.set_xlabel("x", fontsize=20)
-ax1.set_ylabel("y", fontsize=20)
-ax2.set_xlabel("x", fontsize=20)
-ax2.set_ylabel("y", fontsize=20)
-ax1.set_aspect(1)
-ax2.set_aspect(1)
-#colorbar(CS)
-cb = plt.colorbar(CS,fraction=0.035, pad=0.02)
-cb.ax.tick_params(labelsize=15)
-tight_layout()
-savefig("output/doseiso_compare_csd_1stcollision_DLRAM_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)epsAdapt$(s.epsAdapt).png")
-
-# different contours
-X2 = (s.xMid[2:end-1]'.*ones(size(s.yMid[2:end-1])))
-Y2 = (s.yMid[2:end-1]'.*ones(size(s.xMid[2:end-1])))'
-doseMax1 = maximum(dose_DLR[2:(end-1),2:(end-1)])
-doseMax2 = maximum(dose[2:(end-1),2:(end-1)])
-levels = [0.025,0.05, 0.1, 0.25, 0.5, 0.7, 0.8, .9, .95, .98];
-fig, (ax1, ax2) = plt.subplots(1, 2,figsize=(23*(s.d/s.b),10),dpi=100)
-ax1.pcolormesh(Y2,X2,solver1.density[2:(end-1),2:(end-1)]',cmap="gray")
-CS = ax1.contour(Y2,X2,dose_DLR[2:(end-1),2:(end-1)]'./doseMax1,levels,cmap="plasma",vmin=minimum(levels),vmax=maximum(levels))
-ax2.pcolormesh(Y2,X2,solver2.density[2:(end-1),2:(end-1)]',cmap="gray")
-ax2.contour(Y2,X2,dose[2:(end-1),2:(end-1)]'./doseMax2,levels,cmap="plasma",vmin=minimum(levels),vmax=maximum(levels))
-ax1.set_title("fixed rank r = $(s.r)", fontsize=25)
-ax2.set_title("adaptive rank", fontsize=25)
-ax1.tick_params("both",labelsize=20) 
-ax2.tick_params("both",labelsize=20) 
-ax1.set_xlabel("x", fontsize=20)
-ax1.set_ylabel("y", fontsize=20)
-ax2.set_xlabel("x", fontsize=20)
-ax2.set_ylabel("y", fontsize=20)
-ax1.set_aspect(1)
-ax2.set_aspect(1)
-#colorbar(CS)
-cb = plt.colorbar(CS,fraction=0.035, pad=0.02)
-cb.ax.tick_params(labelsize=15)
-tight_layout()
-savefig("output/doseiso_compare_csd_1stcollision_DLRAM_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)epsAdapt$(s.epsAdapt).png")
-
 # line plot dose
 fig, ax = subplots()
 #nyRef = length(yRef)
 ax.plot(s.xMid,dose[:,Int(floor(s.NCellsY/2))]./maximum(dose[:,Int(floor(s.NCellsY/2))]), "r--", linewidth=2, label="CSD", alpha=0.8)
-ax.plot(s.xMid,dose_DLR[:,Int(floor(s.NCellsY/2))]./maximum(dose_DLR[:,Int(floor(s.NCellsY/2))]), "b--", linewidth=2, label="CSD_DLR", alpha=0.8)
 if s.problem == "2DHighD"
  #   ax.plot(xRef',doseRef[:,Int(floor(nyRef/2))]./maximum(doseRef[:,Int(floor(nyRef/2))]), "k-", linewidth=2, label="Starmap", alpha=0.6)
 end
@@ -206,28 +107,12 @@ tight_layout()
 fig.canvas.draw() # Update the figure
 savefig("output/rank_in_energy_csd_1stcollision_adapt_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)$(s.epsAdapt).png")
 
-fig = figure("rank in energy, ML",figsize=(10, 10), dpi=100)
-ax = gca()
-ltype = ["b-","r-","m-","g-","y-","k-","b--","r--","m--","g--","y--","k--","b-","r-","m-","g-","y-","k-","b--","r--","m--","g--","y--","k--","b-","r-","m-","g-","y-","k-","b--","r--","m--","g--","y--","k--"]
-for l = 1:L
-    ax.plot(rankInTimeML[1,1:(end-1)],rankInTimeML[l+1,1:(end-1)], ltype[l], linewidth=2, label="collision $(l)", alpha=1.0)
-end
-ax.set_xlim([0.0,s.eMax])
-#ax.set_ylim([0.0,440])
-ax.set_xlabel("energy [MeV]", fontsize=20);
-ax.set_ylabel("rank", fontsize=20);
-ax.tick_params("both",labelsize=20) 
-ax.legend(loc="upper left", fontsize=20)
-tight_layout()
-fig.canvas.draw() # Update the figure
-savefig("output/rank_in_energy_ML_csd_1stcollision_adapt_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)$(s.epsAdapt).png")
-
 # plot scalar flux
 if s.problem == "LineSource"
-    scalarFlux = Vec2Mat(s.NCellsX,s.NCellsY,Mat2Vec(psiML)*solver1.M')[2:(end-1),2:(end-1),1];
+    scalarFlux = Vec2Ten(s.NCellsX,s.NCellsY,s.NCellsZ,Ten2Vec(psi)*solver2.M')[2:(end-1),2:(end-1),zMid,1];
     for l = 1:L1
         r = int(rankInTime[end,l])
-        scalarFlux .+= Vec2Mat(s.NCellsX,s.NCellsY,solver2.X[l,:,1:r]*solver2.S[l,1:r,1:r]*solver2.W[l,1,1:r])[2:(end-1),2:(end-1)];
+        scalarFlux .+= Vec2Ten(s.NCellsX,s.NCellsY,s.NCellsZ,solver2.X[l,:,1:r]*solver2.S[l,1:r,1:r]*solver2.W[l,1,1:r])[2:(end-1),2:(end-1),zMid];
     end
     fig = figure("scalar flux, L = 2",figsize=(10,10),dpi=100)
     ax = gca()
@@ -238,53 +123,12 @@ if s.problem == "LineSource"
     tight_layout()
     #CS = plt.pcolormesh(X, Y, Z)
     savefig("output/scalarflux1_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")    
-
-    scalarFlux = Vec2Mat(s.NCellsX,s.NCellsY,Mat2Vec(psiML)*solver3.M')[2:(end-1),2:(end-1),1];
-    for l = 1:L
-        r = int(rankInTimeML[end,l])
-        scalarFlux .+= Vec2Mat(s.NCellsX,s.NCellsY,solver3.X[l,:,1:r]*solver3.S[l,1:r,1:r]*solver3.W[l,1,1:r])[2:(end-1),2:(end-1)];
-    end
-    fig = figure("scalar flux, L = 10",figsize=(10,10),dpi=100)
-    ax = gca()
-    pcolormesh(Y,X,scalarFlux')
-    #pcolormesh(s.xMid[2:end],s.yMid[2:end],Vec2Mat(s.NCellsX,s.NCellsY,X_dlrM*diagm(S_dlrM)*(solver1.M*W_dlrM)[1,:])[2:end,2:end])
-    ax.tick_params("both",labelsize=20) 
-    plt.xlabel("x", fontsize=20)
-    plt.ylabel("y", fontsize=20)
-    tight_layout()
-    #CS = plt.pcolormesh(X, Y, Z)
-    savefig("output/scalarflux2_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")           
-    
-    fig = figure("scalar flux",figsize=(10,10),dpi=100)
-    ax = gca()
-    pcolormesh(Y,X,(Vec2Mat(s.NCellsX,s.NCellsY,Mat2Vec(psi_DLR)*solver1.M')[2:(end-1),2:(end-1),1]+Vec2Mat(s.NCellsX,s.NCellsY,X_dlr*diagm(S_dlr)*(solver1.M*W_dlr)[1,:])[2:(end-1),2:(end-1),1])')
-    ax.tick_params("both",labelsize=20) 
-    plt.xlabel("x", fontsize=20)
-    plt.ylabel("y", fontsize=20)
-    tight_layout()
-    #CS = plt.pcolormesh(X, Y, Z)
-    savefig("output/scalarflux2_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")       
 end
 
 # write vtk file
-vtkfile = vtk_grid("output/dose_csd_nx$(s.NCellsX)ny$(s.NCellsY)", s.xMid, s.yMid)
-vtkfile["dose"] = dose
-vtkfile["dose_normalized"] = dose./maximum(dose)
+vtkfile = vtk_grid("output/dose_csd_nx$(s.NCellsX)ny$(s.NCellsY)$(s.NCellsZ)", s.xMid, s.yMid, s.zMid)
+vtkfile["dose"] = doseTensor
+vtkfile["dose_normalized"] = doseTensor./maximum(doseTensor)
 outfiles = vtk_save(vtkfile)
-
-writedlm("output/dose_csd_1stcollision_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)epsAdapt$(s.epsAdapt).txt", dose)
-writedlm("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", dose_DLR)
-writedlm("output/dose_csd_1stcollision_DLRAM_Rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", dose_DLRM)
-
-writedlm("output/X_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)epsAdapt$(s.epsAdapt).txt", X_dlr)
-writedlm("output/X_csd_1stcollision_DLRAM_Rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", X_dlrM)
-
-writedlm("output/S_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", S_dlr)
-writedlm("output/S_csd_1stcollision_DLRAM_Rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", S_dlrM)
-
-writedlm("output/W_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", W_dlr)
-writedlm("output/W_csd_1stcollision_DLRAM_Rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", W_dlrM)
-
-writedlm("output/rank_csd_1stcollision_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", rankInTime)
 
 println("main finished")

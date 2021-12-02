@@ -107,13 +107,14 @@ mutable struct Settings
             d = 1.5;
             e = -1.5;
             f = 1.5;
-            sigmaS = 1.0;
+            sigmaS = 1.0; # 1.0 changed!
             sigmaA = 0.0;  
             cfl = 0.99/sqrt(3);    
             eMax = 1.0
-            adaptIndex = 0;
-            epsAdapt = 0.3;#0.5;
-            #epsAdapt = 1e-1;
+            adaptIndex = 1;
+            #epsAdapt = 0.3;#0.5;
+            epsAdapt = 1e-3;
+            densityMin = 1.0;
         elseif problem =="2DHighD"
             a = 0.0
             b = 1.0;
