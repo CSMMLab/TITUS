@@ -108,6 +108,23 @@ mutable struct Settings
             adaptIndex = 0;
             epsAdapt = 0.3;#0.5;
             density[Int(floor(NCellsX*0.56/(b-a))):end,:] .= 5.0;
+        elseif problem =="validation"
+            a = 0.0
+            b = 14.5;
+            c = 0.0;
+            d = 14.5;
+            sigmaS = 1.0;
+            sigmaA = 0.0;  
+            cfl = 0.99/sqrt(2)*2.5;    
+            eMax = 40.0
+            adaptIndex = 0;
+            epsAdapt = 0.3;#0.5;
+            Omega1 = -0.0;
+            Omega3 = 1.0;
+            x0 = 0.5*b;
+            y0 = 0.0*d;
+            #epsAdapt = 1e-1;
+            density[Int(floor(NCellsX*0.5))+1:end,:] .= 1.85;
         elseif problem =="lungOrig"
             #img = Float64.(Gray.(load("phantom.png")))
             pathlib = pyimport("pathlib")

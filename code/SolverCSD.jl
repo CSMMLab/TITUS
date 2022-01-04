@@ -323,7 +323,6 @@ mutable struct SolverCSD
         end
         normY = sqrt.(normY)
     
-        Mat = zeros(nq,nq)
         O = zeros(nq,Norder)
         M = zeros(Norder,nq)
         for i=1:nq
@@ -338,6 +337,8 @@ mutable struct SolverCSD
                 end
             end
         end
+        println("weights = ",weights)
+        println("Y_0^0 = ",YY[1,:])
         #sqrt((2*l+1)/(4*pi).*factorial(l-ma)./factorial(l+ma)).*(-1).^max(m,0).*exp(1i*m*phi).*z(ma+1);
         
         v = O*M*ones(nq)
@@ -353,12 +354,34 @@ end
 
 function SetupIC(obj::SolverCSD)
     nq = obj.Q.nquadpoints;
+    nx = obj.settings.NCellsX;
+    ny = obj.settings.NCellsY;
     psi = zeros(obj.settings.NCellsX,obj.settings.NCellsY,nq);
-    
-    for k = 1:nq
-        psi[:,:,k] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)
+
+    if obj.settings.problem == "validation"
+        for i = 1:nx
+            for j = 1:ny
+                for k = 1:nq
+                    sigmaO1Inv = 10000.0;
+                    sigmaO3Inv = 10000.0;
+                    pos_beam = [0.5*14.5,0.0,0];
+                    space_beam = normpdf(obj.settings.xMid[i],pos_beam[1],.01).*normpdf(obj.settings.yMid[j],pos_beam[2],.01);
+                    #println(space_beam)
+                    psi[i,j,k] = 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-obj.Q.pointsxyz[k,1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-obj.Q.pointsxyz[k,3])^2)*space_beam*obj.csd.S[end]*obj.settings.densityMin;
+                end
+            end
+        end
+    else    
+        for k = 1:nq
+            psi[:,:,k] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)
+        end
     end
+    
     return psi;
+end
+
+function normpdf(x,mu,sigma)
+    return 1/(sigma*sqrt(2*pi))*exp(-(x-mu)^2/2/(sigma^2));
 end
 
 function SetupICMoments(obj::SolverCSD)
@@ -403,6 +426,16 @@ function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y:
         sigmaXInv = 10.0;
         sigmaYInv = 10.0;
         sigmaEInv = 10.0;
+    elseif obj.settings.problem == "validation"
+        sigmaO1Inv = 10000.0;
+        sigmaO3Inv = 10000.0;
+        sigmaXInv = 500.0;
+        sigmaYInv = 500.0;
+        sigmaEInv = 5000.0;
+        pos_beam = [0.5*14.5,0.0,0];
+        space_beam = normpdf(x,pos_beam[1],.01).*normpdf(y,pos_beam[2],.01);
+        #println(space_beam)
+        return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*exp(-sigmaEInv*(E0-E)^2)*space_beam*obj.csd.S[n]*obj.settings.densityMin;
     elseif obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD"
         return 0.0;
     end
@@ -789,7 +822,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" # determine relevant directions in IC
         idxFullBeam = findall(psi .> floorPsiAll)
         idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
-    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" # determine relevant directions in beam
+    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" # determine relevant directions in beam
         psiBeam = zeros(nq)
         for k = 1:nq
             psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)
@@ -858,14 +891,16 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
 
         # set boundary condition
-        for k = 1:nq
-            for j = 1:nx
-                psi[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
-                psi[j,end,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
-            end
-            for j = 1:ny
-                psi[1,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
-                psi[end,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
+        if obj.settings.problem != "validation"
+            for k = 1:nq
+                for j = 1:nx
+                    psi[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
+                    psi[j,end,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
+                end
+                for j = 1:ny
+                    psi[1,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
+                    psi[end,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
+                end
             end
         end
 

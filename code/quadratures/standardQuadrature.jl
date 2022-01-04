@@ -30,7 +30,7 @@ function computeXYZandWeights(_norder::Int64)
     pointsxyz[:,2] = y[:]
     pointsxyz[:,3] = z[:]
         
-    weights = weights[:]
+    weights = weights[:]*0.5;
         
     
     return pointsxyz, weights
@@ -63,7 +63,7 @@ function computeXYZandWeightsProjected2D(_norder::Int64)
     pointsxyz[:,2] = y[:]
     pointsxyz[:,3] = z[:]
         
-    weights = weights[:]
+    weights = weights[:]*0.5;
         
     
     return pointsxyz, weights
