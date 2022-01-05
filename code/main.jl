@@ -10,9 +10,9 @@ using WriteVTK
 
 close("all")
 
-nx = 801;
-ny = 801;
-problem = "2DHighD"
+nx = 51;
+ny = 51;
+problem = "2DHighLowD"
 s = Settings(nx,ny,50,problem);
 rhoMin = minimum(s.density);
 
@@ -32,6 +32,16 @@ elseif s.problem == "2DHighD"
     doseRef = readdlm("validationData/dose_starmap_full301_inhomogenity.txt", Float64)
     xRef = readdlm("validationData/x_starmap_nx301.txt", Float64)
     yRef = readdlm("validationData/y_starmap_ny301.txt", Float64)
+
+    doseMC = readdlm("validationData/Dose_MC_inhomogenity.txt",',', Float64)
+    nxMC = size(doseMC,1);
+    nyMC = size(doseMC,1);
+    xMC = collect(range( s.a,stop=s.b,length = nxMC));
+    yMC = collect(range( s.c,stop=s.d,length = nxMC));
+elseif s.problem == "2DHighLowD"
+    doseRef = readdlm("validationData/dose_starmap_moreDensities301.txt", Float64)
+    xRef = readdlm("validationData/x_starmap_nx301_moreDensities.txt", Float64)
+    yRef = readdlm("validationData/y_starmap_ny301_moreDensities.txt", Float64)
 
     doseMC = readdlm("validationData/Dose_MC_inhomogenity.txt",',', Float64)
     nxMC = size(doseMC,1);

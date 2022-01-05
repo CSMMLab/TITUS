@@ -65,11 +65,11 @@ mutable struct Settings
         NCellsX = Nx - 1;
         NCellsY = Ny - 1;
 
-        a = 0.0483333333333333; # left boundary
-        b = 14.4516666666667; # right boundary
+        a = 0.0; # left boundary
+        b = 14.5; # right boundary
 
-        c = 0.0483333333333333; # lower boundary
-        d = 14.4516666666667; # upper boundary
+        c = 0.0; # lower boundary
+        d = 14.5; # upper boundary
 
         density = ones(NCellsX,NCellsY);
 
@@ -96,6 +96,21 @@ mutable struct Settings
             adaptIndex = 0;
             epsAdapt = 0.3;#0.5;
             #epsAdapt = 1e-1;
+        elseif problem =="2DHighLowD"
+            a = 0.0
+            b = 1.0;
+            c = 0.0;
+            d = 1.0;
+            sigmaS = 1.0;
+            sigmaA = 0.0;  
+            cfl = 0.99/sqrt(2)*2.5;    
+            eMax = 1.0
+            adaptIndex = 0;
+            epsAdapt = 0.3;#0.5;
+            density[Int(floor(NCellsX*0.5/(b-a))):end,:] .= 5.0;
+            density[Int(floor(NCellsX*0.55/(b-a))):end,:] .= 1.0;
+            density[1:Int(floor(NCellsX*0.45/(b-a))),:] .= 7.0;
+            density[Int(floor(NCellsX*0.55/(b-a))):end,Int(floor(NCellsY*0.52/(b-a))):end] .= 20.0;
         elseif problem =="2DHighD"
             a = 0.0
             b = 1.0;
@@ -224,14 +239,14 @@ function IC(obj::Settings,x,y)
     out = zeros(length(x),length(y));
     posBeamX = (obj.b+obj.a)/2;
     posBeamY = (obj.d+obj.c)/2;
-    if obj.problem != "LineSource" && obj.problem != "2DHighD"
+    if obj.problem != "LineSource" && obj.problem != "2DHighD" && obj.problem != "2DHighLowD"
         return out;
     end
     x0 = x .- posBeamX;
     y0 = y .- posBeamY;
     
     s1 = 0.05
-    if obj.problem == "2DHighD"
+    if obj.problem == "2DHighD" || obj.problem == "2DHighLowD"
         s1 = 0.01
     end
 

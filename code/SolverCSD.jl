@@ -396,7 +396,7 @@ function SetupICMoments(obj::SolverCSD)
                 u[:,:,i] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)*obj.csd.StarMAPmoments[i]
             end
         end
-    elseif obj.settings.problem == "2D" || obj.settings.problem == "2DHighD"
+    elseif obj.settings.problem == "2D" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD"
         for l = 0:obj.settings.nPN
             for k=-l:l
                 i = GlobalIndex( l, k )+1;
@@ -436,7 +436,7 @@ function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y:
         space_beam = normpdf(x,pos_beam[1],.01).*normpdf(y,pos_beam[2],.01);
         #println(space_beam)
         return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*exp(-sigmaEInv*(E0-E)^2)*space_beam*obj.csd.S[n]*obj.settings.densityMin;
-    elseif obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD"
+    elseif obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD"
         return 0.0;
     end
     return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*exp(-sigmaEInv*(E0-E)^2)*exp(-sigmaXInv*(x-obj.settings.x0)^2)*exp(-sigmaYInv*(y-obj.settings.y0)^2)*obj.csd.S[n]*obj.settings.densityMin;
@@ -819,8 +819,10 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     psi = SetupIC(obj);
     floorPsiAll = 1e-1;
     floorPsi = 1e-17;
-    if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" # determine relevant directions in IC
+    if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" # determine relevant directions in IC
+        println(size(psi))
         idxFullBeam = findall(psi .> floorPsiAll)
+        println(maximum(psi))
         idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
     elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" # determine relevant directions in beam
         psiBeam = zeros(nq)
