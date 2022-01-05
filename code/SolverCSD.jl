@@ -894,12 +894,12 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         if obj.settings.problem != "validation"
             for k = 1:nq
                 for j = 1:nx
-                    psi[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
-                    psi[j,end,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
+                    psi[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
+                    psi[j,end,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
                 end
                 for j = 1:ny
-                    psi[1,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
-                    psi[end,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
+                    psi[1,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
+                    psi[end,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
                 end
             end
         end
@@ -907,9 +907,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         # stream uncollided particles
         solveFluxUpwind!(obj,psi,flux);
 
-        psi .= psi .- dE*flux;
-
-        psiNew .= psi ./ (1+dE*sigmaS[1]);
+        psi .= (psi .- dE*flux) ./ (1+dE*sigmaS[1]);
        
         Dvec = zeros(obj.pn.nTotalEntries)
         for l = 0:obj.pn.N
@@ -995,7 +993,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         X[obj.boundaryIdx,:] .= 0.0;
         K .= X*S;
         #u = u .+dE*Mat2Vec(psiNew)*M'*Diagonal(Dvec);
-        K = K .+dE*Mat2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec)*W;
+        K = K .+dE*Mat2Vec(psi)*obj.MReduced'*Diagonal(Dvec)*W;
         K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
         XNew,STmp = qr!(K);
@@ -1006,7 +1004,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
         ################## L-step ##################
         L = W*S';
-        L = L .+dE*(Mat2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec))'*X;
+        L = L .+dE*(Mat2Vec(psi)*obj.MReduced'*Diagonal(Dvec))'*X;
 
         WNew,STmp = qr(L);
         WNew = Matrix(WNew)
@@ -1019,13 +1017,13 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
         ################## S-step ##################
         S .= MUp*S*(NUp')
-        S .= S .+dE*X'*Mat2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec)*W;
+        S .= S .+dE*X'*Mat2Vec(psi)*obj.MReduced'*Diagonal(Dvec)*W;
 
         ############## Dose Computation ##############
         for i = 1:nx
             for j = 1:ny
                 idx = (i-1)*ny + j
-                uOUnc[idx] = psiNew[i,j,:]'*obj.MReduced[1,:];
+                uOUnc[idx] = psi[i,j,:]'*obj.MReduced[1,:];
             end
         end
 
@@ -1036,7 +1034,6 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         # update dose
         obj.dose .+= dE * (X*S*W[1,:]+uOUnc) * obj.csd.SMid[n-1] ./ obj.densityVec ./( 1 + (n==2||n==nEnergies));
 
-        psi .= psiNew;
         next!(prog) # update progress bar
     end
 
@@ -1117,12 +1114,12 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         # set boundary condition
         for k = 1:nq
             for j = 1:nx
-                psi[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
-                psi[j,end,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
+                psi[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
+                psi[j,end,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
             end
             for j = 1:ny
-                psi[1,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
-                psi[end,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
+                psi[1,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
+                psi[end,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
             end
         end
 

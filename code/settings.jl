@@ -65,11 +65,11 @@ mutable struct Settings
         NCellsX = Nx - 1;
         NCellsY = Ny - 1;
 
-        a = 0.0; # left boundary
-        b = 14.5; # right boundary
+        a = 0.0483333333333333; # left boundary
+        b = 14.4516666666667; # right boundary
 
-        c = 0.0; # lower boundary
-        d = 14.5; # upper boundary
+        c = 0.0483333333333333; # lower boundary
+        d = 14.4516666666667; # upper boundary
 
         density = ones(NCellsX,NCellsY);
 
@@ -103,16 +103,16 @@ mutable struct Settings
             d = 1.0;
             sigmaS = 1.0;
             sigmaA = 0.0;  
-            cfl = 0.99/sqrt(2);    
+            cfl = 0.99/sqrt(2)*2.5;    
             eMax = 1.0
             adaptIndex = 0;
             epsAdapt = 0.3;#0.5;
             density[Int(floor(NCellsX*0.56/(b-a))):end,:] .= 5.0;
         elseif problem =="validation"
-            a = 0.0
-            b = 14.5;
-            c = 0.0;
-            d = 14.5;
+            a = 0.0483333333333333; # left boundary
+            b = 14.4516666666667; # right boundary
+            c = 0.0483333333333333; # lower boundary
+            d = 14.4516666666667; # upper boundary
             sigmaS = 1.0;
             sigmaA = 0.0;  
             cfl = 0.99/sqrt(2)*2.5;    
@@ -213,7 +213,7 @@ mutable struct Settings
         dE = cfl*min(dx,dy)*minimum(density);
         
         # number PN moments
-        nPN = 21#13, 21; # use odd number
+        nPN = 13#13, 21; # use odd number
 
         # build class
         new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex);
