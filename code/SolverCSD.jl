@@ -813,7 +813,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     nx = obj.settings.NCellsX;
     ny = obj.settings.NCellsY;
     nq = obj.Q.nquadpoints;
-    N = obj.pn.nTotalEntries
+    N = obj.pn.nTotalEntries;
 
     # Set up initial condition and store as matrix
     psi = SetupIC(obj);
@@ -2190,7 +2190,7 @@ function Solve(obj::SolverCSD)
     S = obj.csd.S;
 
     # Set up initial condition and store as matrix
-    v = SetupIC(obj);
+    v = SetupICMoments(obj);
     nx = obj.settings.NCellsX;
     ny = obj.settings.NCellsY;
     N = obj.pn.nTotalEntries
@@ -2214,23 +2214,17 @@ function Solve(obj::SolverCSD)
 
     uNew = deepcopy(u)
 
-    prog = Progress(nEnergies,1)
+    prog = Progress(nEnergies-1,1)
 
-    out = zeros(nx*ny,N);
-    vout = RhsMatrix(obj,v)
-    for k = 1:N
-        out[:,k] = vec(vout[:,:,k]');
-    end
-
-    println("error rhs = ",norm(Rhs(obj,u) - out))
-    println("norm rhs = ",norm(Rhs(obj,u)))
-    println("norm rhs = ",norm(out))
+    return 0.5*sqrt(obj.gamma[1])*u,obj.dose;
 
     #loop over energy
-    for n=1:nEnergies
+    for n=2:nEnergies
         # compute scattering coefficients at current energy
         sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
        
+        writedlm("sigmaS_$(energy[n])",sigmaS[1] .- sigmaS);
+
         Dvec = zeros(obj.pn.nTotalEntries)
         for l = 0:obj.pn.N
             for k=-l:l
@@ -2240,6 +2234,8 @@ function Solve(obj::SolverCSD)
         end
 
         D = Diagonal(sigmaS[1] .- Dvec);
+
+        #println(sigmaS[1] .- Dvec)
 
         # set boundary condition
         #u[1,:] .= BCLeft(obj,n);

@@ -225,10 +225,10 @@ mutable struct Settings
 
         # time settings
         #cfl = 1.5#1.4 # CFL condition
-        dE = cfl*min(dx,dy)*minimum(density);
+        dE = 1/312;#cfl*min(dx,dy)*minimum(density);
         
         # number PN moments
-        nPN = 13#13, 21; # use odd number
+        nPN = 7#13, 21; # use odd number
 
         # build class
         new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex);
