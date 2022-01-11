@@ -225,7 +225,7 @@ mutable struct Settings
 
         # time settings
         #cfl = 1.5#1.4 # CFL condition
-        dE = 1/90#cfl*min(dx,dy)*minimum(density);#1/312;#cfl*min(dx,dy)*minimum(density);
+        dE = 1/90#cfl*min(dx,dy)*minimum(density);#cfl*min(dx,dy)*minimum(density);#1/312;#cfl*min(dx,dy)*minimum(density);
         
         # number PN moments
         nPN = 7#13, 21; # use odd number

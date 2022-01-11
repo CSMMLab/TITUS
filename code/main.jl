@@ -39,7 +39,9 @@ elseif s.problem == "2DHighD"
     xMC = collect(range( s.a,stop=s.b,length = nxMC));
     yMC = collect(range( s.c,stop=s.d,length = nxMC));
 
-    doseKiTRT = readdlm("validationData/horizontal_full_simulation.csv",',', Float64)
+    doseKiTRTold = readdlm("validationData/horizontal_full_simulation.csv",',', Float64)
+    doseKiTRTold = doseKiTRTold[:,2];
+    doseKiTRT = readdlm("validationData/horizontale_kitRT_Az.csv",',', Float64)
     doseKiTRT = doseKiTRT[:,2];
     xKiTRT = collect(range( s.a,stop=s.b,length = length(doseKiTRT)));
 elseif s.problem == "2DHighLowD"
@@ -128,7 +130,8 @@ ax.plot(s.xMid,dose_DLR[:,Int(floor(s.NCellsY/2))]./maximum(dose_DLR[:,Int(floor
 if s.problem == "2DHighD"
    ax.plot(xRef',doseRef[:,Int(floor(nyRef/2))]./maximum(doseRef[:,Int(floor(nyRef/2))]), "k-", linewidth=2, label="Starmap", alpha=0.6)
    ax.plot(yMC,doseMC[Int(floor(nxMC/2)),:]./maximum(doseMC[Int(floor(nxMC/2)),:])*1.3, "r:", linewidth=2, label="MC", alpha=0.6)
-   ax.plot(xKiTRT,doseKiTRT, "k-", linewidth=2, label="KiT-RT", alpha=0.6)
+   ax.plot(xKiTRT,doseKiTRT, "g-.", linewidth=2, label="KiT-RT", alpha=0.6)
+   ax.plot(xKiTRT,doseKiTRTold, "r-.", linewidth=2, label="KiT-RT old", alpha=0.6)
 end
 #ax.plot(csd.eGrid,csd.S, "r--o", linewidth=2, label="S", alpha=0.6)
 ax.legend(loc="upper left")
@@ -167,3 +170,8 @@ println("distance to kit-RT: eGrid ",norm(E-solver1.csd.eGrid))
 println("distance to kit-RT: eTrafo ",norm(eTrafo-solver1.csd.eTrafo))
 println("distance to kit-RT: S ",norm(S-solver1.csd.S))
 println("distance to kit-RT: SMid ",norm(Smid-solver1.csd.SMid))
+
+AxPlus = readdlm("validationData/AxPlus.csv",',', Float64)
+AxMinus = readdlm("validationData/AxMinus.csv",',', Float64)
+println("distance to kit-RT: AxPlus ",norm(solver1.AxPlus-AxPlus))
+println("distance to kit-RT: AxMinus ",norm(solver1.AxMinus-AxMinus))

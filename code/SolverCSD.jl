@@ -30,6 +30,10 @@ mutable struct SolverCSD
     # Roe matrix
     AbsAx::Array{Float64,2};
     AbsAz::Array{Float64,2};
+    AxPlus::Array{Float64,2};
+    AxMinus::Array{Float64,2};
+    AzPlus::Array{Float64,2};
+    AzMinus::Array{Float64,2};
     # normalized Legendre Polynomials
     P::Array{Float64,2};
     # quadrature points
@@ -100,11 +104,23 @@ mutable struct SolverCSD
         S = eigvals(pn.Ax)
         V = eigvecs(pn.Ax)
         AbsAx = V*abs.(diagm(S))*inv(V)
-        #AxPlus
+        idxPos = findall((S.>=0.0))
+        idxNeg = findall((S.<0.0))
+        SPlus = zeros(size(S)); SPlus[idxPos] = S[idxPos];
+        SMinus = zeros(size(S)); SMinus[idxNeg] = S[idxNeg];
+        AxPlus = V*diagm(SPlus)*inv(V)
+        AxMinus = V*diagm(SMinus)*inv(V)
+        
 
         S = eigvals(pn.Az)
         V = eigvecs(pn.Az)
         AbsAz = V*abs.(diagm(S))*inv(V)
+        idxPos = findall((S.>=0.0))
+        idxNeg = findall((S.<0.0))
+        SPlus = zeros(size(S)); SPlus[idxPos] = S[idxPos];
+        SMinus = zeros(size(S)); SMinus[idxNeg] = S[idxNeg];
+        AzPlus = V*diagm(SPlus)*inv(V)
+        AzMinus = V*diagm(SMinus)*inv(V)
 
         # set density vector
         density = settings.density;
@@ -338,8 +354,8 @@ mutable struct SolverCSD
                 end
             end
         end
-        println("weights = ",weights)
-        println("Y_0^0 = ",YY[1,:])
+        #println("weights = ",weights)
+        #println("Y_0^0 = ",YY[1,:])
         #sqrt((2*l+1)/(4*pi).*factorial(l-ma)./factorial(l+ma)).*(-1).^max(m,0).*exp(1i*m*phi).*z(ma+1);
         
         v = O*M*ones(nq)
@@ -349,7 +365,7 @@ mutable struct SolverCSD
             O[q,:] /= v[q]
         end
 
-        new(x,y,xGrid,settings,outRhs,gamma,AbsAx,AbsAz,P,mu,w,csd,pn,density,vec(density'),dose,L1x,L1y,L2x,L2y,boundaryIdx,boundaryBeam,Q,O,M);
+        new(x,y,xGrid,settings,outRhs,gamma,AbsAx,AbsAz,AxPlus,AxMinus,AzPlus,AzMinus,P,mu,w,csd,pn,density,vec(density'),dose,L1x,L1y,L2x,L2y,boundaryIdx,boundaryBeam,Q,O,M);
     end
 end
 
@@ -503,7 +519,34 @@ function RhsMatrix(obj::SolverCSD,u::Array{Float64,3},t::Float64=0.0)
 end
 
 function Rhs(obj::SolverCSD,u::Array{Float64,2},t::Float64=0.0)   
-    return obj.L2x*u*obj.pn.Ax' + obj.L2y*u*obj.pn.Az' + obj.L1x*u*obj.AbsAx' + obj.L1y*u*obj.AbsAz';
+    xInd = collect(2:(obj.settings.NCellsX-1));
+    yInd = collect(2:(obj.settings.NCellsY-1));
+    out = zeros(size(u))
+    ny = obj.settings.NCellsY;
+    dx = obj.settings.dx;
+    dy = obj.settings.dy;
+    for i=xInd,j=yInd
+
+        # flux NS
+        gNorth = (obj.AzPlus*u[vectorIndex(ny,i,j),:] + obj.AzMinus*u[vectorIndex(ny,i,j+1),:])*dx;
+        gSouth = -(obj.AzPlus*u[vectorIndex(ny,i,j-1),:] + obj.AzMinus*u[vectorIndex(ny,i,j),:])*dx;
+
+        # flux EW
+        gEast = (obj.AxPlus*u[vectorIndex(ny,i,j),:] + obj.AxMinus*u[vectorIndex(ny,i+1,j),:])*dy;
+        gWest = -(obj.AxPlus*u[vectorIndex(ny,i-1,j),:] + obj.AxMinus*u[vectorIndex(ny,i,j),:])*dy;
+
+        #println(vectorIndex(ny,Int(ceil()),j))
+        if vectorIndex(ny,i,j) == 11176 #11325
+            #println("gNorth = ",gNorth)
+            #println("gSouth = ",gSouth)
+            #println("gEast = ",gEast)
+            #println("gWest = ",gWest)
+        end
+
+        out[vectorIndex(ny,i,j),:] = (gNorth+gSouth+gEast+gWest)/dx/dy;
+
+    end
+    return out;
 end
 
 function RhsOld(obj::SolverCSD,u::Array{Float64,2},t::Float64=0.0)   
@@ -2247,22 +2290,17 @@ function Solve(obj::SolverCSD)
         #u[1,:] .= BCLeft(obj,n);
 
         # perform time update
-        uTilde = u .- dE * Rhs(obj,u); 
-
-        # apply filtering
-        #lam = 0.0#5e-7
-        #for j = 1:(settings.NCellsX-1)
-        #    for i = 1:(settings.NCellsY-1)
-        #        for k = 1:obj.settings.nPN
-        #            uTilde[j,i,k] = uTilde[j,i,k]/(1+lam*k^2*(k-1)^2);
-        #        end
-        #    end
-        #end
+        #uTilde = u .- dE * RhsOld(obj,u); 
+        uDivRho = zeros(size(u));
+        for k = 1:size(u,2)
+            uDivRho[:,k] = u[:,k]./ obj.densityVec
+        end
+        uTilde = u .- dE * Rhs(obj,uDivRho); 
 
         #uTilde[1,:] .= BCLeft(obj,n);
         #uNew = uTilde .- dE*uTilde*D;
         for j = 1:size(uNew,1)
-            uNew[j,:] = (Id .+ dE*D*0.0)\uTilde[j,:];
+            uNew[j,:] = (Id .+ dE*D)\uTilde[j,:];
         end
         
         # update dose
