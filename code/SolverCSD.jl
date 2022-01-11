@@ -100,6 +100,7 @@ mutable struct SolverCSD
         S = eigvals(pn.Ax)
         V = eigvecs(pn.Ax)
         AbsAx = V*abs.(diagm(S))*inv(V)
+        #AxPlus
 
         S = eigvals(pn.Az)
         V = eigvecs(pn.Az)
@@ -502,6 +503,10 @@ function RhsMatrix(obj::SolverCSD,u::Array{Float64,3},t::Float64=0.0)
 end
 
 function Rhs(obj::SolverCSD,u::Array{Float64,2},t::Float64=0.0)   
+    return obj.L2x*u*obj.pn.Ax' + obj.L2y*u*obj.pn.Az' + obj.L1x*u*obj.AbsAx' + obj.L1y*u*obj.AbsAz';
+end
+
+function RhsOld(obj::SolverCSD,u::Array{Float64,2},t::Float64=0.0)   
     return obj.L2x*u*obj.pn.Ax' + obj.L2y*u*obj.pn.Az' + obj.L1x*u*obj.AbsAx' + obj.L1y*u*obj.AbsAz';
 end
 
@@ -2216,14 +2221,14 @@ function Solve(obj::SolverCSD)
 
     prog = Progress(nEnergies-1,1)
 
-    return 0.5*sqrt(obj.gamma[1])*u,obj.dose;
+    #return 0.5*sqrt(obj.gamma[1])*u,obj.dose;
 
     #loop over energy
     for n=2:nEnergies
         # compute scattering coefficients at current energy
         sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
        
-        writedlm("sigmaS_$(energy[n])",sigmaS[1] .- sigmaS);
+        #writedlm("sigmaS_$(energy[n])",sigmaS[1] .- sigmaS);
 
         Dvec = zeros(obj.pn.nTotalEntries)
         for l = 0:obj.pn.N
@@ -2234,6 +2239,7 @@ function Solve(obj::SolverCSD)
         end
 
         D = Diagonal(sigmaS[1] .- Dvec);
+        #println(norm(D))
 
         #println(sigmaS[1] .- Dvec)
 
@@ -2256,7 +2262,7 @@ function Solve(obj::SolverCSD)
         #uTilde[1,:] .= BCLeft(obj,n);
         #uNew = uTilde .- dE*uTilde*D;
         for j = 1:size(uNew,1)
-            uNew[j,:] = (Id .+ dE*D)\uTilde[j,:];
+            uNew[j,:] = (Id .+ dE*D*0.0)\uTilde[j,:];
         end
         
         # update dose
