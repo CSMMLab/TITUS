@@ -294,8 +294,6 @@ mutable struct SolverCSD
             boundaryBeam[counter] = idx
         end
 
-        #idx = findall(!iszero, Rtrain);
-
         # setup spatial grid
         xGrid = zeros(nx*ny,2)
         for i = 1:nx
@@ -354,9 +352,6 @@ mutable struct SolverCSD
                 end
             end
         end
-        #println("weights = ",weights)
-        #println("Y_0^0 = ",YY[1,:])
-        #sqrt((2*l+1)/(4*pi).*factorial(l-ma)./factorial(l+ma)).*(-1).^max(m,0).*exp(1i*m*phi).*z(ma+1);
         
         v = O*M*ones(nq)
     
@@ -383,8 +378,8 @@ function SetupIC(obj::SolverCSD)
                     sigmaO3Inv = 10000.0;
                     pos_beam = [0.5*14.5,0.0,0];
                     space_beam = normpdf(obj.settings.xMid[i],pos_beam[1],.01).*normpdf(obj.settings.yMid[j],pos_beam[2],.01);
-                    #println(space_beam)
-                    psi[i,j,k] = 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-obj.Q.pointsxyz[k,1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-obj.Q.pointsxyz[k,3])^2)*space_beam*obj.csd.S[end]*obj.settings.densityMin;
+                    trafo = 1.0;#obj.csd.S[1]*obj.settings.density[i,j];
+                    psi[i,j,k] = 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-obj.Q.pointsxyz[k,1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-obj.Q.pointsxyz[k,3])^2)*space_beam*trafo;
                 end
             end
         end
@@ -401,6 +396,17 @@ function normpdf(x,mu,sigma)
     return 1/(sigma*sqrt(2*pi))*exp(-(x-mu)^2/2/(sigma^2));
 end
 
+function sph_cc(mu,phi,l,m)
+    # Complex conjugates of coefficients.
+    y = 0;
+    z = computePlmx(mu,lmax=l,norm=SphericalHarmonics.Unnormalized())
+    ma = abs(m);
+    ind = Int(0.5*(l^2+l)+ma+1);
+    
+    y = y + sqrt((2*l+1)/(4*pi).*factorial(l-ma)./factorial(big(l+ma))).*(-1).^max(m,0).*exp(1im*m*phi).*z[ind];
+    return y;
+end
+
 function SetupICMoments(obj::SolverCSD)
     u = zeros(obj.settings.NCellsX,obj.settings.NCellsY,obj.pn.nTotalEntries);
     
@@ -411,6 +417,31 @@ function SetupICMoments(obj::SolverCSD)
                 i = GlobalIndex( l, k )+1;
                 #u[:,:,i] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)*Y[i];#obj.csd.StarMAPmoments[i]# .* PCurrent[l]/sqrt(obj.gamma[l+1])
                 u[:,:,i] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)*obj.csd.StarMAPmoments[i]
+            end
+        end
+    elseif obj.settings.problem == "validation"
+        nq = obj.Q.nquadpoints;
+        nx = obj.settings.NCellsX;
+        ny = obj.settings.NCellsY;
+        @polyvar xx yy zz
+        phi_beam = pi/2;                               # Angle of beam w.r.t. x-axis.
+        mu_beam = 0;  
+        psi = zeros(obj.pn.nTotalEntries)*1im;
+        counter = 1;
+        for l=0:obj.settings.nPN
+            for m=-l:l
+                sphericalh = ylm(l,m,xx,yy,zz)
+                psi[counter] =  sph_cc(mu_beam,phi_beam,l,m)
+                counter += 1
+            end
+        end
+    
+        for i = 1:nx
+            for j = 1:ny
+                pos_beam = [0.0,0.5*14.5,0];
+                space_beam = normpdf(obj.settings.xMid[i],pos_beam[1],.01).*normpdf(obj.settings.yMid[j],pos_beam[2],.01);
+                trafo = 1.0;#obj.csd.S[1]*obj.settings.density[i,j];
+                u[i,j,:] = Float64.(obj.pn.M*psi)*space_beam;
             end
         end
     elseif obj.settings.problem == "2D" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD"
@@ -446,13 +477,11 @@ function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y:
     elseif obj.settings.problem == "validation"
         sigmaO1Inv = 10000.0;
         sigmaO3Inv = 10000.0;
-        sigmaXInv = 500.0;
-        sigmaYInv = 500.0;
-        sigmaEInv = 5000.0;
+        densityMin = 1.0;
         pos_beam = [0.5*14.5,0.0,0];
         space_beam = normpdf(x,pos_beam[1],.01).*normpdf(y,pos_beam[2],.01);
         #println(space_beam)
-        return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*exp(-sigmaEInv*(E0-E)^2)*space_beam*obj.csd.S[n]*obj.settings.densityMin;
+        return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*space_beam*obj.csd.S[n]*densityMin;
     elseif obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD"
         return 0.0;
     end
@@ -918,9 +947,6 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     # impose boundary condition
     X[obj.boundaryIdx,:] .= 0.0;
 
-    # setup gamma vector (square norm of P) to nomralize
-    settings = obj.settings
-
     nEnergies = length(eTrafo);
     dE = eTrafo[2]-eTrafo[1];
     obj.settings.dE = dE
@@ -933,15 +959,13 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
     uOUnc = zeros(nx*ny);
     
-    psiNew = deepcopy(psi);
-
     #loop over energy
     for n=2:nEnergies
         # compute scattering coefficients at current energy
         sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
 
         # set boundary condition
-        if obj.settings.problem != "validation"
+        if obj.settings.problem != "validation" # validation testcase sets beam in initial condition
             for k = 1:nq
                 for j = 1:nx
                     psi[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
@@ -954,10 +978,22 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
             end
         end
 
+        ############## Dose Computation ##############
+        for i = 1:nx
+            for j = 1:ny
+                idx = (i-1)*ny + j
+                uOUnc[idx] = psi[i,j,:]'*obj.MReduced[1,:];
+            end
+        end
+        obj.dose .+= 0.5*dE * (X*S*W[1,:]+uOUnc) * obj.csd.S[n-1] ./ obj.densityVec ;
+
         # stream uncollided particles
         solveFluxUpwind!(obj,psi,flux);
 
+        psiBC = psi[obj.boundaryIdx];
+
         psi .= (psi .- dE*flux) ./ (1+dE*sigmaS[1]);
+        psi[obj.boundaryIdx] .= psiBC; # no scattering in boundary cells
        
         Dvec = zeros(obj.pn.nTotalEntries)
         for l = 0:obj.pn.N
@@ -969,7 +1005,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
         D = Diagonal(sigmaS[1] .- Dvec);
 
-        if n > 1 # perform streaming update after first collision (before solution is zero)
+        if n > 2 # perform streaming update after first collision (before solution is zero)
             ################## K-step ##################
             X[obj.boundaryIdx,:] .= 0.0;
             K .= X*S;
@@ -1076,14 +1112,8 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
                 uOUnc[idx] = psi[i,j,:]'*obj.MReduced[1,:];
             end
         end
-
-        #println(maximum(psi)," ",maximum(abs.(uOUnc))," ",maximum(abs.(uNew[:,1])))
+        obj.dose .+= 0.5*dE * (X*S*W[1,:]+uOUnc) * obj.csd.S[n] ./ obj.densityVec;
         
-        # update dose
-        #obj.dose .+= dE * (uNew[:,1]+uOUnc) * obj.csd.SMid[n] ./ obj.densityVec ./( 1 + (n==2||n==nEnergies));
-        # update dose
-        obj.dose .+= dE * (X*S*W[1,:]+uOUnc) * obj.csd.SMid[n-1] ./ obj.densityVec ./( 1 + (n==2||n==nEnergies));
-
         next!(prog) # update progress bar
     end
 
@@ -2232,10 +2262,18 @@ function SolveMCollisionSourceDLR(obj::SolverCSD)
 
 end
 
+function expm1div(x)
+    # Function (exp(x)-1)/x that is accurate for x close to zero.
+    y = 1+x*.5+x.^2/6;
+    if abs(x)>2e-4;
+        y = (exp(x)-1)./x;
+    end
+    return 1.0;#y;
+end
+
 function Solve(obj::SolverCSD)
     eTrafo = obj.csd.eTrafo;
     energy = obj.csd.eGrid;
-    S = obj.csd.S;
 
     # Set up initial condition and store as matrix
     v = SetupICMoments(obj);
@@ -2247,32 +2285,23 @@ function Solve(obj::SolverCSD)
         u[:,k] = vec(v[:,:,k]);
     end
 
-    # define density matrix
-    densityInv = Diagonal(1.0 ./obj.density);
     Id = Diagonal(ones(N));
-
-    # setup gamma vector (square norm of P) to nomralize
-    settings = obj.settings
 
     nEnergies = length(eTrafo);
     dE = eTrafo[2]-eTrafo[1];
     obj.settings.dE = dE
 
-    println("CFL = ",dE/obj.settings.dx*maximum(densityInv))
+    println("CFL = ",dE/obj.settings.dx*maximum(1.0 ./obj.density))
 
     uNew = deepcopy(u)
 
     prog = Progress(nEnergies-1,1)
 
-    #return 0.5*sqrt(obj.gamma[1])*u,obj.dose;
-
     #loop over energy
     for n=2:nEnergies
         # compute scattering coefficients at current energy
-        sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
+        sigmaS = SigmaAtEnergy(obj.csd,energy[n]);#1000.0.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
        
-        #writedlm("sigmaS_$(energy[n])",sigmaS[1] .- sigmaS);
-
         Dvec = zeros(obj.pn.nTotalEntries)
         for l = 0:obj.pn.N
             for k=-l:l
@@ -2280,37 +2309,31 @@ function Solve(obj::SolverCSD)
                 Dvec[i+1] = sigmaS[l+1]
             end
         end
+        #ET = expm1div.(-(sigmaS[1] .- Dvec)*dE);
 
-        D = Diagonal(sigmaS[1] .- Dvec);
-        #println(norm(D))
-
-        #println(sigmaS[1] .- Dvec)
-
-        # set boundary condition
-        #u[1,:] .= BCLeft(obj,n);
+        D = Diagonal((sigmaS[1] .- Dvec));#.*ET);
+        #println("E = ",energy[n]," ",sigmaS[1])
+        #println("ETrafo = ",eTrafo[n]," ",sigmaS[1].-sigmaS)
 
         # perform time update
-        #uTilde = u .- dE * RhsOld(obj,u); 
-        uDivRho = zeros(size(u));
-        for k = 1:size(u,2)
-            uDivRho[:,k] = u[:,k]./ obj.densityVec
-        end
-        uTilde = u .- dE * Rhs(obj,uDivRho); 
+        uTilde = u .- dE * RhsOld(obj,u);
 
-        #uTilde[1,:] .= BCLeft(obj,n);
-        #uNew = uTilde .- dE*uTilde*D;
         for j = 1:size(uNew,1)
             uNew[j,:] = (Id .+ dE*D)\uTilde[j,:];
         end
+        #uNew[obj.boundaryIdx] .= u[obj.boundaryIdx]; # no scattering in boundary cells
         
         # update dose
-        obj.dose .+= dE * uNew[:,1] * obj.csd.SMid[n-1] ./ obj.densityVec ./( 1 + (n==2||n==nEnergies));
+        #println("weight = ", obj.csd.SMid[n-1] ./( 1 + (n==2||n==nEnergies)))
+        obj.dose .+= dE * uNew[:,1] * obj.csd.SMid[n-1] ./( 1 + (n==2||n==nEnergies));
+        #obj.dose .+= dE * uNew[:,1] * obj.csd.SMid[n-1] ./( 1 + (n==2||n==nEnergies));
 
         u .= uNew;
+
         next!(prog) # update progress bar
     end
     # return end time and solution
-    return 0.5*sqrt(obj.gamma[1])*u,obj.dose;
+    return 0.5*sqrt(obj.gamma[1])*u,obj.dose./ obj.densityVec;
 
 end
 

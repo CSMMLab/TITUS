@@ -1,5 +1,10 @@
+__precompile__
+
+function sub2ind(s,row,col)
+    return LinearIndices(s)[CartesianIndex.(row,col)]
+end
+
 struct PNSystem
-    # system matrices
     Ax::Array{Float64,2};
     Ay::Array{Float64,2};
     Az::Array{Float64,2};
@@ -12,6 +17,8 @@ struct PNSystem
     # degree of expansion
     N::Int
 
+    M::SparseMatrixCSC{ComplexF64, Int64};
+
     # constructor
     function PNSystem(settings) 
         N = settings.nPN;
@@ -20,7 +27,29 @@ struct PNSystem
         Ay = zeros(nTotalEntries,nTotalEntries);
         Az = zeros(nTotalEntries,nTotalEntries);
 
-        new(Ax,Ay,Az,settings,nTotalEntries,N);
+        println("nTotalEntries = ",nTotalEntries)
+
+        IndI = []; IndJ = []; val = [];
+        # Assemble transformation matrix
+        for m = 2:N+1
+            for l = 1:m-1
+                r = (m.-1)^2 .+2*l;
+                IndItmp = Int.([r.-1,r,r-1,r]);
+                IndJtmp = Int.([(m-1)^2+l,(m-1)^2+l,m^2+1-l,m^2+1-l]);
+                valTmp = [1,-1im,(-1).^(m+l),(-1).^(m+l)*1im]./sqrt(2);
+                IndI = [IndI;IndItmp];
+                IndJ = [IndJ;IndJtmp];
+                val = [val;valTmp]
+            end
+        end
+        for m = 1:1:N+1
+            IndI = [IndI;m^2];
+            IndJ = [IndJ;(m-1)^2+m];
+            val = [val;1]
+        end
+        M = sparse(Int.(IndI),Int.(IndJ),val,nTotalEntries,nTotalEntries);
+
+        new(Ax,Ay,Az,settings,nTotalEntries,N,M);
     end
 end
 
