@@ -4,10 +4,11 @@ function sub2ind(s,row,col)
     return LinearIndices(s)[CartesianIndex.(row,col)]
 end
 
-struct PNSystem
-    Ax::Array{Float64,2};
-    Ay::Array{Float64,2};
-    Az::Array{Float64,2};
+mutable struct PNSystem
+    # symmetric flux matrices
+    Ax::SparseMatrixCSC{Float64, Int64};
+    Ay::SparseMatrixCSC{Float64, Int64};
+    Az::SparseMatrixCSC{Float64, Int64};
 
     # Solver settings
     settings::Settings;
@@ -23,11 +24,6 @@ struct PNSystem
     function PNSystem(settings) 
         N = settings.nPN;
         nTotalEntries = GlobalIndex( N, N ) + 1;    # total number of entries for sytem matrix
-        Ax = zeros(nTotalEntries,nTotalEntries);
-        Ay = zeros(nTotalEntries,nTotalEntries);
-        Az = zeros(nTotalEntries,nTotalEntries);
-
-        println("nTotalEntries = ",nTotalEntries)
 
         IndI = []; IndJ = []; val = [];
         # Assemble transformation matrix
@@ -49,7 +45,11 @@ struct PNSystem
         end
         M = sparse(Int.(IndI),Int.(IndJ),val,nTotalEntries,nTotalEntries);
 
-        new(Ax,Ay,Az,settings,nTotalEntries,N,M);
+        AxT = sparse([],[],[],nTotalEntries,nTotalEntries);
+        AyT = sparse([],[],[],nTotalEntries,nTotalEntries);
+        AzT = sparse([],[],[],nTotalEntries,nTotalEntries);
+
+        new(AxT,AyT,AzT,settings,nTotalEntries,N,M);
     end
 end
 
@@ -141,6 +141,10 @@ function SetupSystemMatrices(obj::PNSystem)
     nTotalEntries = obj.nTotalEntries;    # total number of entries for sytem matrix
     N = obj.N
 
+    Ax = zeros(nTotalEntries,nTotalEntries)
+    Ay = zeros(nTotalEntries,nTotalEntries)
+    Az = zeros(nTotalEntries,nTotalEntries)
+
     # loop over columns of A
     for l = 0:N
         for k=-l:l
@@ -149,50 +153,96 @@ function SetupSystemMatrices(obj::PNSystem)
             # flux matrix in direction x
             if k != -1
                 j = GlobalIndex( l - 1, kMinus( k ) );
-                if j >= 0 && j < nTotalEntries obj.Ax[i+1,j+1] = 0.5 * CTilde( l - 1, abs( k ) - 1 ); end
+                if j >= 0 && j < nTotalEntries Ax[i+1,j+1] = 0.5 * CTilde( l - 1, abs( k ) - 1 ); end
 
                 j = GlobalIndex( l + 1, kMinus( k ) );
-                if j >= 0 && j < nTotalEntries obj.Ax[i+1,j+1] = -0.5 * DTilde( l + 1, abs( k ) - 1 ); end
+                if j >= 0 && j < nTotalEntries Ax[i+1,j+1] = -0.5 * DTilde( l + 1, abs( k ) - 1 ); end
             end
 
             j = GlobalIndex( l - 1, kPlus( k ) );
-            if  j >= 0 && j < nTotalEntries  obj.Ax[i+1,j+1] = -0.5 * ETilde( l - 1, abs( k ) + 1 ); end
+            if  j >= 0 && j < nTotalEntries  Ax[i+1,j+1] = -0.5 * ETilde( l - 1, abs( k ) + 1 ); end
 
             j = GlobalIndex( l + 1, kPlus( k ) );
-            if  j >= 0 && j < nTotalEntries  obj.Ax[i+1,j+1] = 0.5 * FTilde( l + 1, abs( k ) + 1 ); end
+            if  j >= 0 && j < nTotalEntries  Ax[i+1,j+1] = 0.5 * FTilde( l + 1, abs( k ) + 1 ); end
 
             # flux matrix in direction y
             if  k != 1
                 j = GlobalIndex( l - 1, -kMinus( k ) );
-                if  j >= 0 && j < nTotalEntries  obj.Ay[i+1,j+1] = -0.5 * Sgn( k ) * CTilde( l - 1, abs( k ) - 1 ); end
+                if  j >= 0 && j < nTotalEntries  Ay[i+1,j+1] = -0.5 * Sgn( k ) * CTilde( l - 1, abs( k ) - 1 ); end
 
                 j = GlobalIndex( l + 1, -kMinus( k ) );
-                if  j >= 0 && j < nTotalEntries  obj.Ay[i+1,j+1] = 0.5 * Sgn( k ) * DTilde( l + 1, abs( k ) - 1 ); end
+                if  j >= 0 && j < nTotalEntries  Ay[i+1,j+1] = 0.5 * Sgn( k ) * DTilde( l + 1, abs( k ) - 1 ); end
             end
 
             j = GlobalIndex( l - 1, -kPlus( k ) );
-            if  j >= 0 && j < nTotalEntries  obj.Ay[i+1,j+1] = -0.5 * Sgn( k ) * ETilde( l - 1, abs( k ) + 1 ); end
+            if  j >= 0 && j < nTotalEntries  Ay[i+1,j+1] = -0.5 * Sgn( k ) * ETilde( l - 1, abs( k ) + 1 ); end
 
             j = GlobalIndex( l + 1, -kPlus( k ) );
-            if  j >= 0 && j < nTotalEntries  obj.Ay[i+1,j+1] = 0.5 * Sgn( k ) * FTilde( l + 1, abs( k ) + 1 ); end
+            if  j >= 0 && j < nTotalEntries  Ay[i+1,j+1] = 0.5 * Sgn( k ) * FTilde( l + 1, abs( k ) + 1 ); end
 
             # flux matrix in direction z
             j = GlobalIndex( l - 1, k );
-            if  j >= 0 && j < nTotalEntries  obj.Az[i+1,j+1] = AParam( l - 1, k ); end
+            if  j >= 0 && j < nTotalEntries  Az[i+1,j+1] = AParam( l - 1, k ); end
 
             j = GlobalIndex( l + 1, k );
-            if  j >= 0 && j < nTotalEntries  obj.Az[i+1,j+1] = BParam( l + 1, k ); end
+            if  j >= 0 && j < nTotalEntries  Az[i+1,j+1] = BParam( l + 1, k ); end
         end
     end
-    #println("System Matrix Set UP!")
-    #println("A_x =", obj.Ax)
-    #println("A_y =", obj.Ay)
-    #println("A_z =", obj.Az)
+    return Ax,Ay,Az
 end
 
-#function G( const Vector& u, const Vector& v, const Vector& nUnit, const Vector& n ) {
-#    unused( nUnit );
-#
-#    // return F( 0.5 * ( u + v ) ) * n - 0.5 * ( v - u ) * norm( n );
-#    return 0.5 * ( F( u ) + F( v ) ) * n - 0.5 * _AbsAx * ( v - u ) * fabs( n[0] ) - 0.5 * _AbsAz * ( v - u ) * fabs( n[1] );
-#end
+function SetupSystemMatricesSparse(obj::PNSystem)
+    nTotalEntries = obj.nTotalEntries;    # total number of entries for sytem matrix
+    N = obj.N
+
+    Ix = []; Jx = []; valsx = [];
+    Iy = []; Jy = []; valsy = [];
+    Iz = []; Jz = []; valsz = [];
+
+    # loop over columns of A
+    for l = 0:N
+        for k=-l:l
+            i = GlobalIndex( l, k ) ;
+
+            # flux matrix in direction x
+            if k != -1
+                j = GlobalIndex( l - 1, kMinus( k ) );
+                if j >= 0 && j < nTotalEntries Ix = [Ix;i+1]; Jx = [Jx;j+1]; valsx = [valsx; 0.5 * CTilde( l - 1, abs( k ) - 1 )]; end
+
+                j = GlobalIndex( l + 1, kMinus( k ) );
+                if j >= 0 && j < nTotalEntries Ix = [Ix;i+1]; Jx = [Jx;j+1]; valsx = [valsx; -0.5 * DTilde( l + 1, abs( k ) - 1 )]; end
+            end
+
+            j = GlobalIndex( l - 1, kPlus( k ) );
+            if  j >= 0 && j < nTotalEntries  Ix = [Ix;i+1]; Jx = [Jx;j+1]; valsx = [valsx; -0.5 * ETilde( l - 1, abs( k ) + 1 )]; end
+
+            j = GlobalIndex( l + 1, kPlus( k ) );
+            if  j >= 0 && j < nTotalEntries  Ix = [Ix;i+1]; Jx = [Jx;j+1]; valsx = [valsx; 0.5 * FTilde( l + 1, abs( k ) + 1 )]; end
+
+            # flux matrix in direction y
+            if  k != 1
+                j = GlobalIndex( l - 1, -kMinus( k ) );
+                if  j >= 0 && j < nTotalEntries Iy = [Iy;i+1]; Jy = [Jy;j+1]; valsy = [valsy; -0.5 * Sgn( k ) * CTilde( l - 1, abs( k ) - 1 )]; end
+
+                j = GlobalIndex( l + 1, -kMinus( k ) );
+                if  j >= 0 && j < nTotalEntries  Iy = [Iy;i+1]; Jy = [Jy;j+1]; valsy = [valsy; 0.5 * Sgn( k ) * DTilde( l + 1, abs( k ) - 1 )]; end
+            end
+
+            j = GlobalIndex( l - 1, -kPlus( k ) );
+            if  j >= 0 && j < nTotalEntries  Iy = [Iy;i+1]; Jy = [Jy;j+1]; valsy = [valsy; -0.5 * Sgn( k ) * ETilde( l - 1, abs( k ) + 1 )]; end
+
+            j = GlobalIndex( l + 1, -kPlus( k ) );
+            if  j >= 0 && j < nTotalEntries  Iy = [Iy;i+1]; Jy = [Jy;j+1]; valsy = [valsy; 0.5 * Sgn( k ) * FTilde( l + 1, abs( k ) + 1 )]; end
+
+            # flux matrix in direction z
+            j = GlobalIndex( l - 1, k );
+            if  j >= 0 && j < nTotalEntries  Iz = [Iz;i+1]; Jz = [Jz;j+1]; valsz = [valsz; AParam( l - 1, k )]; end
+
+            j = GlobalIndex( l + 1, k );
+            if  j >= 0 && j < nTotalEntries  Iz = [Iz;i+1]; Jz = [Jz;j+1]; valsz = [valsz; BParam( l + 1, k )]; end
+        end
+    end
+    obj.Ax = sparse(Ix,Jx,valsx,obj.nTotalEntries,obj.nTotalEntries);
+    obj.Ay = sparse(Iy,Jy,valsy,obj.nTotalEntries,obj.nTotalEntries);
+    obj.Az = sparse(Iz,Jz,valsz,obj.nTotalEntries,obj.nTotalEntries);
+end

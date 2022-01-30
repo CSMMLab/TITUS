@@ -28,8 +28,8 @@ mutable struct SolverCSD
     # squared L2 norms of Legendre coeffs
     gamma::Array{Float64,1};
     # Roe matrix
-    AbsAx::Array{Float64,2};
-    AbsAz::Array{Float64,2};
+    AbsAx::SparseMatrixCSC{Float64, Int64};
+    AbsAz::SparseMatrixCSC{Float64, Int64};
     AxPlus::Array{Float64,2};
     AxMinus::Array{Float64,2};
     AzPlus::Array{Float64,2};
@@ -96,13 +96,14 @@ mutable struct SolverCSD
 
         # construct PN system matrices
         pn = PNSystem(settings)
-        SetupSystemMatrices(pn);
+        Ax,Ay,Az = SetupSystemMatrices(pn);
+        SetupSystemMatricesSparse(pn);
 
         outRhs = zeros(settings.NCellsX,settings.NCellsY,pn.nTotalEntries);
 
         # setup Roe matrix
-        S = eigvals(pn.Ax)
-        V = eigvecs(pn.Ax)
+        S = eigvals(Ax)
+        V = eigvecs(Ax)
         AbsAx = V*abs.(diagm(S))*inv(V)
         idxPos = findall((S.>=0.0))
         idxNeg = findall((S.<0.0))
@@ -110,10 +111,13 @@ mutable struct SolverCSD
         SMinus = zeros(size(S)); SMinus[idxNeg] = S[idxNeg];
         AxPlus = V*diagm(SPlus)*inv(V)
         AxMinus = V*diagm(SMinus)*inv(V)
-        
 
-        S = eigvals(pn.Az)
-        V = eigvecs(pn.Az)
+        idx = findall(abs.(AbsAx) .> 1e-10)
+        Ix = first.(Tuple.(idx)); Jx = last.(Tuple.(idx)); vals = AbsAx[idx];
+        AbsAx = sparse(Ix,Jx,vals,pn.nTotalEntries,pn.nTotalEntries);
+        
+        S = eigvals(Az)
+        V = eigvecs(Az)
         AbsAz = V*abs.(diagm(S))*inv(V)
         idxPos = findall((S.>=0.0))
         idxNeg = findall((S.<0.0))
@@ -121,6 +125,10 @@ mutable struct SolverCSD
         SMinus = zeros(size(S)); SMinus[idxNeg] = S[idxNeg];
         AzPlus = V*diagm(SPlus)*inv(V)
         AzMinus = V*diagm(SMinus)*inv(V)
+
+        idx = findall(abs.(AbsAz) .> 1e-10)
+        Iz = first.(Tuple.(idx)); Jz = last.(Tuple.(idx)); valsz = AbsAz[idx];
+        AbsAz = sparse(Iz,Jz,valsz,pn.nTotalEntries,pn.nTotalEntries);
 
         # set density vector
         density = settings.density;
@@ -579,7 +587,7 @@ function Rhs(obj::SolverCSD,u::Array{Float64,2},t::Float64=0.0)
 end
 
 function RhsOld(obj::SolverCSD,u::Array{Float64,2},t::Float64=0.0)   
-    return obj.L2x*u*obj.pn.Ax' + obj.L2y*u*obj.pn.Az' + obj.L1x*u*obj.AbsAx' + obj.L1y*u*obj.AbsAz';
+    return obj.L2x*u*obj.pn.Ax + obj.L2y*u*obj.pn.Az + obj.L1x*u*obj.AbsAx' + obj.L1y*u*obj.AbsAz';
 end
 
 @inline minmod(x::Float64, y::Float64) = ifelse(x < 0, clamp(y, x, 0.0), clamp(y, 0.0, x))
@@ -1010,10 +1018,10 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
             X[obj.boundaryIdx,:] .= 0.0;
             K .= X*S;
 
-            WAzW .= W'*obj.pn.Az'*W
+            WAzW .= W'*obj.pn.Az*W # Az  = Az^T
             WAbsAzW .= W'*obj.AbsAz'*W
             WAbsAxW .= W'*obj.AbsAx'*W
-            WAxW .= W'*obj.pn.Ax'*W
+            WAxW .= W'*obj.pn.Ax*W # Ax  = Ax^T
 
             K .= K .- dE*(obj.L2x*K*WAxW + obj.L2y*K*WAzW + obj.L1x*K*WAbsAxW + obj.L1y*K*WAbsAzW);
 

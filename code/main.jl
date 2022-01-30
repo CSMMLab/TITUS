@@ -8,7 +8,7 @@ using PyPlot
 using DelimitedFiles
 using WriteVTK
 
-close("all")
+#close("all")
 
 nx = 151;
 ny = 151;
