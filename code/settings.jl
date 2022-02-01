@@ -10,6 +10,10 @@ mutable struct Settings
     # number spatial cells
     NCellsX::Int64;
     NCellsY::Int64;
+
+    # number of uncertain collocation points
+    nxi::Int64;
+
     # start and end point
     a::Float64;
     b::Float64;
@@ -18,6 +22,9 @@ mutable struct Settings
     # grid cell width
     dx::Float64
     dy::Float64
+
+    # UQ settings
+    sigmaXi::Float64
 
     # time settings
     # end time
@@ -59,7 +66,7 @@ mutable struct Settings
     epsAdapt::Float64;  
     adaptIndex::Float64;
 
-    function Settings(Nx::Int=102,Ny::Int=102,r::Int=15,problem::String="LineSource")
+    function Settings(Nx::Int=102,Ny::Int=102,nxi::Int=10,r::Int=15,problem::String="LineSource")
 
         # spatial grid setting
         NCellsX = Nx - 1;
@@ -84,6 +91,7 @@ mutable struct Settings
         densityMin = 0.2;
         adaptIndex = 1;
         epsAdapt = 1e-2;
+        sigmaXi = 0.4;
         if problem =="LineSource"
             a = -1.5
             b = 1.5;
@@ -171,8 +179,7 @@ mutable struct Settings
             img = Float64.(Gray.(load("Lung.png")))
             nx = size(img,1)
             ny = size(img,2)
-            println(size(img))
-            densityMin = 0.05
+            densityMin = 0.1
             for i = 1:NCellsX
                 for j = 1:NCellsY
                     density[i,j] = max(1.85*img[Int(floor(i/NCellsX*nx)),Int(floor(j/NCellsY*ny))],densityMin) # 1.85 bone, 1.04 muscle, 0.3 lung
@@ -181,7 +188,7 @@ mutable struct Settings
             b = 14.5; # right boundary
             d = 14.5; # upper boundary
             eMax = 21.0
-            cfl = 1.5
+            cfl = 1.5;
             x0 = 0.5*b;
             y0 = 1.0*d;
             Omega1 = -1.0;
@@ -228,22 +235,22 @@ mutable struct Settings
         dE = cfl*min(dx,dy)*minimum(density);#1/90#
         
         # number PN moments
-        nPN = 21#13, 21; # use odd number
+        nPN = 13#13, 21; # use odd number
 
         # build class
-        new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex);
+        new(Nx,Ny,NCellsX,NCellsY,nxi,a,b,c,d,dx,dy,sigmaXi,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex);
     end
 end
 
-function IC(obj::Settings,x,y)
+function IC(obj::Settings,x,y,xi)
     out = zeros(length(x),length(y));
     posBeamX = (obj.b+obj.a)/2;
     posBeamY = (obj.d+obj.c)/2;
     if obj.problem != "LineSource" && obj.problem != "2DHighD" && obj.problem != "2DHighLowD"
         return out;
     end
-    x0 = x .- posBeamX;
-    y0 = y .- posBeamY;
+    x0 = x .- posBeamX + xi;
+    y0 = y .- posBeamY + xi;
     
     s1 = 0.05
     if obj.problem == "2DHighD" || obj.problem == "2DHighLowD"

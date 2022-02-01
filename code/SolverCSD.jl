@@ -18,6 +18,8 @@ mutable struct SolverCSD
     x::Array{Float64};
     y::Array{Float64};
     xGrid::Array{Float64,2}
+    xi::Array{Float64,1};
+    wXi::Array{Float64,1};
 
     # Solver settings
     settings::Settings;
@@ -72,6 +74,7 @@ mutable struct SolverCSD
     function SolverCSD(settings)
         x = settings.x;
         y = settings.y;
+        xi,wXi = gausslegendre(settings.nxi)
 
         # setup flux matrix
         gamma = zeros(settings.nPN+1);
@@ -112,7 +115,7 @@ mutable struct SolverCSD
         AxPlus = V*diagm(SPlus)*inv(V)
         AxMinus = V*diagm(SMinus)*inv(V)
 
-        idx = findall(abs.(AbsAx) .> 1e-10)
+        idx = findall(abs.(AbsAx) .> 1e-6)
         Ix = first.(Tuple.(idx)); Jx = last.(Tuple.(idx)); vals = AbsAx[idx];
         AbsAx = sparse(Ix,Jx,vals,pn.nTotalEntries,pn.nTotalEntries);
         
@@ -126,7 +129,7 @@ mutable struct SolverCSD
         AzPlus = V*diagm(SPlus)*inv(V)
         AzMinus = V*diagm(SMinus)*inv(V)
 
-        idx = findall(abs.(AbsAz) .> 1e-10)
+        idx = findall(abs.(AbsAz) .> 1e-6)
         Iz = first.(Tuple.(idx)); Jz = last.(Tuple.(idx)); valsz = AbsAz[idx];
         AbsAz = sparse(Iz,Jz,valsz,pn.nTotalEntries,pn.nTotalEntries);
 
@@ -368,7 +371,7 @@ mutable struct SolverCSD
             O[q,:] /= v[q]
         end
 
-        new(x,y,xGrid,settings,outRhs,gamma,AbsAx,AbsAz,AxPlus,AxMinus,AzPlus,AzMinus,P,mu,w,csd,pn,density,vec(density'),dose,L1x,L1y,L2x,L2y,boundaryIdx,boundaryBeam,Q,O,M);
+        new(x,y,xGrid,xi*settings.sigmaXi,wXi./sum(wXi),settings,outRhs,gamma,AbsAx,AbsAz,AxPlus,AxMinus,AzPlus,AzMinus,P,mu,w,csd,pn,density,vec(density'),dose,L1x,L1y,L2x,L2y,boundaryIdx,boundaryBeam,Q,O,M);
     end
 end
 
@@ -376,24 +379,28 @@ function SetupIC(obj::SolverCSD)
     nq = obj.Q.nquadpoints;
     nx = obj.settings.NCellsX;
     ny = obj.settings.NCellsY;
-    psi = zeros(obj.settings.NCellsX,obj.settings.NCellsY,nq);
+    psi = zeros(obj.settings.NCellsX,obj.settings.NCellsY,obj.settings.nxi,nq);
 
     if obj.settings.problem == "validation"
         for i = 1:nx
             for j = 1:ny
-                for k = 1:nq
-                    sigmaO1Inv = 10000.0;
-                    sigmaO3Inv = 10000.0;
-                    pos_beam = [0.5*14.5,0.0,0];
-                    space_beam = normpdf(obj.settings.xMid[i],pos_beam[1],.01).*normpdf(obj.settings.yMid[j],pos_beam[2],.01);
-                    trafo = 1.0;#obj.csd.S[1]*obj.settings.density[i,j];
-                    psi[i,j,k] = 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-obj.Q.pointsxyz[k,1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-obj.Q.pointsxyz[k,3])^2)*space_beam*trafo;
+                for l = 1:nxi
+                    for k = 1:nq
+                        sigmaO1Inv = 10000.0;
+                        sigmaO3Inv = 10000.0;
+                        pos_beam = [0.5*14.5,0.0,0];
+                        space_beam = normpdf(obj.settings.xMid[i],pos_beam[1]+obj.xi[l],.01).*normpdf(obj.settings.yMid[j],pos_beam[2],.01);
+                        trafo = 1.0;#obj.csd.S[1]*obj.settings.density[i,j];
+                        psi[i,j,l,k] = 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-obj.Q.pointsxyz[k,1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-obj.Q.pointsxyz[k,3])^2)*space_beam*trafo;
+                    end
                 end
             end
         end
     else    
-        for k = 1:nq
-            psi[:,:,k] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)
+        for l = 1:nxi
+            for k = 1:nq
+                psi[:,:,l,k] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid,obj.xi[l])
+            end
         end
     end
     
@@ -468,7 +475,7 @@ function PsiLeft(obj::SolverCSD,n::Int,mu::Float64)
     return 10^5*exp(-200.0*(1.0-mu)^2)*exp(-50*(E0-E)^2)
 end
 
-function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y::Float64,n::Int)
+function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y::Float64,xi::Float64,n::Int)
     E0 = obj.settings.eMax;
     if obj.settings.problem == "lung" || obj.settings.problem == "lungOrig"
         sigmaO1Inv = 0.0;
@@ -493,7 +500,7 @@ function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y:
     elseif obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD"
         return 0.0;
     end
-    return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*exp(-sigmaEInv*(E0-E)^2)*exp(-sigmaXInv*(x-obj.settings.x0)^2)*exp(-sigmaYInv*(y-obj.settings.y0)^2)*obj.csd.S[n]*obj.settings.densityMin;
+    return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*exp(-sigmaEInv*(E0-E)^2)*exp(-sigmaXInv*(x-obj.settings.x0 + xi)^2)*exp(-sigmaYInv*(y-obj.settings.y0 + xi)^2)*obj.csd.S[n]*obj.settings.densityMin;
 end
 
 function BCLeft(obj::SolverCSD,n::Int)
@@ -572,14 +579,6 @@ function Rhs(obj::SolverCSD,u::Array{Float64,2},t::Float64=0.0)
         gEast = (obj.AxPlus*u[vectorIndex(ny,i,j),:] + obj.AxMinus*u[vectorIndex(ny,i+1,j),:])*dy;
         gWest = -(obj.AxPlus*u[vectorIndex(ny,i-1,j),:] + obj.AxMinus*u[vectorIndex(ny,i,j),:])*dy;
 
-        #println(vectorIndex(ny,Int(ceil()),j))
-        if vectorIndex(ny,i,j) == 11176 #11325
-            #println("gNorth = ",gNorth)
-            #println("gSouth = ",gSouth)
-            #println("gEast = ",gEast)
-            #println("gWest = ",gWest)
-        end
-
         out[vectorIndex(ny,i,j),:] = (gNorth+gSouth+gEast+gWest)/dx/dy;
 
     end
@@ -587,7 +586,7 @@ function Rhs(obj::SolverCSD,u::Array{Float64,2},t::Float64=0.0)
 end
 
 function RhsOld(obj::SolverCSD,u::Array{Float64,2},t::Float64=0.0)   
-    return obj.L2x*u*obj.pn.Ax + obj.L2y*u*obj.pn.Az + obj.L1x*u*obj.AbsAx' + obj.L1y*u*obj.AbsAz';
+    return obj.L2x*mult_eff(obj,u,obj.pn.Ax) + obj.L2y*mult_eff(obj,u,obj.pn.Az) + obj.L1x*mult_eff(obj,u,obj.AbsAx) + obj.L1y*mult_eff(obj,u,obj.AbsAz);
 end
 
 @inline minmod(x::Float64, y::Float64) = ifelse(x < 0, clamp(y, x, 0.0), clamp(y, 0.0, x))
@@ -690,7 +689,7 @@ function solveFlux!(obj::SolverCSD, phi::Array{Float64,3}, flux::Array{Float64,3
     end
 end
 
-function solveFluxUpwind!(obj::SolverCSD, phi::Array{Float64,3}, flux::Array{Float64,3})
+function solveFluxUpwind!(obj::SolverCSD, phi::Array{Float64,4}, flux::Array{Float64,4})
     # computes the numerical flux over cell boundaries for each ordinate
     # for faster computation, we split the iteration over quadrature points
     # into four different blocks: North West, Nort East, Sout West, South East
@@ -702,67 +701,68 @@ function solveFluxUpwind!(obj::SolverCSD, phi::Array{Float64,3}, flux::Array{Flo
 
     nx = collect(2:(obj.settings.NCellsX-1));
     ny = collect(2:(obj.settings.NCellsY-1));
+    nxi = collect(1:(obj.settings.nxi));
 
     # PosPos
-    for j=ny,i=nx, q = idxPosPos
-        s2 = phi[i,j-1,q]
-        s3 = phi[i,j,q]
+    for j=ny,i=nx,l=nxi, q = idxPosPos
+        s2 = phi[i,j-1,l,q]
+        s3 = phi[i,j,l,q]
         northflux = s3
         southflux = s2
 
-        s2 = phi[i-1,j,q]
-        s3 = phi[i,j,q]
+        s2 = phi[i-1,j,l,q]
+        s3 = phi[i,j,l,q]
         eastflux = s3
         westflux = s2
 
-        flux[i,j,q] = obj.qReduced[q,1] ./obj.settings.dx .* (eastflux-westflux) +
+        flux[i,j,l,q] = obj.qReduced[q,1] ./obj.settings.dx .* (eastflux-westflux) +
         obj.qReduced[q,2]./obj.settings.dy .* (northflux-southflux)
     end
     #PosNeg
-    for j=ny,i=nx,q = idxPosNeg
-        s2 = phi[i,j,q]
-        s3 = phi[i,j+1,q]
+    for j=ny,i=nx,l=nxi,q = idxPosNeg
+        s2 = phi[i,j,l,q]
+        s3 = phi[i,j+1,l,q]
         northflux = s3
         southflux = s2
 
-        s2 = phi[i-1,j,q]
-        s3 = phi[i,j,q]
+        s2 = phi[i-1,j,l,q]
+        s3 = phi[i,j,l,q]
         eastflux = s3
         westflux = s2
 
-        flux[i,j,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
+        flux[i,j,l,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
         obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux)
     end
 
     # NegPos
-    for j=ny,i=nx,q = idxNegPos
-        s2 = phi[i,j-1,q]
-        s3 = phi[i,j,q]
+    for j=ny,i=nx,l=nxi,q = idxNegPos
+        s2 = phi[i,j-1,l,q]
+        s3 = phi[i,j,l,q]
         northflux = s3
         southflux = s2
 
-        s2 = phi[i,j,q]
-        s3 = phi[i+1,j,q]
+        s2 = phi[i,j,l,q]
+        s3 = phi[i+1,j,l,q]
         eastflux = s3
         westflux = s2
 
-        flux[i,j,q] = obj.qReduced[q,1]./obj.settings.dx .*(eastflux-westflux) +
+        flux[i,j,l,q] = obj.qReduced[q,1]./obj.settings.dx .*(eastflux-westflux) +
         obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux)
     end
 
     # NegNeg
-    for j=ny,i=nx,q = idxNegNeg
-        s2 = phi[i,j,q]
-        s3 = phi[i,j+1,q]
+    for j=ny,i=nx,l=nxi,q = idxNegNeg
+        s2 = phi[i,j,l,q]
+        s3 = phi[i,j+1,l,q]
         northflux = s3
         southflux = s2
 
-        s2 = phi[i,j,q]
-        s3 = phi[i+1,j,q]
+        s2 = phi[i,j,l,q]
+        s3 = phi[i+1,j,l,q]
         eastflux = s3
         westflux = s2
 
-        flux[i,j,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
+        flux[i,j,l,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
         obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux)
     end
 end
@@ -888,35 +888,43 @@ function SolveFirstCollisionSource(obj::SolverCSD)
 end
 
 function SolveFirstCollisionSourceDLR(obj::SolverCSD)
+    s = obj.settings;
     # Get rank
-    r=obj.settings.r;
+    r=s.r;
 
     eTrafo = obj.csd.eTrafo;
     energy = obj.csd.eGrid;
     S = obj.csd.S;
 
-    nx = obj.settings.NCellsX;
-    ny = obj.settings.NCellsY;
+    nx = s.NCellsX;
+    ny = s.NCellsY;
     nq = obj.Q.nquadpoints;
     N = obj.pn.nTotalEntries;
+
+    # UQ variables
+    nxi = s.nxi;
+    xi = obj.xi;
+    w = obj.wXi;
+
+    doseXi = zeros(nxi,nx*ny);
 
     # Set up initial condition and store as matrix
     psi = SetupIC(obj);
     floorPsiAll = 1e-1;
-    floorPsi = 1e-17;
-    if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" # determine relevant directions in IC
+    floorPsi = 1e-6;
+    if s.problem == "LineSource" || s.problem == "2DHighD" || s.problem == "2DHighLowD" # determine relevant directions in IC
         println(size(psi))
         idxFullBeam = findall(psi .> floorPsiAll)
         println(maximum(psi))
         idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
-    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" # determine relevant directions in beam
+    elseif s.problem == "lung" || s.problem == "lungOrig" || s.problem == "liver" || s.problem == "validation" # determine relevant directions in beam
         psiBeam = zeros(nq)
         for k = 1:nq
-            psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)
+            psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],s.eMax,s.x0,s.y0,0.0,1)
         end
         idxBeam = findall( psiBeam .> floorPsi*maximum(psiBeam) );
     end
-    psi = psi[:,:,idxBeam]
+    psi = psi[:,:,:,idxBeam]
     obj.qReduced = obj.Q.pointsxyz[idxBeam,:]
     obj.MReduced = obj.M[:,idxBeam]
     obj.OReduced = obj.O[idxBeam,:]
@@ -928,7 +936,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     Id = Diagonal(ones(N));
 
     # Low-rank approx of init data:
-    X,S,W = svd(zeros(nx*ny,N));
+    X,S,W = svd(zeros(nx*ny,N*nxi));
     
     # rank-r truncation:
     X = X[:,1:r];
@@ -957,15 +965,17 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
     nEnergies = length(eTrafo);
     dE = eTrafo[2]-eTrafo[1];
-    obj.settings.dE = dE
+    s.dE = dE
 
-    println("CFL = ",dE/min(obj.settings.dx,obj.settings.dy)*maximum(densityInv))
+    println("CFL = ",dE/min(s.dx,s.dy)*maximum(densityInv))
 
     flux = zeros(size(psi))
 
     prog = Progress(nEnergies-1,1)
 
-    uOUnc = zeros(nx*ny);
+    uOUnc = zeros(nx*ny,s.nxi);
+    XX = (s.xMid[2:end-1]'.*ones(size(s.yMid[2:end-1])))
+    YY = (s.yMid[2:end-1]'.*ones(size(s.xMid[2:end-1])))'
     
     #loop over energy
     for n=2:nEnergies
@@ -973,15 +983,17 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
 
         # set boundary condition
-        if obj.settings.problem != "validation" # validation testcase sets beam in initial condition
-            for k = 1:nq
-                for j = 1:nx
-                    psi[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
-                    psi[j,end,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
-                end
-                for j = 1:ny
-                    psi[1,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
-                    psi[end,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
+        if s.problem != "validation" # validation testcase sets beam in initial condition
+            for l = 1:nxi
+                for k = 1:nq
+                    for j = 1:nx
+                        psi[j,1,l,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[1],xi[l],n-1);
+                        psi[j,end,l,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[end],xi[l],n-1);
+                    end
+                    for j = 1:ny
+                        psi[1,j,l,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[1],s.yMid[j],xi[l],n-1);
+                        psi[end,j,l,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[end],s.yMid[j],xi[l],n-1);
+                    end
                 end
             end
         end
@@ -990,10 +1002,15 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         for i = 1:nx
             for j = 1:ny
                 idx = (i-1)*ny + j
-                uOUnc[idx] = psi[i,j,:]'*obj.MReduced[1,:];
+                for l = 1:nxi
+                    uOUnc[idx,l] = psi[i,j,l,:]'*obj.MReduced[1,:];
+                end
             end
         end
-        obj.dose .+= 0.5*dE * (X*S*W[1,:]+uOUnc) * obj.csd.S[n-1] ./ obj.densityVec ;
+        
+        for l = 1:nxi
+            doseXi[l,:] .+= 0.5*dE * (X*S*W[(l-1)*obj.pn.nTotalEntries + 1,:] .+ uOUnc[:,l] )* obj.csd.S[n-1] ./ obj.densityVec;
+        end
 
         # stream uncollided particles
         solveFluxUpwind!(obj,psi,flux);
@@ -1018,10 +1035,10 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
             X[obj.boundaryIdx,:] .= 0.0;
             K .= X*S;
 
-            WAzW .= W'*obj.pn.Az*W # Az  = Az^T
-            WAbsAzW .= W'*obj.AbsAz'*W
-            WAbsAxW .= W'*obj.AbsAx'*W
-            WAxW .= W'*obj.pn.Ax*W # Ax  = Ax^T
+            WAzW .= mult_eff(obj,Matrix(W'),obj.pn.Az)*W; # Az  = Az^T
+            WAbsAzW .= mult_eff(obj,Matrix(W'),obj.AbsAz)*W;
+            WAbsAxW .= mult_eff(obj,Matrix(W'),obj.AbsAx)*W;
+            WAxW .= mult_eff(obj,Matrix(W'),obj.pn.Ax)*W; # Ax  = Ax^T
 
             K .= K .- dE*(obj.L2x*K*WAxW + obj.L2y*K*WAzW + obj.L1x*K*WAbsAxW + obj.L1y*K*WAbsAzW);
 
@@ -1038,7 +1055,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
             XL1xX .= X'*obj.L1x*X
             XL1yX .= X'*obj.L1y*X
 
-            L .= L .- dE*(obj.pn.Ax*L*XL2xX' + obj.pn.Az*L*XL2yX' + obj.AbsAx*L*XL1xX' + obj.AbsAz*L*XL1yX');
+            L .= L .- dE*(mult_eff(obj,obj.pn.Ax,L)*XL2xX' + mult_eff(obj,obj.pn.Az,L)*XL2yX' + mult_eff(obj,obj.AbsAx,L)*XL1xX' + mult_eff(obj,obj.AbsAz,L)*XL1yX');
                     
             WNew,STmp = qr(L);
             WNew = Matrix(WNew)
@@ -1058,10 +1075,10 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
             XL1xX .= X'*obj.L1x*X
             XL1yX .= X'*obj.L1y*X
 
-            WAzW .= W'*obj.pn.Az'*W
-            WAbsAzW .= W'*obj.AbsAz'*W
-            WAbsAxW .= W'*obj.AbsAx'*W
-            WAxW .= W'*obj.pn.Ax'*W
+            WAzW .= mult_eff(obj,Matrix(W'),obj.pn.Az)*W; 
+            WAbsAzW .= mult_eff(obj,Matrix(W'),obj.AbsAz)*W;
+            WAbsAxW .= mult_eff(obj,Matrix(W'),obj.AbsAx)*W;
+            WAxW .= mult_eff(obj,Matrix(W'),obj.pn.Ax)*W; 
 
             S .= S .- dE.*(XL2xX*S*WAxW + XL2yX*S*WAzW + XL1xX*S*WAbsAxW + XL1yX*S*WAbsAzW);
         end
@@ -1070,7 +1087,9 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         L = W*S';
 
         for i = 1:r
-            L[:,i] = (Id .+ dE*D)\L[:,i]
+            for l = 1:nxi
+                L[(l-1)*obj.pn.nTotalEntries .+ (1:obj.pn.nTotalEntries),i] = (Id .+ dE*D)\L[(l-1)*obj.pn.nTotalEntries .+ (1:obj.pn.nTotalEntries),i]
+            end
         end
 
         W,S = qr(L);
@@ -1086,8 +1105,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         ################## K-step ##################
         X[obj.boundaryIdx,:] .= 0.0;
         K .= X*S;
-        #u = u .+dE*Mat2Vec(psiNew)*M'*Diagonal(Dvec);
-        K = K .+dE*Mat2Vec(psi)*obj.MReduced'*Diagonal(Dvec)*W;
+        K = K .+dE*mult_eff(obj,Ten2Vec(psi),obj.MReduced'*Diagonal(Dvec))*W;
         K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
         XNew,STmp = qr!(K);
@@ -1098,7 +1116,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
         ################## L-step ##################
         L = W*S';
-        L = L .+dE*(Mat2Vec(psi)*obj.MReduced'*Diagonal(Dvec))'*X;
+        L = L .+dE*(mult_eff(obj,Ten2Vec(psi),obj.MReduced'*Diagonal(Dvec)))'*X;
 
         WNew,STmp = qr(L);
         WNew = Matrix(WNew)
@@ -1111,23 +1129,53 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
         ################## S-step ##################
         S .= MUp*S*(NUp')
-        S .= S .+dE*X'*Mat2Vec(psi)*obj.MReduced'*Diagonal(Dvec)*W;
+        S .= S .+dE*X'*mult_eff(obj,Ten2Vec(psi),obj.MReduced'*Diagonal(Dvec))*W;
 
         ############## Dose Computation ##############
         for i = 1:nx
             for j = 1:ny
                 idx = (i-1)*ny + j
-                uOUnc[idx] = psi[i,j,:]'*obj.MReduced[1,:];
+                for l = 1:nxi
+                    uOUnc[idx,l] = psi[i,j,l,:]'*obj.MReduced[1,:];
+                end
             end
         end
-        obj.dose .+= 0.5*dE * (X*S*W[1,:]+uOUnc) * obj.csd.S[n] ./ obj.densityVec;
+        for l = 1:nxi
+            doseXi[l,:] .+= 0.5*dE * (X*S*W[(l-1)*obj.pn.nTotalEntries + 1,:] .+ uOUnc[:,l] )* obj.csd.S[n-1] ./ obj.densityVec;
+        end
+
+        ######## Plotting #########
+        if mod(n,Int(round(10*nEnergies/474/2))) == 1
+            close("all")
+            U,Sigma,V = svd(S);
+            fig = figure("Dose, DLRA",figsize=(10*(s.d/s.b),10),dpi=100)
+            ax = gca()
+            pcolormesh(YY,XX,Vec2Mat(s.NCellsX,s.NCellsY,X*U[:,1])[2:end-1,2:end-1]')
+            ax.tick_params("both",labelsize=20) 
+            plt.xlabel("x", fontsize=20)
+            plt.ylabel("y", fontsize=20)
+            plt.title("dominant spatial mode,  E = $(round(obj.csd.eGrid[n], digits=3)) MeV", fontsize=25)
+            tight_layout()
+            savefig("output/gif/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)_$(n).png")
+        end
         
         next!(prog) # update progress bar
     end
 
+    for l = 1:nxi
+        obj.dose .+= w[l]*doseXi[l,:];
+    end
+
+    VarDose = zeros(size(obj.dose));
+
+    # compute dose variance
+    for l = 1:nxi
+        VarDose .+= w[l]*(doseXi[l,:] .- obj.dose).^2;
+    end
+
     U,Sigma,V = svd(S);
     # return solution and dose
-    return X*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*W*V,obj.dose,psi;
+    return X*U, 0.5*sqrt(obj.gamma[1])*Sigma,W*V,obj.dose,VarDose,psi; #obj.O*W*V,obj.dose,psi;
 
 end
 
@@ -2647,5 +2695,60 @@ function Mat2Vec(mat)
             v[(i-1)*ny + j,:] = mat[i,j,:]
         end
     end
+    return v;
+end
+
+function Ten2Vec(ten)
+    nx = size(ten,1)
+    ny = size(ten,2)
+    nxi = size(ten,3)
+    m = size(ten,4)
+    v = zeros(nx*ny,m*nxi);
+    for i = 1:nx
+        for j = 1:ny
+            for l = 1:nxi
+                for k = 1:m
+                    v[(i-1)*ny + j,(l-1)*m .+ k] = ten[i,j,l,k]
+                end
+            end
+        end
+    end
+    return v;
+end
+
+function mult_eff(obj::SolverCSD,u::Array{Float64,2},A::SparseMatrixCSC{Float64, Int64})
+    n = obj.pn.nTotalEntries;
+    nxi = obj.settings.nxi
+    m = size(u,1);
+    v = zeros(m,n*nxi);
+    for l = 1:nxi
+        v[:,(l-1)*n .+ (1:n)] = u[:,(l-1)*n .+ (1:n)]*A;
+    end
+    return v;
+end
+
+function mult_eff(obj::SolverCSD,A::SparseMatrixCSC{Float64, Int64},u::Array{Float64,2})
+    n = obj.pn.nTotalEntries;
+    nxi = obj.settings.nxi
+    m = size(u,2);
+    v = zeros(n*nxi,m);
+    for l = 1:nxi
+        v[(l-1)*n .+ (1:n),:] = A*u[(l-1)*n .+ (1:n),:];
+    end
+    return v;
+end
+
+function mult_eff(obj::SolverCSD,u::Array{Float64,2},A::Array{Float64,2})
+    n2 = size(A,2);
+    n1 = size(A,1)
+    nxi = obj.settings.nxi
+    m = size(u,1);
+    nm = size(A,2)*nxi;
+    v = zeros(m,nm);
+
+    for l = 1:nxi
+        v[:,(l-1)*n2 .+ (1:n2)] = u[:,(l-1)*n1 .+ (1:n1)]*A;
+    end
+
     return v;
 end
