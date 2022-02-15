@@ -12,6 +12,7 @@ using Einsum
 include("CSD.jl")
 include("PNSystem.jl")
 include("quadratures/Quadrature.jl")
+include("utils.jl")
 
 mutable struct SolverCSD
     # spatial grid of cell interfaces
@@ -318,54 +319,41 @@ mutable struct SolverCSD
         qtype = 1; # Type must be 1 for "standard" or 2 for "octa" and 3 for "ico".
         Q = Quadrature(qorder,qtype)
 
-        Ωs = Q.pointsxyz
         weights = Q.weights
         #Norder = (qorder+1)*(qorder+1)
         Norder = pn.nTotalEntries
         nq = length(weights);
 
-        #Y = zeros(qorder +1,2*(qorder +1)+1,nq)
-        YY = zeros(Norder,nq)
-        @polyvar xx yy zz
+        # Construct Gauss quadrature
+        mu,gaussweights = gausslegendre(qorder)
+            
+        # around z axis equidistant
+        phi = [(k+0.5)*pi/qorder for k=0:2*qorder-1]
+
+        # Transform between (mu,phi) and (x,y,z)
+        x = sqrt.(1.0 .- mu.^2).*cos.(phi)'
+        y = sqrt.(1.0 .- mu.^2).*sin.(phi)'
+        z =           mu    .*ones(size(phi))'
+        weights = 2.0*pi/qorder*repeat(gaussweights,1,2*qorder)
+            
+        weights = weights[:]*0.5;
+
+    
+        global counter;
         counter = 1
+        O = zeros(nq,Norder)
+        M = zeros(Norder,nq)
         for l=0:settings.nPN
             for m=-l:l
-                sphericalh = ylm(l,m,xx,yy,zz)
-                for q = 1 : nq
-                    #Y[l+1,m+l+1,q] = sphericalh(xx=>Ωs[q,1],yy=>Ωs[q,2],zz=>Ωs[q,3])
-                    YY[counter,q] =  sphericalh(xx=>Ωs[q,1],yy=>Ωs[q,2],zz=>Ωs[q,3])
+                for k = 1:length(mu)
+                    for j = 1:length(phi)
+                        global counter;
+                        O[(j-1)*qorder+k,counter] =  real_sph(mu[k],phi[j],l,m)
+                        M[counter,(j-1)*qorder+k] = O[(j-1)*qorder+k,counter]*weights[(j-1)*qorder+k]
+                    end
                 end
                 counter += 1
             end
-        end
-        normY = zeros(Norder);
-        for i = 1:Norder
-            for k = 1:nq
-                normY[i] = normY[i] + YY[i,k]^2
-            end
-        end
-        normY = sqrt.(normY)
-    
-        O = zeros(nq,Norder)
-        M = zeros(Norder,nq)
-        for i=1:nq
-            for j=1:nq
-                counter = 1
-                for l=0:settings.nPN
-                    for m=-l:l
-                        O[i,counter] = YY[counter,i] # / normY[counter] 
-                        M[counter,j] = YY[counter,j]*weights[j]# / normY[counter]
-                        counter += 1
-                    end
-                end
-            end
-        end
-        
-        v = O*M*ones(nq)
-    
-        counter = 1
-        for q=1:nq
-            O[q,:] /= v[q]
         end
 
         new(x,y,xGrid,settings,outRhs,gamma,AbsAx,AbsAz,AxPlus,AxMinus,AzPlus,AzMinus,P,mu,w,csd,pn,density,vec(density'),dose,L1x,L1y,L2x,L2y,boundaryIdx,boundaryBeam,Q,O,M);
@@ -398,21 +386,6 @@ function SetupIC(obj::SolverCSD)
     end
     
     return psi;
-end
-
-function normpdf(x,mu,sigma)
-    return 1/(sigma*sqrt(2*pi))*exp(-(x-mu)^2/2/(sigma^2));
-end
-
-function sph_cc(mu,phi,l,m)
-    # Complex conjugates of coefficients.
-    y = 0;
-    z = computePlmx(mu,lmax=l,norm=SphericalHarmonics.Unnormalized())
-    ma = abs(m);
-    ind = Int(0.5*(l^2+l)+ma+1);
-    
-    y = y + sqrt((2*l+1)/(4*pi).*factorial(l-ma)./factorial(big(l+ma))).*(-1).^max(m,0).*exp(1im*m*phi).*z[ind];
-    return y;
 end
 
 function SetupICMoments(obj::SolverCSD)
@@ -602,10 +575,10 @@ function solveFlux!(obj::SolverCSD, phi::Array{Float64,3}, flux::Array{Float64,3
     # for faster computation, we split the iteration over quadrature points
     # into four different blocks: North West, Nort East, Sout West, South East
     # this corresponds to the direction the ordinates point to
-    idxPosPos = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,2].>=0.0))
-    idxPosNeg = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,2].<0.0))
-    idxNegPos = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,2].>=0.0))
-    idxNegNeg = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,2].<0.0))
+    idxPosPos = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,3].>=0.0))
+    idxPosNeg = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,3].<0.0))
+    idxNegPos = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,3].>=0.0))
+    idxNegNeg = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,3].<0.0))
 
     nx = collect(3:(obj.settings.NCellsX-2));
     ny = collect(3:(obj.settings.NCellsY-2));
@@ -627,7 +600,7 @@ function solveFlux!(obj::SolverCSD, phi::Array{Float64,3}, flux::Array{Float64,3
         westflux = s2+0.5 .*slopefit(s1,s2,s3)
 
         flux[i,j,q] = obj.qReduced[q,1] ./obj.settings.dx .* (eastflux-westflux) +
-        obj.qReduced[q,2]./obj.settings.dy .* (northflux-southflux)
+        obj.qReduced[q,3]./obj.settings.dy .* (northflux-southflux)
     end
     #PosNeg
     for j=nx,i=ny,q = idxPosNeg
@@ -646,7 +619,7 @@ function solveFlux!(obj::SolverCSD, phi::Array{Float64,3}, flux::Array{Float64,3
         westflux = s2+0.5 .*slopefit(s1,s2,s3)
 
         flux[i,j,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
-        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux)
+        obj.qReduced[q,3] ./obj.settings.dy .*(northflux-southflux)
     end
 
     # NegPos
@@ -666,7 +639,7 @@ function solveFlux!(obj::SolverCSD, phi::Array{Float64,3}, flux::Array{Float64,3
         westflux = s2-0.5 .*slopefit(s1,s2,s3)
 
         flux[i,j,q] = obj.qReduced[q,1]./obj.settings.dx .*(eastflux-westflux) +
-        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux)
+        obj.qReduced[q,3] ./obj.settings.dy .*(northflux-southflux)
     end
 
     # NegNeg
@@ -686,7 +659,7 @@ function solveFlux!(obj::SolverCSD, phi::Array{Float64,3}, flux::Array{Float64,3
         westflux = s2-0.5 .* slopefit(s1,s2,s3)
 
         flux[i,j,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
-        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux)
+        obj.qReduced[q,3] ./obj.settings.dy .*(northflux-southflux)
     end
 end
 
@@ -695,10 +668,10 @@ function solveFluxUpwind!(obj::SolverCSD, phi::Array{Float64,3}, flux::Array{Flo
     # for faster computation, we split the iteration over quadrature points
     # into four different blocks: North West, Nort East, Sout West, South East
     # this corresponds to the direction the ordinates point to
-    idxPosPos = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,2].>=0.0))
-    idxPosNeg = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,2].<0.0))
-    idxNegPos = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,2].>=0.0))
-    idxNegNeg = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,2].<0.0))
+    idxPosPos = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,3].>=0.0))
+    idxPosNeg = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,3].<0.0))
+    idxNegPos = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,3].>=0.0))
+    idxNegNeg = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,3].<0.0))
 
     nx = collect(2:(obj.settings.NCellsX-1));
     ny = collect(2:(obj.settings.NCellsY-1));
@@ -716,7 +689,7 @@ function solveFluxUpwind!(obj::SolverCSD, phi::Array{Float64,3}, flux::Array{Flo
         westflux = s2
 
         flux[i,j,q] = obj.qReduced[q,1] ./obj.settings.dx .* (eastflux-westflux) +
-        obj.qReduced[q,2]./obj.settings.dy .* (northflux-southflux)
+        obj.qReduced[q,3]./obj.settings.dy .* (northflux-southflux)
     end
     #PosNeg
     for j=ny,i=nx,q = idxPosNeg
@@ -731,7 +704,7 @@ function solveFluxUpwind!(obj::SolverCSD, phi::Array{Float64,3}, flux::Array{Flo
         westflux = s2
 
         flux[i,j,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
-        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux)
+        obj.qReduced[q,3] ./obj.settings.dy .*(northflux-southflux)
     end
 
     # NegPos
@@ -747,7 +720,7 @@ function solveFluxUpwind!(obj::SolverCSD, phi::Array{Float64,3}, flux::Array{Flo
         westflux = s2
 
         flux[i,j,q] = obj.qReduced[q,1]./obj.settings.dx .*(eastflux-westflux) +
-        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux)
+        obj.qReduced[q,3] ./obj.settings.dy .*(northflux-southflux)
     end
 
     # NegNeg
@@ -763,7 +736,7 @@ function solveFluxUpwind!(obj::SolverCSD, phi::Array{Float64,3}, flux::Array{Flo
         westflux = s2
 
         flux[i,j,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
-        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux)
+        obj.qReduced[q,3] ./obj.settings.dy .*(northflux-southflux)
     end
 end
 
@@ -2270,15 +2243,6 @@ function SolveMCollisionSourceDLR(obj::SolverCSD)
 
 end
 
-function expm1div(x)
-    # Function (exp(x)-1)/x that is accurate for x close to zero.
-    y = 1+x*.5+x.^2/6;
-    if abs(x)>2e-4;
-        y = (exp(x)-1)./x;
-    end
-    return 1.0;#y;
-end
-
 function Solve(obj::SolverCSD)
     eTrafo = obj.csd.eTrafo;
     energy = obj.csd.eGrid;
@@ -2621,31 +2585,4 @@ function SolveUnconventional(obj::SolverCSD)
     # return solution and dose
     return X*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*W*V,obj.dose;
 
-end
-
-function vectorIndex(ny,i,j)
-    return (i-1)*ny + j;
-end
-
-function Vec2Mat(nx,ny,v)
-    m = zeros(nx,ny);
-    for i = 1:nx
-        for j = 1:ny
-            m[i,j] = v[(i-1)*ny + j]
-        end
-    end
-    return m;
-end
-
-function Mat2Vec(mat)
-    nx = size(mat,1)
-    ny = size(mat,2)
-    m = size(mat,3)
-    v = zeros(nx*ny,m);
-    for i = 1:nx
-        for j = 1:ny
-            v[(i-1)*ny + j,:] = mat[i,j,:]
-        end
-    end
-    return v;
 end
