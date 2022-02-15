@@ -63,9 +63,9 @@ end
 
 ############################
 
-solver1 = SolverCSD(s);
-X_dlr,S_dlr,W_dlr, dose_DLR,VarDose, psi_DLR = SolveFirstCollisionSourceDLR(solver1);
-#u, dose_DLR = Solve(solver1);
+solver = SolverCSD(s);
+X_dlr,S_dlr,W_dlr, dose_DLR,VarDose, psi_DLR,rankInTime = SolveFirstCollisionSourceAdaptiveDLR(solver);
+#u, dose_DLR = Solve(solver);
 u = X_dlr*diagm(S_dlr)*W_dlr';
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
 VarDose = Vec2Mat(s.NCellsX,s.NCellsY,VarDose);
@@ -99,26 +99,26 @@ tight_layout()
 savefig("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
 
 levels = 20;
-fig = figure("Dose countours, DLRA",figsize=(10*(s.d/s.b),10),dpi=100)
+fig = figure("Dose contours, DLRA",figsize=(10*(s.d/s.b),10),dpi=100)
 ax = gca()
-pcolormesh(Y,X,solver1.density[2:end-1,2:end-1]',cmap="gray")
+pcolormesh(Y,X,solver.density[2:end-1,2:end-1]',cmap="gray")
 contour(Y,X,dose_DLR[2:end-1,2:end-1]', levels,cmap="plasma")
 ax.tick_params("both",labelsize=20) 
 plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
 tight_layout()
-savefig("output/doseiso_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
+savefig("output/E_doseiso_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
 
 levels = 20;
 fig = figure("std Dose countours, DLRA",figsize=(10*(s.d/s.b),10),dpi=100)
 ax = gca()
-pcolormesh(Y,X,solver1.density[2:end-1,2:end-1]',cmap="gray")
+pcolormesh(Y,X,solver.density[2:end-1,2:end-1]',cmap="gray")
 contour(Y,X,sqrt.(VarDose[2:end-1,2:end-1]'), levels,cmap="plasma")
 ax.tick_params("both",labelsize=20) 
 plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
 tight_layout()
-savefig("output/doseiso_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
+savefig("output/std_doseiso_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
 
 fig = figure("u, full",figsize=(10*(s.d/s.b),10),dpi=100)
 ax = gca()
@@ -132,12 +132,29 @@ plt.title(L"u, Full", fontsize=25)
 tight_layout()
 savefig("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
 
+##################### plot rank in energy #####################
+
+fig = figure("rank in energy",figsize=(10, 10), dpi=100)
+ax = gca()
+ltype = ["b-","r--","m-","g-","y-","k-","b--","r--","m--","g--","y--","k--","b-","r-","m-","g-","y-","k-","b--","r--","m--","g--","y--","k--","b-","r-","m-","g-","y-","k-","b--","r--","m--","g--","y--","k--"]
+labelvec = [L"rank $\mathbf{u}_{1}$",L"rank $\mathbf{u}_{c}$"]
+l=1
+ax.plot(rankInTime[1,1:(end-1)],rankInTime[2,1:(end-1)], ltype[l], linewidth=2, alpha=1.0)
+ax.set_xlim([0.0,s.eMax])
+#ax.set_ylim([0.0,440])
+ax.set_xlabel("energy [MeV]", fontsize=20);
+ax.set_ylabel("rank", fontsize=20);
+ax.tick_params("both",labelsize=20) 
+#ax.legend(loc="upper right", fontsize=20)
+tight_layout()
+fig.canvas.draw() # Update the figure
+savefig("output/rankInEnergy.png")
 
 # write vtk file
 vtkfile = vtk_grid("output/dose_csd_nx$(s.NCellsX)ny$(s.NCellsY)", s.xMid, s.yMid)
 vtkfile["dose"] = dose_DLR
 vtkfile["dose_normalized"] = dose_DLR./maximum(dose_DLR)
-vtkfile["u"] = u/0.5/sqrt(solver1.gamma[1])
+vtkfile["u"] = u/0.5/sqrt(solver.gamma[1])
 outfiles = vtk_save(vtkfile)
 
 println("main finished")

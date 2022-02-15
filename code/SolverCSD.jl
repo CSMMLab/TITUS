@@ -12,6 +12,7 @@ using Einsum
 include("CSD.jl")
 include("PNSystem.jl")
 include("quadratures/Quadrature.jl")
+include("utils.jl")
 
 mutable struct SolverCSD
     # spatial grid of cell interfaces
@@ -327,48 +328,39 @@ mutable struct SolverCSD
         Norder = pn.nTotalEntries
         nq = length(weights);
 
-        #Y = zeros(qorder +1,2*(qorder +1)+1,nq)
-        YY = zeros(Norder,nq)
-        @polyvar xx yy zz
+        # Construct Gauss quadrature
+        mu,gaussweights = gausslegendre(qorder)
+            
+        # around z axis equidistant
+        phi = [(k+0.5)*pi/qorder for k=0:2*qorder-1]
+
+        # Transform between (mu,phi) and (x,y,z)
+        x = sqrt.(1.0 .- mu.^2).*cos.(phi)'
+        y = sqrt.(1.0 .- mu.^2).*sin.(phi)'
+        z =           mu    .*ones(size(phi))'
+        weights = 2.0*pi/qorder*repeat(gaussweights,1,2*qorder)
+            
+        weights = weights[:]*0.5;
+
+        counter = 1;
+
+        nq = length(weights);
+    
+        global counter;
         counter = 1
+        O = zeros(nq,Norder)
+        M = zeros(Norder,nq)
         for l=0:settings.nPN
             for m=-l:l
-                sphericalh = ylm(l,m,xx,yy,zz)
-                for q = 1 : nq
-                    #Y[l+1,m+l+1,q] = sphericalh(xx=>Ωs[q,1],yy=>Ωs[q,2],zz=>Ωs[q,3])
-                    YY[counter,q] =  sphericalh(xx=>Ωs[q,1],yy=>Ωs[q,2],zz=>Ωs[q,3])
+                for k = 1:length(mu)
+                    for j = 1:length(phi)
+                        global counter;
+                        O[(j-1)*qorder+k,counter] =  real_sph(mu[k],phi[j],l,m)
+                        M[counter,(j-1)*qorder+k] = O[(j-1)*qorder+k,counter]*weights[(j-1)*qorder+k]
+                    end
                 end
                 counter += 1
             end
-        end
-        normY = zeros(Norder);
-        for i = 1:Norder
-            for k = 1:nq
-                normY[i] = normY[i] + YY[i,k]^2
-            end
-        end
-        normY = sqrt.(normY)
-    
-        O = zeros(nq,Norder)
-        M = zeros(Norder,nq)
-        for i=1:nq
-            for j=1:nq
-                counter = 1
-                for l=0:settings.nPN
-                    for m=-l:l
-                        O[i,counter] = YY[counter,i] # / normY[counter] 
-                        M[counter,j] = YY[counter,j]*weights[j]# / normY[counter]
-                        counter += 1
-                    end
-                end
-            end
-        end
-        
-        v = O*M*ones(nq)
-    
-        counter = 1
-        for q=1:nq
-            O[q,:] /= v[q]
         end
 
         new(x,y,xGrid,xi*settings.sigmaXi,wXi./sum(wXi),settings,outRhs,gamma,AbsAx,AbsAz,AxPlus,AxMinus,AzPlus,AzMinus,P,mu,w,csd,pn,density,vec(density'),dose,L1x,L1y,L2x,L2y,boundaryIdx,boundaryBeam,Q,O,M);
@@ -407,21 +399,6 @@ function SetupIC(obj::SolverCSD)
     return psi;
 end
 
-function normpdf(x,mu,sigma)
-    return 1/(sigma*sqrt(2*pi))*exp(-(x-mu)^2/2/(sigma^2));
-end
-
-function sph_cc(mu,phi,l,m)
-    # Complex conjugates of coefficients.
-    y = 0;
-    z = computePlmx(mu,lmax=l,norm=SphericalHarmonics.Unnormalized())
-    ma = abs(m);
-    ind = Int(0.5*(l^2+l)+ma+1);
-    
-    y = y + sqrt((2*l+1)/(4*pi).*factorial(l-ma)./factorial(big(l+ma))).*(-1).^max(m,0).*exp(1im*m*phi).*z[ind];
-    return y;
-end
-
 function SetupICMoments(obj::SolverCSD)
     u = zeros(obj.settings.NCellsX,obj.settings.NCellsY,obj.pn.nTotalEntries);
     
@@ -438,14 +415,12 @@ function SetupICMoments(obj::SolverCSD)
         nq = obj.Q.nquadpoints;
         nx = obj.settings.NCellsX;
         ny = obj.settings.NCellsY;
-        @polyvar xx yy zz
         phi_beam = pi/2;                               # Angle of beam w.r.t. x-axis.
         mu_beam = 0;  
         psi = zeros(obj.pn.nTotalEntries)*1im;
         counter = 1;
         for l=0:obj.settings.nPN
             for m=-l:l
-                sphericalh = ylm(l,m,xx,yy,zz)
                 psi[counter] =  sph_cc(mu_beam,phi_beam,l,m)
                 counter += 1
             end
@@ -478,11 +453,11 @@ end
 function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y::Float64,xi::Float64,n::Int)
     E0 = obj.settings.eMax;
     if obj.settings.problem == "lung" || obj.settings.problem == "lungOrig"
-        sigmaO1Inv = 0.0;
-        sigmaO3Inv = 75.0;
-        sigmaXInv = 20.0;
-        sigmaYInv = 20.0;
+        sigmaO1Inv = 10.0;
+        sigmaXInv = 10.0;
+        sigmaYInv = 10.0;
         sigmaEInv = 100.0;
+        OmegaStar = [obj.settings.Omega1; 0.0; obj.settings.Omega3]
     elseif obj.settings.problem == "liver"
         sigmaO1Inv = 75.0;
         sigmaO3Inv = 0.0;
@@ -496,11 +471,11 @@ function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y:
         pos_beam = [0.5*14.5,0.0,0];
         space_beam = normpdf(x,pos_beam[1],.01).*normpdf(y,pos_beam[2],.01);
         #println(space_beam)
-        return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*space_beam*obj.csd.S[n]*densityMin;
+        return 10^5*exp(-sigmaO1Inv*(norm(OmegaStar-Omega)))*space_beam*obj.csd.S[n]*densityMin;
     elseif obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD"
         return 0.0;
     end
-    return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*exp(-sigmaEInv*(E0-E)^2)*exp(-sigmaXInv*(x-obj.settings.x0 + xi)^2)*exp(-sigmaYInv*(y-obj.settings.y0 + xi)^2)*obj.csd.S[n]*obj.settings.densityMin;
+    return 10^5*exp(-sigmaO1Inv*(norm(OmegaStar-Omega)^2))*exp(-sigmaEInv*(E0-E)^2)*exp(-sigmaXInv*(x-obj.settings.x0 + xi)^2)*exp(-sigmaYInv*(y-obj.settings.y0 + xi)^2)*obj.csd.S[n]*obj.settings.densityMin;
 end
 
 function BCLeft(obj::SolverCSD,n::Int)
@@ -694,10 +669,10 @@ function solveFluxUpwind!(obj::SolverCSD, phi::Array{Float64,4}, flux::Array{Flo
     # for faster computation, we split the iteration over quadrature points
     # into four different blocks: North West, Nort East, Sout West, South East
     # this corresponds to the direction the ordinates point to
-    idxPosPos = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,2].>=0.0))
-    idxPosNeg = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,2].<0.0))
-    idxNegPos = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,2].>=0.0))
-    idxNegNeg = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,2].<0.0))
+    idxPosPos = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,3].>=0.0))
+    idxPosNeg = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,3].<0.0))
+    idxNegPos = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,3].>=0.0))
+    idxNegNeg = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,3].<0.0))
 
     nx = collect(2:(obj.settings.NCellsX-1));
     ny = collect(2:(obj.settings.NCellsY-1));
@@ -716,7 +691,7 @@ function solveFluxUpwind!(obj::SolverCSD, phi::Array{Float64,4}, flux::Array{Flo
         westflux = s2
 
         flux[i,j,l,q] = obj.qReduced[q,1] ./obj.settings.dx .* (eastflux-westflux) +
-        obj.qReduced[q,2]./obj.settings.dy .* (northflux-southflux)
+        obj.qReduced[q,3]./obj.settings.dy .* (northflux-southflux)
     end
     #PosNeg
     for j=ny,i=nx,l=nxi,q = idxPosNeg
@@ -731,7 +706,7 @@ function solveFluxUpwind!(obj::SolverCSD, phi::Array{Float64,4}, flux::Array{Flo
         westflux = s2
 
         flux[i,j,l,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
-        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux)
+        obj.qReduced[q,3] ./obj.settings.dy .*(northflux-southflux)
     end
 
     # NegPos
@@ -747,7 +722,7 @@ function solveFluxUpwind!(obj::SolverCSD, phi::Array{Float64,4}, flux::Array{Flo
         westflux = s2
 
         flux[i,j,l,q] = obj.qReduced[q,1]./obj.settings.dx .*(eastflux-westflux) +
-        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux)
+        obj.qReduced[q,3] ./obj.settings.dy .*(northflux-southflux)
     end
 
     # NegNeg
@@ -763,7 +738,7 @@ function solveFluxUpwind!(obj::SolverCSD, phi::Array{Float64,4}, flux::Array{Flo
         westflux = s2
 
         flux[i,j,l,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
-        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux)
+        obj.qReduced[q,3] ./obj.settings.dy .*(northflux-southflux)
     end
 end
 
@@ -977,6 +952,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     XX = (s.xMid[2:end-1]'.*ones(size(s.yMid[2:end-1])))
     YY = (s.yMid[2:end-1]'.*ones(size(s.xMid[2:end-1])))'
     
+    counterPNG = 0;
     #loop over energy
     for n=2:nEnergies
         # compute scattering coefficients at current energy
@@ -1145,9 +1121,11 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         end
 
         ######## Plotting #########
-        if mod(n,Int(round(10*nEnergies/474/2))) == 1
-            close("all")
+        if mod(n-1,Int(round(7*nEnergies/474/2))) == 0
+            counterPNG += 1;
+            
             U,Sigma,V = svd(S);
+            close("all")
             fig = figure("Dose, DLRA",figsize=(10*(s.d/s.b),10),dpi=100)
             ax = gca()
             pcolormesh(YY,XX,Vec2Mat(s.NCellsX,s.NCellsY,X*U[:,1])[2:end-1,2:end-1]')
@@ -1156,7 +1134,17 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
             plt.ylabel("y", fontsize=20)
             plt.title("dominant spatial mode,  E = $(round(obj.csd.eGrid[n], digits=3)) MeV", fontsize=25)
             tight_layout()
-            savefig("output/gif/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)_$(n).png")
+            if counterPNG < 10
+                savefig("output/gif/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)_00$(counterPNG).png")
+            elseif counterPNG < 100
+                savefig("output/gif/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)_0$(counterPNG).png")
+            else
+                savefig("output/gif/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)_$(counterPNG).png")
+            end
+            
+            # write modal basis
+            writedlm("output/gifW/W_$(counterPNG)",W*V)
+            #break
         end
         
         next!(prog) # update progress bar
@@ -1189,21 +1177,45 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
     energy = obj.csd.eGrid;
     S = obj.csd.S;
 
+    nx = s.NCellsX;
+    ny = s.NCellsY;
+    nq = obj.Q.nquadpoints;
+    N = obj.pn.nTotalEntries;
+
+    # UQ variables
+    nxi = s.nxi;
+    xi = obj.xi;
+    w = obj.wXi;
+
     # Set up initial condition and store as matrix
     psi = SetupIC(obj);
-    nx = obj.settings.NCellsX;
-    ny = obj.settings.NCellsY;
-    nq = obj.Q.nquadpoints;
-    N = obj.pn.nTotalEntries
-    # Set up initial condition and store as matrix
-    u = zeros(nx*ny,N);
+    floorPsiAll = 1e-1;
+    floorPsi = 1e-6;
+    if s.problem == "LineSource" || s.problem == "2DHighD" || s.problem == "2DHighLowD" # determine relevant directions in IC
+        println(size(psi))
+        idxFullBeam = findall(psi .> floorPsiAll)
+        println(maximum(psi))
+        idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
+    elseif s.problem == "lung" || s.problem == "lungOrig" || s.problem == "liver" || s.problem == "validation" # determine relevant directions in beam
+        psiBeam = zeros(nq)
+        for k = 1:nq
+            psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],s.eMax,s.x0,s.y0,0.0,1)
+        end
+        idxBeam = findall( psiBeam .> floorPsi*maximum(psiBeam) );
+    end
+    psi = psi[:,:,:,idxBeam]
+    obj.qReduced = obj.Q.pointsxyz[idxBeam,:]
+    obj.MReduced = obj.M[:,idxBeam]
+    obj.OReduced = obj.O[idxBeam,:]
+    println("reduction of ordinates is ",(nq-length(idxBeam))/nq*100.0," percent")
+    nq = length(idxBeam);
 
     # define density matrix
     densityInv = Diagonal(1.0 ./obj.density);
     Id = Diagonal(ones(N));
 
     # Low-rank approx of init data:
-    X,S,W = svd(u);
+    X,S,W = svd(zeros(nx*ny,N*nxi));
     
     # rank-r truncation:
     X = X[:,1:r];
@@ -1223,11 +1235,6 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
     nEnergies = length(eTrafo);
     dE = eTrafo[2]-eTrafo[1];
     obj.settings.dE = dE
-
-    println("CFL = ",dE/obj.settings.dx*maximum(densityInv))
-    println("dE = ",dE)
-    println("dx = ",obj.settings.dx)
-    println("densityInv = ",maximum(densityInv))
     
     flux = zeros(size(psi))
 
@@ -1237,10 +1244,12 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
     rankInTime[1,1] = energy[1];
     rankInTime[2,1] = r;
 
-    uOUnc = zeros(nx*ny);
+    uOUnc = zeros(nx*ny,s.nxi);
 
     psi .= zeros(size(psi));
     psiNew = zeros(size(psi));
+
+    doseXi = zeros(nxi,nx*ny);
 
     #loop over energy
     for n=2:nEnergies
@@ -1248,14 +1257,18 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
 
         # set boundary condition
-        for k = 1:nq
-            for j = 1:nx
-                psi[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
-                psi[j,end,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
-            end
-            for j = 1:ny
-                psi[1,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
-                psi[end,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
+        if s.problem != "validation" # validation testcase sets beam in initial condition
+            for l = 1:nxi
+                for k = 1:nq
+                    for j = 1:nx
+                        psi[j,1,l,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[1],xi[l],n-1);
+                        psi[j,end,l,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[end],xi[l],n-1);
+                    end
+                    for j = 1:ny
+                        psi[1,j,l,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[1],s.yMid[j],xi[l],n-1);
+                        psi[end,j,l,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[end],s.yMid[j],xi[l],n-1);
+                    end
+                end
             end
         end
 
@@ -1283,7 +1296,9 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         L = W*S';
 
         for i = 1:r
-            L[:,i] = (Id .+ dE*D)\L[:,i];
+            for l = 1:nxi
+                L[(l-1)*obj.pn.nTotalEntries .+ (1:obj.pn.nTotalEntries),i] = (Id .+ dE*D)\L[(l-1)*obj.pn.nTotalEntries .+ (1:obj.pn.nTotalEntries),i]
+            end
         end
 
         W,S = qr(L);
@@ -1300,7 +1315,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         X[obj.boundaryIdx,:] .= 0.0;
         K = X*S;
         #u = u .+dE*Mat2Vec(psiNew)*M'*Diagonal(Dvec);
-        K = K .+dE*Mat2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec)*W;
+        K = K .+dE*mult_eff(obj,Ten2Vec(psi),obj.MReduced'*Diagonal(Dvec))*W;
         K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
         XNew,STmp = qr!([K Xold]);
@@ -1311,7 +1326,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
 
         ################## L-step ##################
         L = W*S';
-        L = L .+dE*(Mat2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec))'*X;
+        L = L .+dE*(mult_eff(obj,Ten2Vec(psi),obj.MReduced'*Diagonal(Dvec)))'*X;
 
         WNew,STmp = qr([L Wold]);
         WNew = Matrix(WNew)
@@ -1324,7 +1339,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
 
         ################## S-step ##################
         S = MUp*S*(NUp')
-        S = S .+dE*X'*Mat2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec)*W;
+        S .= S .+dE*X'*mult_eff(obj,Ten2Vec(psi),obj.MReduced'*Diagonal(Dvec))*W;
 
         ################## truncate ##################
 
@@ -1375,24 +1390,26 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         r = rmax;
 
         ################## Update dose ##################
-
         for i = 1:nx
             for j = 1:ny
-                idx = (i-1)*nx + j
-                uOUnc[idx] = psiNew[i,j,:]'*obj.MReduced[1,:];
+                idx = (i-1)*ny + j
+                for l = 1:nxi
+                    uOUnc[idx,l] = psi[i,j,l,:]'*obj.MReduced[1,:];
+                end
             end
         end
         
-        # update dose
-        obj.dose .+= dE * (X*S*W[1,:]+uOUnc) * obj.csd.SMid[n-1] ./ obj.densityVec ./( 1 + (n==2||n==nEnergies));
+        for l = 1:nxi
+            doseXi[l,:] .+= 0.5*dE * (X*S*W[(l-1)*obj.pn.nTotalEntries + 1,:] .+ uOUnc[:,l] )* obj.csd.S[n-1] ./ obj.densityVec;
+        end
 
         ################## K-step ##################
         K = X*S;
 
-        WAzW = W'*obj.pn.Az'*W
-        WAbsAzW = W'*obj.AbsAz'*W
-        WAbsAxW = W'*obj.AbsAx'*W
-        WAxW = W'*obj.pn.Ax'*W
+        WAzW = mult_eff(obj,Matrix(W'),obj.pn.Az)*W; # Az  = Az^T
+        WAbsAzW = mult_eff(obj,Matrix(W'),obj.AbsAz)*W;
+        WAbsAxW = mult_eff(obj,Matrix(W'),obj.AbsAx)*W;
+        WAxW = mult_eff(obj,Matrix(W'),obj.pn.Ax)*W; # Ax  = Ax^T
 
         K .= K .- dE*(obj.L2x*K*WAxW + obj.L2y*K*WAzW + obj.L1x*K*WAbsAxW + obj.L1y*K*WAbsAzW);
 
@@ -1412,7 +1429,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         XL1xX = X'*obj.L1x*X
         XL1yX = X'*obj.L1y*X
 
-        L .= L .- dE*(obj.pn.Ax*L*XL2xX' + obj.pn.Az*L*XL2yX' + obj.AbsAx*L*XL1xX' + obj.AbsAz*L*XL1yX');
+        L .= L .- dE*(mult_eff(obj,obj.pn.Ax,L)*XL2xX' + mult_eff(obj,obj.pn.Az,L)*XL2yX' + mult_eff(obj,obj.AbsAx,L)*XL1xX' + mult_eff(obj,obj.AbsAz,L)*XL1yX');
                 
         WNew,STmp = qr([L W]);
         WNew = Matrix(WNew)
@@ -1429,10 +1446,10 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         XL1xX = X'*obj.L1x*X
         XL1yX = X'*obj.L1y*X
 
-        WAzW = W'*obj.pn.Az'*W
-        WAbsAzW = W'*obj.AbsAz'*W
-        WAbsAxW = W'*obj.AbsAx'*W
-        WAxW = W'*obj.pn.Ax'*W
+        WAzW = mult_eff(obj,Matrix(W'),obj.pn.Az)*W; 
+        WAbsAzW = mult_eff(obj,Matrix(W'),obj.AbsAz)*W;
+        WAbsAxW = mult_eff(obj,Matrix(W'),obj.AbsAx)*W;
+        WAxW = mult_eff(obj,Matrix(W'),obj.pn.Ax)*W; 
 
         S .= S .- dE.*(XL2xX*S*WAxW + XL2yX*S*WAzW + XL1xX*S*WAbsAxW + XL1yX*S*WAbsAzW);
 
@@ -1492,9 +1509,20 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         next!(prog) # update progress bar
     end
 
+    for l = 1:nxi
+        obj.dose .+= w[l]*doseXi[l,:];
+    end
+
+    VarDose = zeros(size(obj.dose));
+
+    # compute dose variance
+    for l = 1:nxi
+        VarDose .+= w[l]*(doseXi[l,:] .- obj.dose).^2;
+    end
+
     U,Sigma,V = svd(S);
     # return solution, dose and rank
-    return X*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*W*V,obj.dose,rankInTime;
+    return X*U, 0.5*sqrt(obj.gamma[1])*Sigma, W*V,obj.dose,VarDose,psi,rankInTime;
 
 end
 
@@ -2318,15 +2346,6 @@ function SolveMCollisionSourceDLR(obj::SolverCSD)
 
 end
 
-function expm1div(x)
-    # Function (exp(x)-1)/x that is accurate for x close to zero.
-    y = 1+x*.5+x.^2/6;
-    if abs(x)>2e-4;
-        y = (exp(x)-1)./x;
-    end
-    return 1.0;#y;
-end
-
 function Solve(obj::SolverCSD)
     eTrafo = obj.csd.eTrafo;
     energy = obj.csd.eGrid;
@@ -2669,51 +2688,6 @@ function SolveUnconventional(obj::SolverCSD)
     # return solution and dose
     return X*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*W*V,obj.dose;
 
-end
-
-function vectorIndex(ny,i,j)
-    return (i-1)*ny + j;
-end
-
-function Vec2Mat(nx,ny,v)
-    m = zeros(nx,ny);
-    for i = 1:nx
-        for j = 1:ny
-            m[i,j] = v[(i-1)*ny + j]
-        end
-    end
-    return m;
-end
-
-function Mat2Vec(mat)
-    nx = size(mat,1)
-    ny = size(mat,2)
-    m = size(mat,3)
-    v = zeros(nx*ny,m);
-    for i = 1:nx
-        for j = 1:ny
-            v[(i-1)*ny + j,:] = mat[i,j,:]
-        end
-    end
-    return v;
-end
-
-function Ten2Vec(ten)
-    nx = size(ten,1)
-    ny = size(ten,2)
-    nxi = size(ten,3)
-    m = size(ten,4)
-    v = zeros(nx*ny,m*nxi);
-    for i = 1:nx
-        for j = 1:ny
-            for l = 1:nxi
-                for k = 1:m
-                    v[(i-1)*ny + j,(l-1)*m .+ k] = ten[i,j,l,k]
-                end
-            end
-        end
-    end
-    return v;
 end
 
 function mult_eff(obj::SolverCSD,u::Array{Float64,2},A::SparseMatrixCSC{Float64, Int64})

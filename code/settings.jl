@@ -91,7 +91,7 @@ mutable struct Settings
         densityMin = 0.2;
         adaptIndex = 1;
         epsAdapt = 1e-2;
-        sigmaXi = 0.4;
+        sigmaXi = 0.5;
         if problem =="LineSource"
             a = -1.5
             b = 1.5;
@@ -191,7 +191,7 @@ mutable struct Settings
             cfl = 1.5;
             x0 = 0.5*b;
             y0 = 1.0*d;
-            Omega1 = -1.0;
+            Omega1 = -0.0;
             Omega3 = -1.0;
         elseif problem =="liver"
             #img = Float64.(Gray.(load("phantom.png")))
