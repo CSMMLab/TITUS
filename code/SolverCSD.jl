@@ -265,7 +265,7 @@ mutable struct SolverCSD
         end
         L2y = sparse(II,J,vals,nx*ny,nx*ny);
 
-        # collect boundary indices
+        # collect boundary indices (double check this)
         boundaryIdx = zeros(Int,2*nx+2*ny)
         counter = 0;
         for i = 1:nx
@@ -379,6 +379,20 @@ function SetupIC(obj::SolverCSD)
                 end
             end
         end
+    elseif obj.settings.problem == "lung2"
+        sigma = 0.1;
+        OmegaStar = [obj.settings.Omega1,0.0,obj.settings.Omega3]
+        pos_beam = [obj.settings.x0;obj.settings.y0]
+        for i = 1:nx
+            for j = 1:ny
+                space_beam = normpdf(obj.settings.xMid[i],pos_beam[1],sigma).*normpdf(obj.settings.yMid[j],pos_beam[2],sigma);
+                for k = 1:nq
+                    Omega = obj.Q.pointsxyz[k,:];
+                    Omega_beam = normpdf(Omega[1],OmegaStar[1],sigma).*normpdf(Omega[2],OmegaStar[2],sigma).*normpdf(Omega[3],OmegaStar[3],sigma);
+                    psi[i,j,k] = 10^5*Omega_beam*space_beam*obj.csd.S[1]*obj.settings.density[i,j];
+                end
+            end
+        end
     else    
         for k = 1:nq
             psi[:,:,k] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)
@@ -463,7 +477,7 @@ function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y:
         space_beam = normpdf(x,pos_beam[1],.01).*normpdf(y,pos_beam[2],.01);
         #println(space_beam)
         return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*space_beam*obj.csd.S[n]*densityMin;
-    elseif obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD"
+    elseif obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" || obj.settings.problem == "lung2"
         return 0.0;
     end
     return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*exp(-sigmaEInv*(E0-E)^2)*exp(-sigmaXInv*(x-obj.settings.x0)^2)*exp(-sigmaYInv*(y-obj.settings.y0)^2)*obj.csd.S[n]*obj.settings.densityMin;
@@ -754,10 +768,10 @@ function SolveFirstCollisionSource(obj::SolverCSD)
     psi = SetupIC(obj);
     floorPsiAll = 1e-1;
     floorPsi = 1e-17;
-    if obj.settings.problem == "LineSource" # determine relevant directions in IC
+    if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" || obj.settings.problem == "lung2" # determine relevant directions in IC
         idxFullBeam = findall(psi .> floorPsiAll)
         idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
-    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" # determine relevant directions in beam
+    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" # determine relevant directions in beam
         psiBeam = zeros(nq)
         for k = 1:nq
             psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)
@@ -774,9 +788,6 @@ function SolveFirstCollisionSource(obj::SolverCSD)
     # define density matrix
     densityInv = Diagonal(1.0 ./obj.density);
     Id = Diagonal(ones(N));
-
-    # setup gamma vector (square norm of P) to nomralize
-    settings = obj.settings
 
     nEnergies = length(eTrafo);
     dE = eTrafo[2]-eTrafo[1];
@@ -801,14 +812,16 @@ function SolveFirstCollisionSource(obj::SolverCSD)
         sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
 
         # set boundary condition
-        for k = 1:nq
-            for j = 1:nx
-                psi[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
-                psi[j,end,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
-            end
-            for j = 1:ny
-                psi[1,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
-                psi[end,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
+        if obj.settings.problem != "validation" # validation testcase sets beam in initial condition
+            for k = 1:nq
+                for j = 1:nx
+                    psi[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
+                    psi[j,end,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
+                end
+                for j = 1:ny
+                    psi[1,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
+                    psi[end,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
+                end
             end
         end
        
@@ -823,15 +836,15 @@ function SolveFirstCollisionSource(obj::SolverCSD)
         D = Diagonal(sigmaS[1] .- Dvec);
 
         # stream uncollided particles
-        solveFluxUpwind!(obj,psi,flux);
+        solveFluxUpwind!(obj,psi./obj.density,flux);
 
         psi .= psi .- dE*flux;
         
         psiNew .= psi ./ (1+dE*sigmaS[1]);
 
         # stream collided particles
-        uTilde = u .- dE * Rhs(obj,u); 
-        uTilde[obj.boundaryIdx,:] .= 0.0;
+        uTilde = u .- dE * RhsOld(obj,u); 
+        #uTilde[obj.boundaryIdx,:] .= 0.0;
 
         # scatter particles
         for i = 2:(nx-1)
@@ -841,7 +854,7 @@ function SolveFirstCollisionSource(obj::SolverCSD)
                 uOUnc[idx] = psiNew[i,j,:]'*obj.MReduced[1,:];
             end
         end
-        uNew[obj.boundaryIdx,:] .= 0.0;
+        #uNew[obj.boundaryIdx,:] .= 0.0;
 
         #uTilde[1,:] .= BCLeft(obj,n);
         #uNew = uTilde .- dE*uTilde*D;
@@ -851,7 +864,7 @@ function SolveFirstCollisionSource(obj::SolverCSD)
 
 
         u .= uNew;
-        u[obj.boundaryIdx,:] .= 0.0;
+        #u[obj.boundaryIdx,:] .= 0.0;
         psi .= psiNew;
         next!(prog) # update progress bar
     end
@@ -866,7 +879,6 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
     eTrafo = obj.csd.eTrafo;
     energy = obj.csd.eGrid;
-    S = obj.csd.S;
 
     nx = obj.settings.NCellsX;
     ny = obj.settings.NCellsY;
@@ -877,12 +889,13 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     psi = SetupIC(obj);
     floorPsiAll = 1e-1;
     floorPsi = 1e-17;
-    if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" # determine relevant directions in IC
+    if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" || obj.settings.problem == "lung2" # determine relevant directions in IC
         println(size(psi))
         idxFullBeam = findall(psi .> floorPsiAll)
+        println(size(idxFullBeam));
         println(maximum(psi))
         idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
-    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" # determine relevant directions in beam
+    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" || obj.settings.problem == "lung2"# determine relevant directions in beam
         psiBeam = zeros(nq)
         for k = 1:nq
             psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)
@@ -926,7 +939,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     STmp = zeros(r,r)
 
     # impose boundary condition
-    X[obj.boundaryIdx,:] .= 0.0;
+    #X[obj.boundaryIdx,:] .= 0.0;
 
     nEnergies = length(eTrafo);
     dE = eTrafo[2]-eTrafo[1];
@@ -969,12 +982,12 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         obj.dose .+= 0.5*dE * (X*S*W[1,:]+uOUnc) * obj.csd.S[n-1] ./ obj.densityVec ;
 
         # stream uncollided particles
-        solveFluxUpwind!(obj,psi,flux);
+        solveFluxUpwind!(obj,psi./obj.density,flux);
 
-        psiBC = psi[obj.boundaryIdx];
+        #psiBC = psi[obj.boundaryIdx];
 
         psi .= (psi .- dE*flux) ./ (1+dE*sigmaS[1]);
-        psi[obj.boundaryIdx] .= psiBC; # no scattering in boundary cells
+        #psi[obj.boundaryIdx] .= psiBC; # no scattering in boundary cells
        
         Dvec = zeros(obj.pn.nTotalEntries)
         for l = 0:obj.pn.N
@@ -988,7 +1001,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
         if n > 2 # perform streaming update after first collision (before solution is zero)
             ################## K-step ##################
-            X[obj.boundaryIdx,:] .= 0.0;
+            #X[obj.boundaryIdx,:] .= 0.0;
             K .= X*S;
 
             WAzW .= W'*obj.pn.Az*W # Az  = Az^T
@@ -1057,11 +1070,11 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         ############## In Scattering ##############
 
         ################## K-step ##################
-        X[obj.boundaryIdx,:] .= 0.0;
+        #X[obj.boundaryIdx,:] .= 0.0;
         K .= X*S;
         #u = u .+dE*Mat2Vec(psiNew)*M'*Diagonal(Dvec);
         K = K .+dE*Mat2Vec(psi)*obj.MReduced'*Diagonal(Dvec)*W;
-        K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
+        #K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
         XNew,STmp = qr!(K);
         XNew = Matrix(XNew)
@@ -1140,7 +1153,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
     STmp = zeros(r,r)
 
     # impose boundary condition
-    X[obj.boundaryIdx,:] .= 0.0;
+    #X[obj.boundaryIdx,:] .= 0.0;
 
     # setup gamma vector (square norm of P) to nomralize
     settings = obj.settings
@@ -1222,11 +1235,11 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         ############## In Scattering ##############
 
         ################## K-step ##################
-        X[obj.boundaryIdx,:] .= 0.0;
+        #X[obj.boundaryIdx,:] .= 0.0;
         K = X*S;
         #u = u .+dE*Mat2Vec(psiNew)*M'*Diagonal(Dvec);
         K = K .+dE*Mat2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec)*W;
-        K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
+        #K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
         XNew,STmp = qr!([K Xold]);
         XNew = Matrix(XNew)
@@ -1294,7 +1307,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         W = WNew[:,1:rmax];
 
         # impose boundary condition
-        X[obj.boundaryIdx,:] .= 0.0;
+        #X[obj.boundaryIdx,:] .= 0.0;
 
         # update rank
         r = rmax;
@@ -1326,7 +1339,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         XNew = XNew[:,1:2*r];
 
         # impose boundary condition
-        XNew[obj.boundaryIdx,:] .= 0.0;
+        #XNew[obj.boundaryIdx,:] .= 0.0;
 
         MUp = XNew' * X;
         ################## L-step ##################
@@ -1404,7 +1417,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         W = WNew[:,1:rmax];
 
         # impose boundary condition
-        X[obj.boundaryIdx,:] .= 0.0;
+        #X[obj.boundaryIdx,:] .= 0.0;
 
         # update rank
         r = rmax;
@@ -1448,10 +1461,10 @@ function UnconventionalIntegratorAdaptive!(obj::SolverCSD,Dvec::Array{Float64,1}
     ############## In Scattering ##############
     sigT = SigmaT[1];
     ################## K-step ##################
-    X[obj.boundaryIdx,:] .= 0.0;
+    #X[obj.boundaryIdx,:] .= 0.0;
     K = X*S;
     K .= (K .+dE*Mat2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec)*W)/(1+dE*sigT);
-    K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
+    #K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
     XNew,STmp = qr!([K X]);
     XNew = Matrix(XNew)
@@ -1519,7 +1532,7 @@ function UnconventionalIntegratorAdaptive!(obj::SolverCSD,Dvec::Array{Float64,1}
     W = WNew[:,1:rmax];
 
     # impose boundary condition
-    X[obj.boundaryIdx,:] .= 0.0;
+    #X[obj.boundaryIdx,:] .= 0.0;
 
     return X,S,W;
 end
@@ -1544,13 +1557,13 @@ function UnconventionalIntegratorAdaptive!(obj::SolverCSD,Dvec::Array{Float64,1}
     ############## In Scattering ##############
     sigT = SigmaT[1]
     ################## K-step ##################
-    X[obj.boundaryIdx,:] .= 0.0;
+    #X[obj.boundaryIdx,:] .= 0.0;
     K = X*S;
     WPrevDW = WPrev'*Diagonal(Dvec)*W;
     #K .= K .+dE*XPrev*SPrev*WPrevDW;
     K = (K + dE*XPrev*SPrev*WPrev'*Diagonal(Dvec)*W)/(1+dE*sigT)
     #u = u + dE*XPrev*SPrev*WPrev'*Diagonal(Dvec)
-    K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
+    #K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
     XNew,STmp = qr!([K X]);
     XNew = Matrix(XNew)
@@ -1623,7 +1636,7 @@ function UnconventionalIntegratorAdaptive!(obj::SolverCSD,Dvec::Array{Float64,1}
     W = WNew[:,1:rmax];
 
     # impose boundary condition
-    X[obj.boundaryIdx,:] .= 0.0;    
+    #X[obj.boundaryIdx,:] .= 0.0;    
 
     return X,S,W;
 end
@@ -1646,13 +1659,13 @@ function UnconventionalIntegratorCollidedAdaptive!(obj::SolverCSD,Dvec::Array{Fl
     SigmaT = D+Diagonal(Dvec)
     sigT = SigmaT[1]
     ################## K-step ##################
-    X[obj.boundaryIdx,:] .= 0.0;
+    #X[obj.boundaryIdx,:] .= 0.0;
     K = X*S;
     WPrevDW = WPrev'*Diagonal(Dvec)*W;
     #K .= K .+dE*XPrev*SPrev*WPrevDW;
     K = K + dE*XPrev*SPrev*WPrev'*Diagonal(Dvec)*W
     #u = u + dE*XPrev*SPrev*WPrev'*Diagonal(Dvec)
-    K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
+    #K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
     XNew,STmp = qr!([K X]);
     XNew = Matrix(XNew)
@@ -1766,11 +1779,11 @@ function UnconventionalIntegrator!(obj::SolverCSD,Dvec::Array{Float64,1},D,X::Ar
     ############## In Scattering ##############
     sigT = SigmaT[1];
     ################## K-step ##################
-    X[obj.boundaryIdx,:] .= 0.0;
+    #X[obj.boundaryIdx,:] .= 0.0;
     K = X*S;
     #u = u .+dE*Mat2Vec(psiNew)*M'*Diagonal(Dvec);
     K .= (K .+dE*Mat2Vec(psiNew)*obj.MReduced'*Diagonal(Dvec)*W)/(1+dE*sigT);
-    K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
+    #K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
     XNew,STmp = qr!(K);
     XNew = Matrix(XNew)
@@ -1822,13 +1835,13 @@ function UnconventionalIntegrator!(obj::SolverCSD,Dvec::Array{Float64,1},D,X::Ar
     ############## In Scattering ##############
     sigT = SigmaT[1]
     ################## K-step ##################
-    X[obj.boundaryIdx,:] .= 0.0;
+    #X[obj.boundaryIdx,:] .= 0.0;
     K = X*S;
     WPrevDW = WPrev'*Diagonal(Dvec)*W;
     #K .= K .+dE*XPrev*SPrev*WPrevDW;
     K = (K + dE*XPrev*SPrev*WPrev'*Diagonal(Dvec)*W)/(1+dE*sigT)
     #u = u + dE*XPrev*SPrev*WPrev'*Diagonal(Dvec)
-    K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
+    #K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
     XNew,STmp = qr!(K);
     XNew = Matrix(XNew)
@@ -1883,13 +1896,13 @@ function UnconventionalIntegratorCollided!(obj::SolverCSD,Dvec::Array{Float64,1}
     ############## In Scattering ##############
 
     ################## K-step ##################
-    X[obj.boundaryIdx,:] .= 0.0;
+    #X[obj.boundaryIdx,:] .= 0.0;
     K = X*S;
     WPrevDW = WPrev'*Diagonal(Dvec)*W;
     #K .= K .+dE*XPrev*SPrev*WPrevDW;
     K .= K + dE*XPrev*SPrev*WPrev'*Diagonal(Dvec)*W
     #u = u + dE*XPrev*SPrev*WPrev'*Diagonal(Dvec)
-    K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
+    #K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
     XNew,STmp = qr!(K);
     XNew = Matrix(XNew)
@@ -1963,7 +1976,7 @@ function UpdateUIStreaming(obj::SolverCSD,X::Array{Float64,2},S::Array{Float64,2
     XNew = XNew[:,1:r];
 
     # impose boundary condition
-    XNew[obj.boundaryIdx,:] .= 0.0;
+    #XNew[obj.boundaryIdx,:] .= 0.0;
 
     MUp = XNew' * X;
     ################## L-step ##################
@@ -2021,7 +2034,7 @@ function UpdateUIStreamingAdaptive(obj::SolverCSD,X::Array{Float64,2},S::Array{F
     XNew = XNew[:,1:2*r];
 
     # impose boundary condition
-    XNew[obj.boundaryIdx,:] .= 0.0;
+    #XNew[obj.boundaryIdx,:] .= 0.0;
 
     MUp = XNew' * X;
     ################## L-step ##################
@@ -2099,7 +2112,7 @@ function UpdateUIStreamingAdaptive(obj::SolverCSD,X::Array{Float64,2},S::Array{F
     W = WNew[:,1:rmax];
 
     # impose boundary condition
-    X[obj.boundaryIdx,:] .= 0.0;
+    #X[obj.boundaryIdx,:] .= 0.0;
     
     return X,S,W;
 end
@@ -2146,7 +2159,7 @@ function SolveMCollisionSourceDLR(obj::SolverCSD)
     S3 = deepcopy(S);
 
     # impose boundary condition
-    X[obj.boundaryIdx,:] .= 0.0;
+    #X[obj.boundaryIdx,:] .= 0.0;
 
     # setup gamma vector (square norm of P) to nomralize
     settings = obj.settings
@@ -2208,19 +2221,19 @@ function SolveMCollisionSourceDLR(obj::SolverCSD)
         D = Diagonal(sigmaS[1] .- Dvec);
 
         X1,S1,W1 = UnconventionalIntegratorAdaptive!(obj,Dvec,D,X1,S1,W1,psiNew,1,n)
-        X1[obj.boundaryIdx,:] .= 0.0;
+        #X1[obj.boundaryIdx,:] .= 0.0;
         rankInTime[2,n] = size(S1,1);
 
         X2,S2,W2 = UnconventionalIntegratorAdaptive!(obj,Dvec,D,X2,S2,W2,X1,S1,W1,2,n)
-        X2[obj.boundaryIdx,:] .= 0.0;
+        #X2[obj.boundaryIdx,:] .= 0.0;
         rankInTime[3,n] = size(S2,1);
 
         X3,S3,W3 = UnconventionalIntegratorAdaptive!(obj,Dvec,D,X3,S3,W3,X2,S2,W2,3,n)
-        X3[obj.boundaryIdx,:] .= 0.0;
+        #X3[obj.boundaryIdx,:] .= 0.0;
         rankInTime[4,n] = size(S3,1);
 
         X,S,W = UnconventionalIntegratorCollidedAdaptive!(obj,Dvec,D,X,S,W,X3,S3,W3,4,n)
-        X[obj.boundaryIdx,:] .= 0.0;
+        #X[obj.boundaryIdx,:] .= 0.0;
         rankInTime[5,n] = size(S,1);
 
        

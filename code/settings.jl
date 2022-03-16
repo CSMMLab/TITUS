@@ -186,6 +186,29 @@ mutable struct Settings
             y0 = 1.0*d;
             Omega1 = -1.0;
             Omega3 = -1.0;
+        elseif problem =="lung2"
+            #img = Float64.(Gray.(load("phantom.png")))
+            pathlib = pyimport("pathlib")
+            path = pathlib.Path(pwd())
+            println(path)
+            img = Float64.(Gray.(load("Lung_square.png")))
+            nx = size(img,1)
+            ny = size(img,2)
+            println(size(img))
+            densityMin = 0.05
+            for i = 1:NCellsX
+                for j = 1:NCellsY
+                    density[i,j] = max(1.85*img[Int(floor(i/NCellsX*nx)),Int(floor(j/NCellsY*ny))],densityMin) # 1.85 bone, 1.04 muscle, 0.3 lung
+                end
+            end
+            b = 6.0; # right boundary
+            d = 6.0; # upper boundary
+            eMax = 20.0
+            cfl = 1.5
+            x0 = 0.0;
+            y0 = 2.5;
+            Omega1 = -1.0;
+            Omega3 = 0.0;
         elseif problem =="liver"
             #img = Float64.(Gray.(load("phantom.png")))
             pathlib = pyimport("pathlib")
@@ -228,7 +251,7 @@ mutable struct Settings
         dE = cfl*min(dx,dy)*minimum(density);#1/90#
         
         # number PN moments
-        nPN = 21#13, 21; # use odd number
+        nPN = 13#13, 21; # use odd number
 
         # build class
         new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex);

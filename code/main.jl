@@ -10,10 +10,10 @@ using WriteVTK
 
 #close("all")
 
-nx = 151;
-ny = 151;
-problem = "validation"
-s = Settings(nx,ny,200,problem);
+nx = 201;
+ny = 201;
+problem = "lung2"
+s = Settings(nx,ny,50,problem);
 rhoMin = minimum(s.density);
 
 if s.problem == "AirCavity"
@@ -65,15 +65,13 @@ end
 solver1 = SolverCSD(s);
 X_dlr,S_dlr,W_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR(solver1);
 #u, dose_DLR = Solve(solver1);
+#u, dose_DLR, psi_DLR = SolveFirstCollisionSource(solver1);
 u = X_dlr*diagm(S_dlr)*W_dlr';
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
 u = Vec2Mat(s.NCellsX,s.NCellsY,u[:,1]);
 
 X = (s.xMid[2:end-1]'.*ones(size(s.yMid[2:end-1])))
 Y = (s.yMid[2:end-1]'.*ones(size(s.xMid[2:end-1])))'
-
-XRef = (xRef[2:end-1]'.*ones(size(xRef[2:end-1])))
-YRef = (yRef[2:end-1]'.*ones(size(yRef[2:end-1])))'
 
 fig = figure("Dose, DLRA",figsize=(10*(s.d/s.b),10),dpi=100)
 ax = gca()
@@ -86,6 +84,9 @@ plt.ylabel("y", fontsize=20)
 plt.title(L"dose, DLRA", fontsize=25)
 tight_layout()
 savefig("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
+
+XRef = (xRef[2:end-1]'.*ones(size(xRef[2:end-1])))
+YRef = (yRef[2:end-1]'.*ones(size(yRef[2:end-1])))'
 
 fig = figure("Dose, ref",figsize=(10*(s.d/s.b),10),dpi=100)
 ax = gca()
