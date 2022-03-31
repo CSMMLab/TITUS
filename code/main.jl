@@ -10,10 +10,10 @@ using WriteVTK
 
 #close("all")
 
-nx = 151;
-ny = 151;
-problem = "validation"
-s = Settings(nx,ny,200,problem);
+nx = 301;
+ny = 301;
+problem = "validationMC"
+s = Settings(nx,ny,500,problem);
 rhoMin = minimum(s.density);
 
 if s.problem == "AirCavity"
@@ -63,9 +63,9 @@ end
 ############################
 
 solver1 = SolverCSD(s);
-X_dlr,S_dlr,W_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR(solver1);
-#u, dose_DLR = Solve(solver1);
-u = X_dlr*diagm(S_dlr)*W_dlr';
+#X_dlr,S_dlr,W_dlr, dose_DLR = Solver(solver1);
+u, dose_DLR = Solve(solver1);
+#u = X_dlr*diagm(S_dlr)*W_dlr';
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
 u = Vec2Mat(s.NCellsX,s.NCellsY,u[:,1]);
 

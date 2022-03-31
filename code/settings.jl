@@ -123,7 +123,7 @@ mutable struct Settings
             adaptIndex = 0;
             epsAdapt = 0.3;#0.5;
             density[Int(floor(NCellsX*0.56/(b-a))):end,:] .= 5.0;
-        elseif problem =="validation"
+        elseif problem =="validationMC"
             a = 0.0483333333333333; # left boundary
             b = 14.4516666666667; # right boundary
             c = 0.0483333333333333; # lower boundary
@@ -137,9 +137,9 @@ mutable struct Settings
             Omega1 = 0.0;
             Omega3 = 1.0;
             x0 = 0.5*b;
-            y0 = 0.0*d;
+            y0 = 1.0*c+1;
             #epsAdapt = 1e-1;
-            density[Int(floor(NCellsX*0.5))+1:end,:] .= 1.85;
+            #density[Int(floor(NCellsX*0.5))+1:end,:] .= 1.85;
         elseif problem =="lungOrig"
             #img = Float64.(Gray.(load("phantom.png")))
             pathlib = pyimport("pathlib")
@@ -228,7 +228,7 @@ mutable struct Settings
         dE = cfl*min(dx,dy)*minimum(density);#1/90#
         
         # number PN moments
-        nPN = 21#13, 21; # use odd number
+        nPN = 27#13, 21; # use odd number
 
         # build class
         new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex);

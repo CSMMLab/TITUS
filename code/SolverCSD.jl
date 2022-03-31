@@ -372,7 +372,7 @@ function SetupIC(obj::SolverCSD)
                 for k = 1:nq
                     sigmaO1Inv = 10000.0;
                     sigmaO3Inv = 10000.0;
-                    pos_beam = [0.5*14.5,0.0,0];
+                    pos_beam = [0.5*14.5,1+0.0483333333333333,0];
                     space_beam = normpdf(obj.settings.xMid[i],pos_beam[1],.01).*normpdf(obj.settings.yMid[j],pos_beam[2],.01);
                     trafo = 1.0;#obj.csd.S[1]*obj.settings.density[i,j];
                     psi[i,j,k] = 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-obj.Q.pointsxyz[k,1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-obj.Q.pointsxyz[k,3])^2)*space_beam*trafo;
@@ -419,7 +419,7 @@ function SetupICMoments(obj::SolverCSD)
     
         for i = 1:nx
             for j = 1:ny
-                pos_beam = [0.0,0.5*14.5,0];
+                pos_beam = [0,0.5*14.4516666666667,0];
                 space_beam = normpdf(obj.settings.xMid[i],pos_beam[1],.01).*normpdf(obj.settings.yMid[j],pos_beam[2],.01);
                 trafo = 1.0;#obj.csd.S[1]*obj.settings.density[i,j];
                 u[i,j,:] = Float64.(obj.pn.M*psi)*space_beam;
@@ -459,8 +459,8 @@ function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y:
         sigmaO1Inv = 10000.0;
         sigmaO3Inv = 10000.0;
         densityMin = 1.0;
-        pos_beam = [0.5*14.5,0.0,0];
-        space_beam = normpdf(x,pos_beam[1],.01).*normpdf(y,pos_beam[2],.01);
+        pos_beam = [0.5*14.4516666666667,0,0];
+        space_beam = normpdf(x,pos_beam[1],.0967).*normpdf(y,pos_beam[2],.0967);
         #println(space_beam)
         return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*space_beam*obj.csd.S[n]*densityMin;
     elseif obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD"
@@ -823,7 +823,7 @@ function SolveFirstCollisionSource(obj::SolverCSD)
         D = Diagonal(sigmaS[1] .- Dvec);
 
         # stream uncollided particles
-        solveFluxUpwind!(obj,psi,flux);
+        solveFluxUpwind!(obj,psi./obj.density,flux);
 
         psi .= psi .- dE*flux;
         
@@ -969,7 +969,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         obj.dose .+= 0.5*dE * (X*S*W[1,:]+uOUnc) * obj.csd.S[n-1] ./ obj.densityVec ;
 
         # stream uncollided particles
-        solveFluxUpwind!(obj,psi,flux);
+        solveFluxUpwind!(obj,psi./obj.density,flux);
 
         psiBC = psi[obj.boundaryIdx];
 
@@ -1185,7 +1185,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         end
 
         # stream uncollided particles
-        solveFluxUpwind!(obj,psi,flux);
+        solveFluxUpwind!(obj,psi./obj.density,flux);
 
         psi .= psi .- dE*flux;
         
@@ -2191,7 +2191,7 @@ function SolveMCollisionSourceDLR(obj::SolverCSD)
         end
 
         # stream uncollided particles
-        solveFluxUpwind!(obj,psi,flux);
+        solveFluxUpwind!(obj,psi./obj.density,flux);
 
         psi .= psi .- dE*flux;
 
