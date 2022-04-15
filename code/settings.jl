@@ -10,6 +10,8 @@ mutable struct Settings
     # number spatial cells
     NCellsX::Int64;
     NCellsY::Int64;
+    # number of collocation points
+    Nxi::Int;
     # start and end point
     a::Float64;
     b::Float64;
@@ -59,7 +61,13 @@ mutable struct Settings
     epsAdapt::Float64;  
     adaptIndex::Float64;
 
-    function Settings(Nx::Int=102,Ny::Int=102,r::Int=15,problem::String="LineSource")
+    # uncertainty
+    rho0Inv::Array{Float64,2};
+    rho1Inv::Array{Float64,2};
+    rho0InvVec::Array{Float64,1};
+    rho1InvVec::Array{Float64,1};
+
+    function Settings(Nx::Int=102,Ny::Int=102,Nxi::Int=100,r::Int=15,problem::String="LineSource")
 
         # spatial grid setting
         NCellsX = Nx - 1;
@@ -137,7 +145,7 @@ mutable struct Settings
             Omega1 = 0.0;
             Omega3 = 1.0;
             x0 = 0.5*b;
-            y0 = 0.0*d;
+            y0 = 0.5*d;
             #epsAdapt = 1e-1;
             density[Int(floor(NCellsX*0.5))+1:end,:] .= 1.85;
         elseif problem =="lungOrig"
@@ -234,6 +242,13 @@ mutable struct Settings
         end
         sigmaT = sigmaA + sigmaS;
 
+        # define inverse tissue density
+        rho0Inv = ones(NCellsX,NCellsY);#1.0./density#ones(NCellsX*NCellsY);
+        rho1Inv = 0.0*ones(NCellsX,NCellsY);
+        density = ones(size(density));
+        densityMin = 1.0
+        cfl = 0.6;
+
         # spatial grid
         x = collect(range(a,stop = b,length = NCellsX));
         dx = x[2]-x[1];
@@ -251,10 +266,10 @@ mutable struct Settings
         dE = cfl*min(dx,dy)*minimum(density);#1/90#
         
         # number PN moments
-        nPN = 13#13, 21; # use odd number
+        nPN = 7#13, 21; # use odd number
 
         # build class
-        new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex);
+        new(Nx,Ny,NCellsX,NCellsY,Nxi,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex,rho0Inv,rho1Inv,vec(rho0Inv),vec(rho1Inv));
     end
 end
 

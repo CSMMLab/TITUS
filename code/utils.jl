@@ -57,6 +57,20 @@ function Mat2Vec(mat)
     return v;
 end
 
+function Ten2Ten(ten::Array{Float64,4}) # collapses order 4 to order 3 tensor
+    nx = size(ten,1)
+    ny = size(ten,2)
+    m = size(ten,3)
+    nxi = size(ten,4)
+    v = zeros(nx*ny,m,nxi);
+    for i = 1:nx
+        for j = 1:ny
+            v[(i-1)*ny + j,:,:] = ten[i,j,:,:]
+        end
+    end
+    return v;
+end
+
 function Ten2Vec(ten)
     nx = size(ten,1)
     ny = size(ten,2)
@@ -77,4 +91,30 @@ end
 
 function vectorIndex(ny,i,j)
     return (i-1)*ny + j;
+end
+
+function FillMatrix(mat,r)
+    if size(mat,2) != r
+        tmp = mat;
+        mat = zeros(size(tmp,1),r)
+        for i = 1:size(tmp,2)
+            mat[:,i] = tmp[:,i];
+        end
+    end
+    return mat
+end
+
+function FillTensor(ten,r)
+    if size(ten,1) != r || size(ten,2) != r || size(ten,3) != r
+        tmp = ten;
+        ten = zeros(r,r,r)
+        for i = 1:size(tmp,1)
+            for j = 1:size(tmp,2)
+                for k = 1:size(tmp,3)
+                    ten[i,j,k] = tmp[i,j,k];
+                end
+            end
+        end
+    end
+    return ten
 end

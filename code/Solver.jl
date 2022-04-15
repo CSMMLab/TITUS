@@ -4,6 +4,7 @@ using ProgressMeter
 using LinearAlgebra
 using LegendrePolynomials
 using QuadGK
+using TensorToolbox
 
 struct Solver
     # spatial grid of cell interfaces
