@@ -145,7 +145,7 @@ mutable struct Settings
             Omega1 = 0.0;
             Omega3 = 1.0;
             x0 = 0.5*b;
-            y0 = 0.5*d;
+            y0 = 0.0*d;
             #epsAdapt = 1e-1;
             density[Int(floor(NCellsX*0.5))+1:end,:] .= 1.85;
         elseif problem =="lungOrig"
@@ -243,8 +243,8 @@ mutable struct Settings
         sigmaT = sigmaA + sigmaS;
 
         # define inverse tissue density
-        rho0Inv = ones(NCellsX,NCellsY);#1.0./density#ones(NCellsX*NCellsY);
-        rho1Inv = 0.0*ones(NCellsX,NCellsY);
+        rho0Inv = 1.0./density;#ones(NCellsX*NCellsY);
+        rho1Inv = 0.1*ones(NCellsX,NCellsY);
         density = ones(size(density));
         densityMin = 1.0
         cfl = 0.6;
@@ -263,7 +263,7 @@ mutable struct Settings
 
         # time settings
         #cfl = 1.5#1.4 # CFL condition
-        dE = cfl*min(dx,dy)*minimum(density);#1/90#
+        dE = cfl*min(dx,dy)/maximum(rho0Inv .+ rho1Inv);#1/90#
         
         # number PN moments
         nPN = 7#13, 21; # use odd number

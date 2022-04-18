@@ -118,3 +118,53 @@ function FillTensor(ten,r)
     end
     return ten
 end
+
+function FillTensor(ten,r1,r2,r3)
+    if size(ten,1) != r1 || size(ten,2) != r2 || size(ten,3) != r3
+        tmp = ten;
+        ten = zeros(r1,r2,r3)
+        for i = 1:size(tmp,1)
+            for j = 1:size(tmp,2)
+                for k = 1:size(tmp,3)
+                    ten[i,j,k] = tmp[i,j,k];
+                end
+            end
+        end
+    end
+    return ten
+end
+
+function Var(u::Array{Float64,3})
+    nx = size(u,1);
+    n = size(u,2);
+    nxi = size(u,3);
+    EU = zeros(nx,n);
+    VarU = zeros(nx,n);
+    xi, w = gausslegendre(nxi);
+    for l = 1:nxi
+        EU .+= w[l]*u[:,:,l]*0.5;
+    end
+
+    for l = 1:nxi
+        VarU .+= 0.5*w[l]*(u[:,:,l] .- EU).^2;
+    end
+    return VarU;
+end
+
+function Var(u::Array{Float64,4})
+    nx = size(u,1);
+    ny = size(u,2);
+    n = size(u,3);
+    nxi = size(u,4);
+    EU = zeros(nx,ny,n);
+    VarU = zeros(nx,ny,n);
+    xi, w = gausslegendre(nxi);
+    for l = 1:nxi
+        EU .+= w[l]*u[:,:,:,l]*0.5;
+    end
+
+    for l = 1:nxi
+        VarU .+= 0.5*w[l]*(u[:,:,:,l] .- EU).^2;
+    end
+    return VarU;
+end
