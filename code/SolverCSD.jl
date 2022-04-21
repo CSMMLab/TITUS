@@ -454,13 +454,12 @@ end
 
 function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y::Float64,n::Int)
     E0 = obj.settings.eMax;
-    if obj.settings.problem == "lung" || obj.settings.problem == "lungOrig"
+    if obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "timeCT"
         sigmaO1Inv = 0.0;
         sigmaO3Inv = 75.0;
         sigmaXInv = 20.0;
         sigmaYInv = 20.0;
         sigmaEInv = 100.0;
-        println("lungOrig");
     elseif obj.settings.problem == "liver"
         sigmaO1Inv = 75.0;
         sigmaO3Inv = 0.0;
@@ -705,7 +704,7 @@ function SolveFirstCollisionSource(obj::SolverCSD,xi::Float64=0.0)
     if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" || obj.settings.problem == "lung2" # determine relevant directions in IC
         idxFullBeam = findall(psi .> floorPsiAll)
         idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
-    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" # determine relevant directions in beam
+    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" || obj.settings.problem == "timeCT" # determine relevant directions in beam
         psiBeam = zeros(nq)
         for k = 1:nq
             psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)
@@ -827,7 +826,7 @@ function SolveFirstCollisionSourceTensorDLRAold(obj::SolverCSD)
     if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" || obj.settings.problem == "lung2" # determine relevant directions in IC
         idxFullBeam = findall(psi .> floorPsiAll)
         idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
-    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" # determine relevant directions in beam
+    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" || obj.settings.problem == "timeCT" # determine relevant directions in beam
         psiBeam = zeros(nq)
         for k = 1:nq
             psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)
@@ -1121,7 +1120,7 @@ function SolveFirstCollisionSourceTensorDLRA(obj::SolverCSD)
     if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" || obj.settings.problem == "lung2" # determine relevant directions in IC
         idxFullBeam = findall(psi .> floorPsiAll)
         idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
-    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" # determine relevant directions in beam
+    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" || obj.settings.problem == "timeCT" # determine relevant directions in beam
         psiBeam = zeros(nq)
         for k = 1:nq
             psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)
@@ -1382,7 +1381,7 @@ function SolveFirstCollisionSourceTensor(obj::SolverCSD)
     if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" || obj.settings.problem == "lung2" # determine relevant directions in IC
         idxFullBeam = findall(psi .> floorPsiAll)
         idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
-    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" # determine relevant directions in beam
+    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" || obj.settings.problem == "timeCT" # determine relevant directions in beam
         psiBeam = zeros(nq)
         for k = 1:nq
             psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)
@@ -1538,7 +1537,7 @@ function SolveFirstCollisionSourceUINaive(obj::SolverCSD)
     if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" || obj.settings.problem == "lung2" # determine relevant directions in IC
         idxFullBeam = findall(psi .> floorPsiAll)
         idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
-    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" # determine relevant directions in beam
+    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" || obj.settings.problem == "timeCT" # determine relevant directions in beam
         psiBeam = zeros(nq)
         for k = 1:nq
             psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)
@@ -1789,7 +1788,7 @@ function SolveFirstCollisionSourceUI(obj::SolverCSD)
     if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" || obj.settings.problem == "lung2" # determine relevant directions in IC
         idxFullBeam = findall(psi .> floorPsiAll)
         idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
-    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" # determine relevant directions in beam
+    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" || obj.settings.problem == "timeCT" # determine relevant directions in beam
         psiBeam = zeros(nq)
         for k = 1:nq
             psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)
@@ -2054,7 +2053,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         println(size(idxFullBeam));
         println(maximum(psi))
         idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
-    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" || obj.settings.problem == "lung2"# determine relevant directions in beam
+    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" || obj.settings.problem == "lung2" || obj.settings.problem == "timeCT"# determine relevant directions in beam
         psiBeam = zeros(nq)
         for k = 1:nq
             psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)

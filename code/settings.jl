@@ -239,6 +239,38 @@ mutable struct Settings
             y0 = 0.35*d;
             Omega1 = -1.0;
             Omega3 = -1.0;
+        elseif problem =="timeCT"
+            nx = NCellsX;
+            ny = NCellsY;
+            densityTmp = zeros(nx,ny);
+            ndata = 10;
+            densityInv = zeros(nx*ny,ndata);
+            for k = 1:ndata
+                img = Float64.(Gray.(load("CTData/$(k)-070.png")));
+                nxi = size(img,1);
+                nyi = size(img,2);
+                densityMin = 0.05;
+                for i = 1:nx
+                    for j = 1:ny
+                        densityTmp[i,j] = max(1.85*img[max(Int(floor(i/nx*nxi)),1),max(Int(floor(j/ny*nyi)),1)],densityMin) # 1.85 bone, 1.04 muscle, 0.3 lung
+                    end
+                end
+                densityInv[:,k] = 1.0./Mat2Vec(densityTmp);
+            end
+            
+            nf = 100;
+            xi_tab = collect(range(0,1,10));
+            xi = collect(range(0,1,nf));
+            densityInvF = zeros(nx*ny,nf);
+            
+            for j = 1:nx*ny
+                xiToDensity = LinearInterpolation(xi_tab, densityInv[j,:]; extrapolation_bc=Throw())
+                for i = 1:nf  
+                    densityInvF[j,i] = xiToDensity(xi[i])
+                end
+            end
+            
+            U,S,V = svd(densityInvF)
         end
         sigmaT = sigmaA + sigmaS;
 
