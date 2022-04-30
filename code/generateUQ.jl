@@ -12,7 +12,7 @@ include("utils.jl")
 nx = 300;
 ny = 300;
 nxi = 20;
-problem = "lung"
+problem = "timeCT"
 s = Settings(nx+1,ny+1,nxi,20,problem);
 densityTmp = zeros(nx,ny);
 ndata = 10;
@@ -21,7 +21,7 @@ for k = 1:ndata
     img = Float64.(Gray.(load("CTData/$(k)-070.png")));
     nxi = size(img,1);
     nyi = size(img,2);
-    densityMin = 0.05;
+    densityMin = 0.2;
     for i = 1:nx
         for j = 1:ny
             densityTmp[i,j] = max(1.85*img[max(Int(floor(i/nx*nxi)),1),max(Int(floor(j/ny*nyi)),1)],densityMin) # 1.85 bone, 1.04 muscle, 0.3 lung
@@ -30,7 +30,7 @@ for k = 1:ndata
     densityInv[:,k] = 1.0./Mat2Vec(densityTmp);
 end
 
-nf = 100;
+nf = 50;
 xi_tab = collect(range(0,1,10));
 xi = collect(range(0,1,nf));
 densityInvF = zeros(nx*ny,nf);
@@ -42,7 +42,14 @@ for j = 1:nx*ny
     end
 end
 
-U,S,V = svd(densityInvF)
+rXi = 5;
+rhoInvX,rhoInv,rhoInvXi = svd(densityInvF)
+rhoInvXi = Matrix(rhoInvXi);
+rhoInv = rhoInv[1:rXi];
+rhoInvX = rhoInvX[:,1:rXi];
+rhoInvXi = rhoInvXi[:,1:rXi];
+densityInvF = rhoInvX*Diagonal(rhoInv)*rhoInvXi'
+#densityInvF = rhoInvX*Diagonal(rhoInv)*rhoInvXiT
 
 XX = (s.xMid[2:end-1]'.*ones(size(s.yMid[2:end-1])))
 YY = (s.yMid[2:end-1]'.*ones(size(s.xMid[2:end-1])))'

@@ -19,7 +19,7 @@ nxi = 20;
 s = Settings(nx,nx,nxi,20,problem);
 solver = SolverCSD(s);
 #X_dlr,W_dlr,U_dlr,C, dose_dlra,dose_dlra_var, psi_DLR,doseXi = SolveFirstCollisionSourceDLR(solver2);
-u,dose_dlra,dose_dlra_var, psi_DLR = SolveFirstCollisionSourceUI(solver);
+u,dose_dlra,dose_dlra_var, psi_DLR = SolveFirstCollisionSourceUIOld(solver);
 dose_dlra = Vec2Mat(s.NCellsX,s.NCellsY,dose_dlra);
 dose_dlra_var = Vec2Mat(s.NCellsX,s.NCellsY,dose_dlra_var);
 

@@ -67,6 +67,10 @@ mutable struct Settings
     rho0InvVec::Array{Float64,1};
     rho1InvVec::Array{Float64,1};
 
+    rhoInv::Array{Float64,1};
+    rhoInvX::Array{Float64,2};
+    rhoInvXi::Array{Float64,2};
+
     function Settings(Nx::Int=102,Ny::Int=102,Nxi::Int=100,r::Int=15,problem::String="LineSource")
 
         # spatial grid setting
@@ -249,7 +253,8 @@ mutable struct Settings
                 img = Float64.(Gray.(load("CTData/$(k)-070.png")));
                 nxi = size(img,1);
                 nyi = size(img,2);
-                densityMin = 0.05;
+                densityMin = 0.2;
+                #img = ones(size(img))
                 for i = 1:nx
                     for j = 1:ny
                         densityTmp[i,j] = max(1.85*img[max(Int(floor(i/nx*nxi)),1),max(Int(floor(j/ny*nyi)),1)],densityMin) # 1.85 bone, 1.04 muscle, 0.3 lung
@@ -258,19 +263,35 @@ mutable struct Settings
                 densityInv[:,k] = 1.0./Mat2Vec(densityTmp);
             end
             
-            nf = 100;
             xi_tab = collect(range(0,1,10));
-            xi = collect(range(0,1,nf));
-            densityInvF = zeros(nx*ny,nf);
+            xi = collect(range(0,1,nxi));
+            densityInvF = zeros(nx*ny,nxi);
             
             for j = 1:nx*ny
                 xiToDensity = LinearInterpolation(xi_tab, densityInv[j,:]; extrapolation_bc=Throw())
-                for i = 1:nf  
+                for i = 1:nxi  
                     densityInvF[j,i] = xiToDensity(xi[i])
                 end
             end
             
-            U,S,V = svd(densityInvF)
+            rXi = 5;
+            rhoInvX,rhoInv,rhoInvXi = svd(densityInvF)
+            rhoInvXi = Matrix(rhoInvXi);
+            rhoInv = rhoInv[1:rXi];
+            rhoInvX = rhoInvX[:,1:rXi];
+            rhoInvXi = rhoInvXi[:,1:rXi]
+
+            println("error tissue is ",norm(rhoInvX*Diagonal(rhoInv)*rhoInvXi' - densityInvF))
+
+            b = 14.5; # right boundary
+            d = 14.5; # upper boundary
+            eMax = 31.0
+            cfl = 0.6
+            x0 = 0.8*b;
+            y0 = 1.0*d;
+            Omega1 = 0.8;
+            Omega3 = -1.0;
+            normOmega = sqrt(Omega1^2 + Omega3^2); Omega1 /= normOmega; Omega3 /= normOmega;
         end
         sigmaT = sigmaA + sigmaS;
 
@@ -278,8 +299,7 @@ mutable struct Settings
         rho0Inv = 1.0./density;#ones(NCellsX*NCellsY);
         rho1Inv = 0.1*ones(NCellsX,NCellsY);
         density = ones(size(density));
-        densityMin = 1.0
-        cfl = 0.6;
+        #densityMin = 1.0
 
         # spatial grid
         x = collect(range(a,stop = b,length = NCellsX));
@@ -295,13 +315,14 @@ mutable struct Settings
 
         # time settings
         #cfl = 1.5#1.4 # CFL condition
-        dE = cfl*min(dx,dy)/maximum(rho0Inv .+ rho1Inv);#1/90#
+        #dE = cfl*min(dx,dy)/maximum(rho0Inv .+ rho1Inv);#1/90#
+        dE = cfl*min(dx,dy)*densityMin;#1/90#
         
         # number PN moments
         nPN = 7#13, 21; # use odd number
 
         # build class
-        new(Nx,Ny,NCellsX,NCellsY,Nxi,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex,rho0Inv,rho1Inv,vec(rho0Inv),vec(rho1Inv));
+        new(Nx,Ny,NCellsX,NCellsY,Nxi,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex,rho0Inv,rho1Inv,vec(rho0Inv),vec(rho1Inv),rhoInv,rhoInvX,rhoInvXi);
     end
 end
 
