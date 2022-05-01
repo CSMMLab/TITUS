@@ -264,12 +264,12 @@ mutable struct Settings
             end
             
             xi_tab = collect(range(0,1,10));
-            xi = collect(range(0,1,nxi));
-            densityInvF = zeros(nx*ny,nxi);
+            xi = collect(range(0,1,Nxi));
+            densityInvF = zeros(nx*ny,Nxi);
             
             for j = 1:nx*ny
                 xiToDensity = LinearInterpolation(xi_tab, densityInv[j,:]; extrapolation_bc=Throw())
-                for i = 1:nxi  
+                for i = 1:Nxi  
                     densityInvF[j,i] = xiToDensity(xi[i])
                 end
             end

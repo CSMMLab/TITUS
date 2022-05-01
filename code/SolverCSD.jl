@@ -24,9 +24,6 @@ mutable struct SolverCSD
 
     # Solver settings
     settings::Settings;
-
-    # preallocate memory for performance
-    outRhs::Array{Float64,3};
     
     # squared L2 norms of Legendre coeffs
     gamma::Array{Float64,1};
@@ -97,8 +94,6 @@ mutable struct SolverCSD
         pn = PNSystem(settings)
         Ax,Ay,Az = SetupSystemMatrices(pn);
         SetupSystemMatricesSparse(pn);
-
-        outRhs = zeros(settings.NCellsX,settings.NCellsY,pn.nTotalEntries);
 
         # setup Roe matrix
         S = eigvals(Ax)
@@ -353,7 +348,7 @@ mutable struct SolverCSD
 
         xi, w = gausslegendre(settings.Nxi);
 
-        new(x,y,xGrid,xi,settings,outRhs,gamma,AbsAx,AbsAz,AxPlus,AxMinus,AzPlus,AzMinus,P,mu,w,csd,pn,dose,L1x,L1y,L2x,L2y,boundaryIdx,boundaryBeam,Q,O,M);
+        new(x,y,xGrid,xi,settings,gamma,AbsAx,AbsAz,AxPlus,AxMinus,AzPlus,AzMinus,P,mu,w,csd,pn,dose,L1x,L1y,L2x,L2y,boundaryIdx,boundaryBeam,Q,O,M);
     end
 end
 
@@ -455,11 +450,12 @@ end
 function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y::Float64,n::Int)
     E0 = obj.settings.eMax;
     if obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "timeCT"
-        sigmaO1Inv = 0.0;
-        sigmaO3Inv = 75.0;
-        sigmaXInv = 20.0;
-        sigmaYInv = 20.0;
+        sigmaO1Inv = 300.0;
+        sigmaO3Inv = 300.0;
+        sigmaXInv = 50.0;
+        sigmaYInv = 50.0;
         sigmaEInv = 100.0;
+        OmegaStar = [obj.settings.Omega1; 0.0; obj.settings.Omega3]
     elseif obj.settings.problem == "liver"
         sigmaO1Inv = 75.0;
         sigmaO3Inv = 0.0;
@@ -478,7 +474,7 @@ function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y:
         return 0.0;
     end
 
-    return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*exp(-sigmaEInv*(E0-E)^2)*exp(-sigmaXInv*(x-obj.settings.x0)^2)*exp(-sigmaYInv*(y-obj.settings.y0)^2)*obj.csd.S[n]*obj.settings.densityMin;
+    return 10^5*exp(-sigmaO1Inv*(norm(OmegaStar-Omega)^2))*exp(-sigmaEInv*(E0-E)^2)*exp(-sigmaXInv*(x-obj.settings.x0)^2)*exp(-sigmaYInv*(y-obj.settings.y0)^2)*obj.csd.S[n]*obj.settings.densityMin;
 end
 
 function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y::Float64,xi::Float64,n::Int)
@@ -779,6 +775,120 @@ function SolveFirstCollisionSource(obj::SolverCSD,xi::Float64=0.0)
         # stream collided particles
         uTilde = u .- dE * (obj.L2x*rho0Inv*u*obj.pn.Ax + obj.L2y*rho0Inv*u*obj.pn.Az + obj.L1x*rho0Inv*u*obj.AbsAx' + obj.L1y*rho0Inv*u*obj.AbsAz');
         uTilde = uTilde .- dE * (obj.L2x*rho1InvXi*u*obj.pn.Ax + obj.L2y*rho1InvXi*u*obj.pn.Az + obj.L1x*rho1InvXi*u*obj.AbsAx' + obj.L1y*rho1InvXi*u*obj.AbsAz');  
+        #uTilde[obj.boundaryIdx,:] .= 0.0;
+
+        # scatter particles
+        for i = 2:(nx-1)
+            for j = 2:(ny-1)
+                idx = vectorIndex(ny,i,j);
+                uNew[idx,:] = (Id .+ dE*D)\(uTilde[idx,:] .+ dE*Diagonal(Dvec)*obj.MReduced*psiNew[i,j,:]);
+                uOUnc[idx] = psiNew[i,j,:]'*obj.MReduced[1,:];
+            end
+        end
+        
+        # update dose
+        obj.dose .+= dE * (uNew[:,1]+uOUnc) * obj.csd.SMid[n-1] ./ densityVec ./( 1 + (n==2||n==nEnergies));
+
+
+        u .= uNew;
+        #u[obj.boundaryIdx,:] .= 0.0;
+        psi .= psiNew;
+        next!(prog) # update progress bar
+    end
+    # return end time and solution
+    return 0.5*sqrt(obj.gamma[1])*u,obj.dose,psi;
+
+end
+
+function SolveFirstCollisionSource(obj::SolverCSD,densityVec::Array{Float64,1})
+    eTrafo = obj.csd.eTrafo;
+    energy = obj.csd.eGrid;
+
+    nx = obj.settings.NCellsX;
+    ny = obj.settings.NCellsY;
+    nq = obj.Q.nquadpoints;
+    N = obj.pn.nTotalEntries
+
+    # Set up initial condition and store as matrix
+    psi = SetupIC(obj);
+    floorPsiAll = 1e-1;
+    floorPsi = 1e-17;
+    if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" || obj.settings.problem == "lung2" # determine relevant directions in IC
+        idxFullBeam = findall(psi .> floorPsiAll)
+        idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
+    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" || obj.settings.problem == "timeCT" # determine relevant directions in beam
+        psiBeam = zeros(nq)
+        for k = 1:nq
+            psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)
+        end
+        idxBeam = findall( psiBeam .> floorPsi*maximum(psiBeam) );
+    end
+    psi = psi[:,:,idxBeam]
+    obj.qReduced = obj.Q.pointsxyz[idxBeam,:]
+    obj.MReduced = obj.M[:,idxBeam]
+    obj.OReduced = obj.O[idxBeam,:]
+    println("reduction of ordinates is ",(nq-length(idxBeam))/nq*100.0," percent")
+    nq = length(idxBeam);
+
+    # define density matrix
+    Id = Diagonal(ones(N));
+    density = Vec2Mat(nx,ny,densityVec);
+    rhoInv = Diagonal(1.0./densityVec);
+
+    nEnergies = length(eTrafo);
+    dE = eTrafo[2]-eTrafo[1];
+    obj.settings.dE = dE
+
+
+    u = zeros(nx*ny,N);
+    uNew = deepcopy(u)
+    flux = zeros(size(psi))
+
+    prog = Progress(nEnergies-1,1)
+
+    uOUnc = zeros(nx*ny);
+
+    psiNew = zeros(size(psi));
+    uTilde = zeros(size(u))
+
+    #loop over energy
+    for n=2:nEnergies
+        # compute scattering coefficients at current energy
+        sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
+
+        # set boundary condition
+        if obj.settings.problem != "validation" # validation testcase sets beam in initial condition
+            for k = 1:nq
+                for j = 1:nx
+                    psi[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
+                    psi[j,end,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
+                end
+                for j = 1:ny
+                    psi[1,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
+                    psi[end,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
+                end
+            end
+        end
+       
+        Dvec = zeros(obj.pn.nTotalEntries)
+        for l = 0:obj.pn.N
+            for k=-l:l
+                i = GlobalIndex( l, k );
+                Dvec[i+1] = sigmaS[l+1]
+            end
+        end
+
+        D = Diagonal(sigmaS[1] .- Dvec);
+
+        # stream uncollided particles
+        solveFluxUpwind!(obj,psi./density,flux);
+
+        psi .= psi .- dE*flux;
+        
+        psiNew .= psi ./ (1.0+dE*sigmaS[1]);
+
+        # stream collided particles
+        uTilde = u .- dE * (obj.L2x*rhoInv*u*obj.pn.Ax + obj.L2y*rhoInv*u*obj.pn.Az + obj.L1x*rhoInv*u*obj.AbsAx' + obj.L1y*rhoInv*u*obj.AbsAz');
         #uTilde[obj.boundaryIdx,:] .= 0.0;
 
         # scatter particles
@@ -2036,6 +2146,8 @@ function SolveFirstCollisionSourceUI(obj::SolverCSD)
     nxi = obj.settings.Nxi;
 
     xi, w = gausslegendre(nxi);
+    xi = collect(range(0,1,nxi));
+    w = 1.0/nxi*ones(size(xi))
     Xi = Matrix(Diagonal(xi));
 
     # Set up initial condition and store as matrix
