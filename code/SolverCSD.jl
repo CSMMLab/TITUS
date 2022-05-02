@@ -1537,6 +1537,8 @@ function SolveFirstCollisionSourceTensor(obj::SolverCSD)
     AbsAz = Matrix(obj.AbsAz);
 
     xi, w = gausslegendre(nxi);
+    xi = collect(range(0,1,nxi));
+    w = 1.0/nxi*ones(size(xi))
     Xi = Matrix(Diagonal(xi));
 
     #loop over energy
@@ -1609,14 +1611,16 @@ function SolveFirstCollisionSourceTensor(obj::SolverCSD)
 
     obj.dose .= zeros(size(obj.dose));
     for l = 1:nxi
-        obj.dose .+= w[l]*doseXi[l,:]*0.5;
+        #obj.dose .+= w[l]*doseXi[l,:]*0.5;
+        obj.dose .+= w[l]*doseXi[l,:];
     end
 
     VarDose = zeros(size(obj.dose));
 
     # compute dose variance
     for l = 1:nxi
-        VarDose .+= 0.5*w[l]*(doseXi[l,:] .- obj.dose).^2;
+        #VarDose .+= 0.5*w[l]*(doseXi[l,:] .- obj.dose).^2;
+        VarDose .+= w[l]*(doseXi[l,:] .- obj.dose).^2;
     end
 
     # return end time and solution
@@ -2406,14 +2410,14 @@ function SolveFirstCollisionSourceUI(obj::SolverCSD)
 
     obj.dose .= zeros(size(obj.dose));
     for l = 1:nxi
-        obj.dose .+= w[l]*doseXi[l,:]*0.5;
+        obj.dose .+= w[l]*doseXi[l,:];
     end
 
     VarDose = zeros(size(obj.dose));
 
     # compute dose variance
     for l = 1:nxi
-        VarDose .+= 0.5*w[l]*(doseXi[l,:] .- obj.dose).^2;
+        VarDose .+= w[l]*(doseXi[l,:] .- obj.dose).^2;
     end
 
     # return end time and solution
