@@ -84,6 +84,7 @@ mutable struct Settings
         d = 14.5; # upper boundary
 
         density = ones(NCellsX,NCellsY);
+        rhoInvX = zeros(2,2); rhoInv = zeros(2); rhoInvXi = zeros(2,2);
 
         # physical parameters
         sigmaS = 0.0;
@@ -172,9 +173,10 @@ mutable struct Settings
             cfl = 1.5
             x0 = 0.5*b;
             y0 = 1.0*d;
-            Omega1 = -1.0;
+            Omega1 = 0.0;
             Omega3 = -1.0;
             epsAdapt = 1e-3;
+            normOmega = sqrt(Omega1^2 + Omega3^2); Omega1 /= normOmega; Omega3 /= normOmega;
         elseif problem =="lung"
             #img = Float64.(Gray.(load("phantom.png")))
             pathlib = pyimport("pathlib")
@@ -285,7 +287,7 @@ mutable struct Settings
 
             b = 14.5; # right boundary
             d = 14.5; # upper boundary
-            eMax = 31.0
+            eMax = 21.0
             cfl = 0.6
             x0 = 0.8*b;
             y0 = 1.0*d;
@@ -296,8 +298,8 @@ mutable struct Settings
         sigmaT = sigmaA + sigmaS;
 
         # define inverse tissue density
-        rho0Inv = 1.0./density;#ones(NCellsX*NCellsY);
-        rho1Inv = 0.1*ones(NCellsX,NCellsY);
+        rho0Inv = 2*ones(NCellsX,NCellsY); #1.0./density;#
+        rho1Inv = 1.0*ones(NCellsX,NCellsY);
         density = ones(size(density));
         #densityMin = 1.0
 

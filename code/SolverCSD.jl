@@ -851,6 +851,8 @@ function SolveFirstCollisionSource(obj::SolverCSD,densityVec::Array{Float64,1})
     psiNew = zeros(size(psi));
     uTilde = zeros(size(u))
 
+    obj.dose .= zeros(size(obj.dose));
+
     #loop over energy
     for n=2:nEnergies
         # compute scattering coefficients at current energy
@@ -1537,8 +1539,11 @@ function SolveFirstCollisionSourceTensor(obj::SolverCSD)
     AbsAz = Matrix(obj.AbsAz);
 
     xi, w = gausslegendre(nxi);
-    xi = collect(range(0,1,nxi));
-    w = 1.0/nxi*ones(size(xi))
+    w = w*0.5;
+    if obj.settings.problem == "timeCT"
+        xi = collect(range(0,1,nxi));
+        w = 1.0/nxi*ones(size(xi))
+    end
     Xi = Matrix(Diagonal(xi));
 
     #loop over energy
@@ -2149,7 +2154,7 @@ function SolveFirstCollisionSourceUI(obj::SolverCSD)
     N = obj.pn.nTotalEntries;
     nxi = obj.settings.Nxi;
 
-    xi, w = gausslegendre(nxi);
+    #xi, w = gausslegendre(nxi);
     xi = collect(range(0,1,nxi));
     w = 1.0/nxi*ones(size(xi))
     Xi = Matrix(Diagonal(xi));
@@ -2413,9 +2418,8 @@ function SolveFirstCollisionSourceUI(obj::SolverCSD)
         obj.dose .+= w[l]*doseXi[l,:];
     end
 
-    VarDose = zeros(size(obj.dose));
-
     # compute dose variance
+    VarDose = zeros(size(obj.dose));
     for l = 1:nxi
         VarDose .+= w[l]*(doseXi[l,:] .- obj.dose).^2;
     end
