@@ -12,16 +12,20 @@ close("all")
 
 problem = "timeCT"
 nx = 51; ny = 51;
-Nxi = 50;
+Nxi = 30;
 
 ############################ DLRA ############################
 
-s = Settings(nx,ny,Nxi,40,problem);
+s = Settings(nx,ny,Nxi,30,problem);
 solver = SolverCSD(s);
 #X_dlr,W_dlr,U_dlr,C, dose_dlra,dose_dlra_var, psi_DLR,doseXi = SolveFirstCollisionSourceDLR(solver2);
 u,dose_dlra,dose_dlra_var, psi_DLR = SolveFirstCollisionSourceUI(solver);
 dose_dlra = Vec2Mat(s.NCellsX,s.NCellsY,dose_dlra);
 dose_dlra_var = Vec2Mat(s.NCellsX,s.NCellsY,dose_dlra_var);
+
+doseMax = maximum(dose_dlra[2:(end-1),2:(end-1)]);
+doseMaxVar = maximum(dose_dlra_var[2:(end-1),2:(end-1)]);
+println("DLRA = ",doseMax," ",doseMaxVar)
 
 ############################ Collocation ############################
 

@@ -168,3 +168,39 @@ function Var(u::Array{Float64,4})
     end
     return VarU;
 end
+
+
+function VarD(u::Array{Float64,3})
+    nx = size(u,1);
+    n = size(u,2);
+    nxi = size(u,3);
+    EU = zeros(nx,n);
+    VarU = zeros(nx,n);
+    w = 1/nxi * ones(nxi);
+    for l = 1:nxi
+        EU .+= w[l]*u[:,:,l];
+    end
+
+    for l = 1:nxi
+        VarU .+= w[l]*(u[:,:,l] .- EU).^2;
+    end
+    return VarU;
+end
+
+function VarD(u::Array{Float64,4})
+    nx = size(u,1);
+    ny = size(u,2);
+    n = size(u,3);
+    nxi = size(u,4);
+    EU = zeros(nx,ny,n);
+    VarU = zeros(nx,ny,n);
+    w = 1/nxi * ones(nxi);
+    for l = 1:nxi
+        EU .+= w[l]*u[:,:,:,l];
+    end
+
+    for l = 1:nxi
+        VarU .+= w[l]*(u[:,:,:,l] .- EU).^2;
+    end
+    return VarU;
+end

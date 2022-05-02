@@ -600,7 +600,7 @@ function solveFluxUpwind!(obj::SolverCSD, phi::Array{Float64,3}, flux::Array{Flo
     end
 end
 
-function solveFluxUpwind!(obj::SolverCSD, phi::Array{Float64,4}, flux::Array{Float64,4})
+function solveFluxUpwindOld!(obj::SolverCSD, phi::Array{Float64,4}, flux::Array{Float64,4})
     # computes the numerical flux over cell boundaries for each ordinate
     # for faster computation, we split the iteration over quadrature points
     # into four different blocks: North West, Nort East, Sout West, South East
@@ -672,7 +672,86 @@ function solveFluxUpwind!(obj::SolverCSD, phi::Array{Float64,4}, flux::Array{Flo
         southflux = s2
 
         s2 = (rho0Inv[i,j]+obj.xi[l]*rho1Inv[i,j])*phi[i,j,q,l]
-        s3 = phi[i+1,j,q,l]
+        s3 = (rho0Inv[i+1,j]+obj.xi[l]*rho1Inv[i+1,j])*phi[i+1,j,q,l]
+        eastflux = s3
+        westflux = s2
+
+        flux[i,j,q,l] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
+        obj.qReduced[q,3] ./obj.settings.dy .*(northflux-southflux)
+    end
+end
+
+function solveFluxUpwind!(obj::SolverCSD, phi::Array{Float64,4}, flux::Array{Float64,4},rhoInv::Array{Float64,3})
+    # computes the numerical flux over cell boundaries for each ordinate
+    # for faster computation, we split the iteration over quadrature points
+    # into four different blocks: North West, Nort East, Sout West, South East
+    # this corresponds to the direction the ordinates point to
+    idxPosPos = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,3].>=0.0))
+    idxPosNeg = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,3].<0.0))
+    idxNegPos = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,3].>=0.0))
+    idxNegNeg = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,3].<0.0))
+
+    nx = collect(2:(obj.settings.NCellsX-1));
+    ny = collect(2:(obj.settings.NCellsY-1));
+    nxi = collect(1:(obj.settings.Nxi));
+
+
+    # PosPos
+    for j=ny,i=nx,l=nxi, q = idxPosPos
+        s2 = phi[i,j-1,q,l]*rhoInv[i,j-1,l]
+        s3 = phi[i,j,q,l]*rhoInv[i,j,l]
+        northflux = s3
+        southflux = s2
+
+        s2 = phi[i-1,j,q,l]*rhoInv[i-1,j,l]
+        s3 = phi[i,j,q,l]*rhoInv[i,j,l]
+        eastflux = s3
+        westflux = s2
+
+        flux[i,j,q,l] = obj.qReduced[q,1] ./obj.settings.dx .* (eastflux-westflux) +
+        obj.qReduced[q,3]./obj.settings.dy .* (northflux-southflux)
+    end
+    #PosNeg
+    for j=ny,i=nx,l=nxi,q = idxPosNeg
+        s2 = phi[i,j,q,l]*rhoInv[i,j,l]
+        s3 = phi[i,j+1,q,l]*rhoInv[i,j+1,l]
+        northflux = s3
+        southflux = s2
+
+        s2 = phi[i-1,j,q,l]*rhoInv[i-1,j,l]
+        s3 = phi[i,j,q,l]*rhoInv[i,j,l]
+        eastflux = s3
+        westflux = s2
+
+        flux[i,j,q,l] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
+        obj.qReduced[q,3] ./obj.settings.dy .*(northflux-southflux)
+    end
+
+    # NegPos
+    for j=ny,i=nx,l=nxi,q = idxNegPos
+        s2 = phi[i,j-1,q,l]*rhoInv[i,j-1,l]
+        s3 = phi[i,j,q,l]*rhoInv[i,j,l]
+        northflux = s3
+        southflux = s2
+
+        s2 = phi[i,j,q,l]*rhoInv[i,j,l]
+        s3 = phi[i+1,j,q,l]*rhoInv[i+1,j,l]
+        eastflux = s3
+        westflux = s2
+
+        flux[i,j,q,l] = obj.qReduced[q,1]./obj.settings.dx .*(eastflux-westflux) +
+        obj.qReduced[q,3] ./obj.settings.dy .*(northflux-southflux)
+    end
+
+    # NegNeg
+    for j=ny,i=nx,l=nxi,q = idxNegNeg
+        s2 = phi[i,j,q,l]*rhoInv[i,j,l]
+        s3 = phi[i,j+1,q,l]*rhoInv[i,j+1,l]
+        northflux = s3
+        southflux = s2
+
+        s2 = phi[i,j,q,l]*rhoInv[i,j,l]
+        s3 = phi[i+1,j,q,l]*rhoInv[i+1,j,l]
         eastflux = s3
         westflux = s2
 
@@ -2242,6 +2321,10 @@ function SolveFirstCollisionSourceUI(obj::SolverCSD)
 
     rXi = length(s.rhoInv)
     rhoInv = s.rhoInvX*Diagonal(s.rhoInv)*s.rhoInvXi';
+    rhoInvMat = zeros(nx,ny,nxi)
+    for l = 1:nxi
+        rhoInvMat[:,:,l] = Vec2Mat(nx,ny,rhoInv[:,l]);
+    end
 
 
     #loop over energy
@@ -2277,7 +2360,7 @@ function SolveFirstCollisionSourceUI(obj::SolverCSD)
         D = Diagonal(sigmaS[1] .- Dvec);
 
         # stream uncollided particles
-        solveFluxUpwind!(obj,psi,flux);
+        solveFluxUpwind!(obj,psi,flux,rhoInvMat);
 
         psi .= (psi .- dE*flux) ./ (1.0+dE*sigmaS[1]);
 
@@ -2543,7 +2626,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         end
 
         # stream uncollided particles
-        solveFluxUpwind!(obj,psi,flux);
+        solveFluxUpwindOld!(obj,psi,flux);
 
         #psiBC = psi[obj.boundaryIdx];
 
