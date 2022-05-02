@@ -30,13 +30,13 @@ rhoInvX = s.rhoInvX;
 rhoInv = s.rhoInv;
 rhoInvXi = s.rhoInvXi;
 rhoFull = (rhoInvX*Diagonal(rhoInv)*rhoInvXi').^(-1);
-rhoFullTestInv = zeros(size(rhoFull));
+#=rhoFullTestInv = zeros(size(rhoFull));
 for k = 1:length(rhoInv)
     rhoFullTestInv .+= rhoInvX[:,k]*rhoInv[k]*rhoInvXi[:,k]';
 end
 rhoFullTest = rhoFullTestInv.^(-1);
 println(norm(rhoFullTest - rhoFull))
-#=test rho full
+=test rho full
 XX = (s.xMid[2:end-1]'.*ones(size(s.yMid[2:end-1])))
 YY = (s.yMid[2:end-1]'.*ones(size(s.xMid[2:end-1])))'
 for i = 1:Nxi

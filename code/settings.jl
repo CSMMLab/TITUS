@@ -252,7 +252,8 @@ mutable struct Settings
             ndata = 10;
             densityInv = zeros(nx*ny,ndata);
             for k = 1:ndata
-                img = Float64.(Gray.(load("CTData/$(k)-070.png")));
+                #img = Float64.(Gray.(load("CTData/$(k)-070.png")));
+                img = Float64.(Gray.(load("CTData/1-070.png")));
                 nxi = size(img,1);
                 nyi = size(img,2);
                 densityMin = 0.2;
@@ -282,6 +283,7 @@ mutable struct Settings
             rhoInv = rhoInv[1:rXi];
             rhoInvX = rhoInvX[:,1:rXi];
             rhoInvXi = rhoInvXi[:,1:rXi]
+
 
             println("error tissue is ",norm(rhoInvX*Diagonal(rhoInv)*rhoInvXi' - densityInvF))
 

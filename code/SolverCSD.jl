@@ -2157,7 +2157,6 @@ function SolveFirstCollisionSourceUI(obj::SolverCSD)
     #xi, w = gausslegendre(nxi);
     xi = collect(range(0,1,nxi));
     w = 1.0/nxi*ones(size(xi))
-    Xi = Matrix(Diagonal(xi));
 
     # Set up initial condition and store as matrix
     psi = zeros(nx,ny,nq,nxi);
@@ -2296,7 +2295,7 @@ function SolveFirstCollisionSourceUI(obj::SolverCSD)
 
         rhsK = zeros(nx*ny,r,r);
         for k = 1:rXi
-            UXiU = U'*Diagonal(s.rhoInvXi[:,k])*U;
+            UXiU = U'*(s.rhoInvXi[:,k].*U);
             rhsK .+= s.rhoInv[k]*(- ttm(Q,[obj.L2x*Diagonal(s.rhoInvX[:,k])*K,WAxW,UXiU],[1,2,3]) .- ttm(Q,[obj.L2y*Diagonal(s.rhoInvX[:,k])*K,WAzW,UXiU],[1,2,3]) .- ttm(Q,[obj.L1x*Diagonal(s.rhoInvX[:,k])*K,WAbsAxW,UXiU],[1,2,3]) .- ttm(Q,[obj.L1y*Diagonal(s.rhoInvX[:,k])*K,WAbsAzW,UXiU],[1,2,3]));
         end
         rhsK .+= ttm(Ten2Ten(psi),[W'*Diagonal(Dvec)*obj.MReduced,Matrix(U')],[2,3]) # in-scattering from uncollided particles
@@ -2323,7 +2322,7 @@ function SolveFirstCollisionSourceUI(obj::SolverCSD)
             XL1xX .= X'*obj.L1x*Diagonal(s.rhoInvX[:,k])*X
             XL1yX .= X'*obj.L1y*Diagonal(s.rhoInvX[:,k])*X
 
-            UXiU = U'*Diagonal(s.rhoInvXi[:,k])*U;
+            UXiU = U'*(s.rhoInvXi[:,k].*U);
             
             rhsK .+= s.rhoInv[k] *(- ttm(Q,[XL2xX,obj.pn.Ax*K,UXiU],[1,2,3]) .- ttm(Q,[XL2yX,obj.pn.Az*K,UXiU],[1,2,3]) .- ttm(Q,[XL1xX,obj.AbsAx*K,UXiU],[1,2,3]) .- ttm(Q,[XL1yX,obj.AbsAz*K,UXiU],[1,2,3]));
         end
@@ -2352,7 +2351,7 @@ function SolveFirstCollisionSourceUI(obj::SolverCSD)
             XL1xX .= X'*obj.L1x*Diagonal(s.rhoInvX[:,k])*X
             XL1yX .= X'*obj.L1y*Diagonal(s.rhoInvX[:,k])*X
 
-            rhsK .+= s.rhoInv[k] *(- ttm(Q,[XL2xX,WAxW,Diagonal(s.rhoInvXi[:,k])*K],[1,2,3]) .- ttm(Q,[XL2yX,WAzW,Diagonal(s.rhoInvXi[:,k])*K],[1,2,3]) .- ttm(Q,[XL1xX,WAbsAxW,Xi*K],[1,2,3]) .- ttm(Q,[XL1yX,WAbsAzW,Diagonal(s.rhoInvXi[:,k])*K],[1,2,3]));
+            rhsK .+= s.rhoInv[k] *(- ttm(Q,[XL2xX,WAxW,s.rhoInvXi[:,k].*K],[1,2,3]) .- ttm(Q,[XL2yX,WAzW,s.rhoInvXi[:,k].*K],[1,2,3]) .- ttm(Q,[XL1xX,WAbsAxW,s.rhoInvXi[:,k].*K],[1,2,3]) .- ttm(Q,[XL1yX,WAbsAzW,s.rhoInvXi[:,k].*K],[1,2,3]));
         end
         rhsK .+= ttm(Ten2Ten(psi),[Matrix(X'),W'*Diagonal(Dvec)*obj.MReduced],[1,2]) # in-scattering from uncollided particles
         K = K .+ dE*tenmat(rhsK,3)*tenmat(Q,3)';
@@ -2382,7 +2381,7 @@ function SolveFirstCollisionSourceUI(obj::SolverCSD)
             XL1xX .= X'*obj.L1x*Diagonal(s.rhoInvX[:,k])*X
             XL1yX .= X'*obj.L1y*Diagonal(s.rhoInvX[:,k])*X
 
-            UXiU = U'*Diagonal(s.rhoInvXi[:,k])*U;
+            UXiU = U'*(s.rhoInvXi[:,k].*U);
 
             rhsC .+= s.rhoInv[k] *(- ttm(C,[XL2xX,WAxW,UXiU],[1,2,3]) .- ttm(C,[XL2yX,WAzW,UXiU],[1,2,3]) .- ttm(C,[XL1xX,WAbsAxW,UXiU],[1,2,3]) .- ttm(C,[XL1yX,WAbsAzW,UXiU],[1,2,3]));
         end
@@ -2405,6 +2404,15 @@ function SolveFirstCollisionSourceUI(obj::SolverCSD)
         C = matten(S*Matrix(QT)',2,[r,r,r]);
 
         # update dose
+        # scatter particles
+        for i = 2:(nx-1)
+            for j = 2:(ny-1)
+                for l = 1:nxi
+                    idx = vectorIndex(ny,i,j);
+                    uOUnc[idx,l] = psi[i,j,:,l]'*obj.MReduced[1,:];
+                end
+            end
+        end
         Phi = ttm(C,[X,W[1:1,:],U],[1,2,3])
         for l = 1:nxi
             doseXi[l,:] .+= dE * (Phi[:,1,l] .+ uOUnc[:,l] )* obj.csd.SMid[n-1] .*rhoInv[:,l]./( 1 + (n==2||n==nEnergies));
