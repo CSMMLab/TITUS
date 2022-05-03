@@ -2844,4 +2844,23 @@ struct MaterialParameters
         
         new(S_tab,E_tab,E_sigmaTab,sigma_tab,StarMAPmoments);
     end
+
+    function ComptonScattering(E_in,E_out,ϑ)
+      #Ω' · Ω = cos ϑ
+      r_e = 2.8179*1e-15  #electron radius
+      # differential scattering crosssection photons (Davisson and Evans (1952))
+      s_Cy = (r_e^2)/2*[1/(1+E_in(1-cos(ϑ)))]^2*[1+cos(ϑ)^2+((E_in^2*(1-cos(ϑ))^2)/(1+E_in*(1-cos(ϑ))))]
+      delta_Cy = Dirac(E_out - (E_in/(1+E_in*(1-cos(ϑ)))))
+      sigma_cd_yy = s_Cy * delta_Cy
+
+      # total scattering crosssection photons (Davisson and Evans (1952))
+      sigma_ct_yy = 2*pi*r_e^2*[((1+E_out)/E_out^2)*((2*(1+E_out)/(1+2*E_out))-1/E_out*log(1+2*E_out))+1/(2*E_out)*log(1+2*E_out)-((1+3*E_out)/(1+2*E_out)^2)]
+
+      # differential scattering crosssection photon/electron (Davisson and Evans (1952)) --> maybe separate this from the photon only interactions!
+      a = (1+E_in)^2*tan(ϑ)^2+1
+      s_Ce = [(4*r_e^2*(1+E_in)^2)/cos(ϑ)^3]*[1/(a+2*E_in)^2]*[1-(2/a)+(2/a^2)+((2*E_in^2)/(a*(a+2*E_in)))]
+      delta_Ce = Dirac(E_out-(2*E_in^2)/(2*E_in+a))
+      sigma_cd_ey = s_Ce*delta_Ce
+
+    end
 end
