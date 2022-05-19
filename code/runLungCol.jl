@@ -12,11 +12,11 @@ close("all")
 
 problem = "timeCT"
 nx = 51; ny = 51;
-Nxi = 30;
+Nxi = 100;
 
 ############################ DLRA ############################
 
-s = Settings(nx,ny,Nxi,30,problem);
+s = Settings(nx,ny,Nxi,60,problem);
 solver = SolverCSD(s);
 #X_dlr,W_dlr,U_dlr,C, dose_dlra,dose_dlra_var, psi_DLR,doseXi = SolveFirstCollisionSourceDLR(solver2);
 u,dose_dlra,dose_dlra_var, psi_DLR = SolveFirstCollisionSourceUI(solver);

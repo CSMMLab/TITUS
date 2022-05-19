@@ -503,8 +503,8 @@ function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y:
     elseif obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD"
         return 0.0;
     end
-    #return 10^5*exp(-sigmaO1Inv*(norm(OmegaStar-Omega)^2))*exp(-sigmaEInv*(E0-E)^2)*exp(-sigmaXInv*(x-obj.settings.x0 + xi)^2)*exp(-sigmaYInv*(y-obj.settings.y0 + xi)^2)*obj.csd.S[n]*obj.settings.densityMin;
-    return 10^5*exp(-sigmaO1Inv*(norm(OmegaStar-Omega)^2))*exp(-sigmaEInv*(E0-E)^2)*exp(-sigmaXInv*(x-obj.settings.x0)^2)*exp(-sigmaYInv*(y-obj.settings.y0)^2)*obj.csd.S[n]*obj.settings.densityMin;
+    #return 10^5*exp(-sigmaO1Inv*(norm(OmegaStar-Omega)^2))*exp(-sigmaEInv*(E0-E)^2)*exp(-sigmaXInv*(x-obj.settings.x0)^2)*exp(-sigmaYInv*(y-obj.settings.y0)^2)*obj.csd.S[n]*obj.settings.densityMin;
+    return 10^5*exp(-sigmaO1Inv*(norm(OmegaStar-Omega)^2))*exp(-sigmaEInv*(E0-E)^2)*exp(-sigmaXInv*(x-obj.settings.x0)^2)*exp(-sigmaYInv*(y-obj.settings.y0)^2)*obj.csd.S[n]*xi;
 end
 
 function BCLeft(obj::SolverCSD,n::Int)
@@ -824,12 +824,12 @@ function SolveFirstCollisionSource(obj::SolverCSD,xi::Float64=0.0)
         if obj.settings.problem != "validation" # validation testcase sets beam in initial condition
             for k = 1:nq
                 for j = 1:nx
-                    psi[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
-                    psi[j,end,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
+                    psi[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[1],density[j,1],n-1);
+                    psi[j,end,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[end],density[j,end],n-1);
                 end
                 for j = 1:ny
-                    psi[1,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
-                    psi[end,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
+                    psi[1,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[1],obj.settings.yMid[j],density[1,j],n-1);
+                    psi[end,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[end],obj.settings.yMid[j],density[end,j],n-1);
                 end
             end
         end
@@ -941,12 +941,12 @@ function SolveFirstCollisionSource(obj::SolverCSD,densityVec::Array{Float64,1})
         if obj.settings.problem != "validation" # validation testcase sets beam in initial condition
             for k = 1:nq
                 for j = 1:nx
-                    psi[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
-                    psi[j,end,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
+                    psi[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[1],density[j,1],n-1);
+                    psi[j,end,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[end],density[j,end],n-1);
                 end
                 for j = 1:ny
-                    psi[1,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
-                    psi[end,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
+                    psi[1,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[1],obj.settings.yMid[j],density[1,j],n-1);
+                    psi[end,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[end],obj.settings.yMid[j],density[end,j],n-1);
                 end
             end
         end
@@ -2338,12 +2338,12 @@ function SolveFirstCollisionSourceUI(obj::SolverCSD)
             for l = 1:nxi
                 for k = 1:nq
                     for j = 1:nx
-                        psi[j,1,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[1],xi[l],n-1);
-                        psi[j,end,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[end],xi[l],n-1);
+                        psi[j,1,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[1],rhoInvMat[j,1,l],n-1);
+                        psi[j,end,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[end],rhoInvMat[j,end,l],n-1);
                     end
                     for j = 1:ny
-                        psi[1,j,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[1],s.yMid[j],xi[l],n-1);
-                        psi[end,j,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[end],s.yMid[j],xi[l],n-1);
+                        psi[1,j,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[1],s.yMid[j],rhoInvMat[1,j,l],n-1);
+                        psi[end,j,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[end],s.yMid[j],rhoInvMat[end,j,l],n-1);
                     end
                 end
             end
