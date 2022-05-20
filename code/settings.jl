@@ -323,7 +323,7 @@ mutable struct Settings
         dE = cfl*min(dx,dy)*densityMin;#1/90#
         
         # number PN moments
-        nPN = 7#13, 21; # use odd number
+        nPN = 9#13, 21; # use odd number
 
         # build class
         new(Nx,Ny,NCellsX,NCellsY,Nxi,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex,rho0Inv,rho1Inv,vec(rho0Inv),vec(rho1Inv),rhoInv,rhoInvX,rhoInvXi);
