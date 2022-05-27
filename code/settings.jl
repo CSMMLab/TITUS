@@ -134,7 +134,7 @@ mutable struct Settings
             eMax = 40.0
             adaptIndex = 0;
             epsAdapt = 0.3;#0.5;
-            Omega1 = 0.0;
+            Omega1 = -0.0;
             Omega3 = 1.0;
             x0 = 0.5*b;
             y0 = 0.0*d;
@@ -225,10 +225,10 @@ mutable struct Settings
 
         # time settings
         #cfl = 1.5#1.4 # CFL condition
-        dE = cfl*min(dx,dy)*minimum(density);#1/90#
+        dE = 1/90#cfl*min(dx,dy)*minimum(density);#1/312;#cfl*min(dx,dy)*minimum(density);
         
         # number PN moments
-        nPN = 21#13, 21; # use odd number
+        nPN = 7#13, 21; # use odd number
 
         # build class
         new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex);
