@@ -38,6 +38,9 @@ mutable struct Settings
 
     # problem definitions
     problem::String;
+
+    #particle type
+    particle::String;
     # beam properties
     x0::Float64;
     y0::Float64;
@@ -59,7 +62,7 @@ mutable struct Settings
     epsAdapt::Float64;  
     adaptIndex::Float64;
 
-    function Settings(Nx::Int=102,Ny::Int=102,r::Int=15,problem::String="LineSource")
+    function Settings(Nx::Int=102,Ny::Int=102,r::Int=15,problem::String="LineSource",particle::String="Electrons")
 
         # spatial grid setting
         NCellsX = Nx - 1;
@@ -131,7 +134,7 @@ mutable struct Settings
             sigmaS = 1.0;
             sigmaA = 0.0;  
             cfl = 0.99/sqrt(2)*2.5;    
-            eMax = 40.0
+            eMax = 100.0
             adaptIndex = 0;
             epsAdapt = 0.3;#0.5;
             Omega1 = -0.0;
@@ -139,7 +142,7 @@ mutable struct Settings
             x0 = 0.5*b;
             y0 = 0.0*d;
             #epsAdapt = 1e-1;
-            density[Int(floor(NCellsX*0.5))+1:end,:] .= 1.85;
+           # density[Int(floor(NCellsX*0.5))+1:end,:] .= 5;
         elseif problem =="lungOrig"
             #img = Float64.(Gray.(load("phantom.png")))
             pathlib = pyimport("pathlib")
@@ -228,10 +231,10 @@ mutable struct Settings
         dE = 1/90#cfl*min(dx,dy)*minimum(density);#1/312;#cfl*min(dx,dy)*minimum(density);
         
         # number PN moments
-        nPN = 7#13, 21; # use odd number
+        nPN = 13#13, 21; # use odd number
 
         # build class
-        new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex);
+        new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,particle,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex);
     end
 end
 

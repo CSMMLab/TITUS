@@ -1,6 +1,7 @@
 __precompile__
 using Interpolations
 include("MaterialParameters.jl")
+include("MaterialParametersProtons.jl")
 
 struct CSD
     # energy grid
@@ -22,11 +23,19 @@ struct CSD
     # constructor
     function CSD(settings::Settings)
         # read tabulated material parameters
-        param = MaterialParameters();
-        S_tab = param.S_tab;
-        E_tab = param.E_tab;
-        E_sigmaTab = param.E_sigmaTab;
-        sigma_tab = param.sigma_tab;
+        if settings.particle =="Protons"
+            param = MaterialParametersProtons();
+            S_tab = param.S_tab;
+            E_tab = param.E_tab;
+            E_sigmaTab = param.E_sigmaTab;
+            sigma_tab = param.sigmaTab;
+        else
+            param = MaterialParameters();
+            S_tab = param.S_tab;
+            E_tab = param.E_tab;
+            E_sigmaTab = param.E_sigmaTab;
+            sigma_tab = param.sigma_tab;
+        end
 
         # define constant cross-sections for linesource test
         if settings.problem == "LineSource"
@@ -43,8 +52,14 @@ struct CSD
         end
 
         # define minimal and maximal energy for computation
-        minE = 5e-5+1e-8;
-        maxE = settings.eMax;
+        if settings.particle =="Protons"
+            minE = 5e-5+1e-8;
+            maxE = settings.eMax;
+        else
+            minE = 5e-5+1e-8;
+            maxE = settings.eMax;
+        end
+
 
         # determine bounds of transformed energy grid for computation
         ETab2ETrafo = LinearInterpolation(E_tab, E_transformed; extrapolation_bc=Throw())
@@ -70,19 +85,24 @@ struct CSD
         eGridMid = ETrafo2ETab(eMaxTrafo .- (eTrafo[1:(end-1)].+0.5*dE))
         SMid = E2S(eGridMid)
 
-        new(eGrid,eTrafo,S,SMid,E_sigmaTab,sigma_tab,param.StarMAPmoments,settings);
+        new(eGrid,eTrafo,S,SMid,E_sigmaTab,sigma_tab,param.StarMAPmoments.*0,settings);
     end
 end
 
 function SigmaAtEnergy(obj::CSD, energy::Float64)
+
     if energy <= 5e-5
         energy = 5e-5+1e-9
     end
     y = zeros(obj.settings.nPN+1)
     for i = 1:(obj.settings.nPN+1)
         # define Sigma mapping for interpolation at moment i
-        E2Sigma = LinearInterpolation(obj.E_Tab, obj.sigma_tab[:,i]; extrapolation_bc=Throw())
-        y[i] = E2Sigma(energy)
+        if obj.settings.particle =="Protons" && energy<7
+            y[i] = 0
+        else
+            E2Sigma = LinearInterpolation(obj.E_Tab, obj.sigma_tab[:,i]; extrapolation_bc=Throw())
+            y[i] = E2Sigma(energy)
+        end
     end
     return y;
 end

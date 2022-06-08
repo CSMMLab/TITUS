@@ -10,10 +10,11 @@ using WriteVTK
 
 #close("all")
 
-nx = 151;
-ny = 151;
+nx = 51;
+ny = 51;
 problem = "validation"
-s = Settings(nx,ny,200,problem);
+particle = "Electrons"
+s = Settings(nx,ny,50,problem, particle);
 rhoMin = minimum(s.density);
 
 if s.problem == "AirCavity"
