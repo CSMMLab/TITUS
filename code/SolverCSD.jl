@@ -372,9 +372,9 @@ function SetupIC(obj::SolverCSD)
                 for k = 1:nq
                     sigmaO1Inv = 10000.0;
                     sigmaO3Inv = 10000.0;
-                    pos_beam = [0.5*14.5,0.0,0];
+                    pos_beam = [0.5*14.5,0.5*14.5,0];
                     space_beam = normpdf(obj.settings.xMid[i],pos_beam[1],.01).*normpdf(obj.settings.yMid[j],pos_beam[2],.01);
-                    trafo = 1.0;#obj.csd.S[1]*obj.settings.density[i,j];
+                    trafo = 1; #obj.csd.S[1]*obj.settings.density[i,j]; 
                     psi[i,j,k] = 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-obj.Q.pointsxyz[k,1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-obj.Q.pointsxyz[k,3])^2)*space_beam*trafo;
                 end
             end
@@ -419,9 +419,9 @@ function SetupICMoments(obj::SolverCSD)
     
         for i = 1:nx
             for j = 1:ny
-                pos_beam = [0.0,0.5*14.5,0];
+                pos_beam = [0.5*14.5,0.5*14.5,0];
                 space_beam = normpdf(obj.settings.xMid[i],pos_beam[1],.01).*normpdf(obj.settings.yMid[j],pos_beam[2],.01);
-                trafo = 1.0;#obj.csd.S[1]*obj.settings.density[i,j];
+                trafo = obj.csd.S[1]*obj.settings.density[i,j];
                 u[i,j,:] = Float64.(obj.pn.M*psi)*space_beam;
             end
         end
@@ -459,7 +459,7 @@ function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y:
         sigmaO1Inv = 10000.0;
         sigmaO3Inv = 10000.0;
         densityMin = 1.0;
-        pos_beam = [0.5*14.5,0.0,0];
+        pos_beam = [0.5*14.5,0.5*14.5,0];
         space_beam = normpdf(x,pos_beam[1],.01).*normpdf(y,pos_beam[2],.01);
         #println(space_beam)
         return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*space_beam*obj.csd.S[n]*densityMin;
@@ -757,7 +757,7 @@ function SolveFirstCollisionSource(obj::SolverCSD)
     if obj.settings.problem == "LineSource" # determine relevant directions in IC
         idxFullBeam = findall(psi .> floorPsiAll)
         idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
-    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" # determine relevant directions in beam
+    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation"# determine relevant directions in beam
         psiBeam = zeros(nq)
         for k = 1:nq
             psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)
@@ -866,6 +866,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
     eTrafo = obj.csd.eTrafo;
     energy = obj.csd.eGrid;
+    eKin = sqrt(obj.csd.eGrid.^2 .- obj.settings.eRest^2);
     S = obj.csd.S;
 
     nx = obj.settings.NCellsX;
@@ -943,7 +944,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     #loop over energy
     for n=2:nEnergies
         # compute scattering coefficients at current energy
-        sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
+        sigmaS = SigmaAtEnergy(obj.csd,eKin[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
 
         # set boundary condition
         if obj.settings.problem != "validation" # validation testcase sets beam in initial condition

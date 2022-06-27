@@ -22,6 +22,7 @@ mutable struct Settings
     # time settings
     # end time
     eMax::Float64;
+    eRest::Float64;
     # time increment
     dE::Float64;
     # CFL number 
@@ -63,7 +64,12 @@ mutable struct Settings
     adaptIndex::Float64;
 
     function Settings(Nx::Int=102,Ny::Int=102,r::Int=15,problem::String="LineSource",particle::String="Electrons")
-
+        #Proton rest energy
+        if particle == "Protons"
+            eRest = 938.26 #MeV
+        elseif particle == "Electrons"
+            eRest = 0.5 #MeV -> estimate, look this up
+        end
         # spatial grid setting
         NCellsX = Nx - 1;
         NCellsY = Ny - 1;
@@ -133,14 +139,15 @@ mutable struct Settings
             d = 14.4516666666667; # upper boundary
             sigmaS = 1.0;
             sigmaA = 0.0;  
-            cfl = 0.99/sqrt(2)*2.5;    
-            eMax = 100.0
+            cfl = 0.99/sqrt(2)*2.5;  
+            eKin = 100;  
+            eMax = sqrt(eKin^2 + eRest^2)
             adaptIndex = 0;
             epsAdapt = 0.3;#0.5;
             Omega1 = -0.0;
             Omega3 = 1.0;
             x0 = 0.5*b;
-            y0 = 0.0*d;
+            y0 = 0.5*d;
             #epsAdapt = 1e-1;
            # density[Int(floor(NCellsX*0.5))+1:end,:] .= 5;
         elseif problem =="lungOrig"
@@ -183,7 +190,8 @@ mutable struct Settings
             end
             b = 14.5; # right boundary
             d = 14.5; # upper boundary
-            eMax = 21.0
+            eKin = 21.0
+            eMax = sqrt(eKin^2 + eRest^2)
             cfl = 1.5
             x0 = 0.5*b;
             y0 = 1.0*d;
@@ -228,13 +236,13 @@ mutable struct Settings
 
         # time settings
         #cfl = 1.5#1.4 # CFL condition
-        dE = 1/90#cfl*min(dx,dy)*minimum(density);#1/312;#cfl*min(dx,dy)*minimum(density);
+        dE = cfl*min(dx,dy)*minimum(density);#1/312;#cfl*min(dx,dy)*minimum(density);
         
         # number PN moments
-        nPN = 13#13, 21; # use odd number
+        nPN = 13#7, 13, 21; # use odd number
 
         # build class
-        new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,particle,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex);
+        new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,eRest,dE,cfl,nPN,x,xMid,y,yMid,problem,particle,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex);
     end
 end
 
