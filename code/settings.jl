@@ -140,7 +140,7 @@ mutable struct Settings
             d = 14.4516666666667; # upper boundary
             sigmaS = 1.0;
             sigmaA = 0.0;  
-            cfl = 0.99/sqrt(2)*2.5;  
+            cfl = 0.99/sqrt(2)*120.5;  
             eKin = 90;  
             eMax = eKin + eRest
             adaptIndex = 0;

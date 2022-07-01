@@ -65,9 +65,9 @@ struct CSD
         eMinTrafo = ETab2ETrafo( minE );
 
         # determine transformed energy Grid for computation
-        nEnergies = 1000; #Integer(ceil(maxE/settings.dE));
-        eTrafo = collect(exp10.(range(log10(eMaxTrafo - eMaxTrafo+0.0001),log10(eMaxTrafo - eMinTrafo -0.0001),length = nEnergies)));
-        #eTrafo = collect(range(eMaxTrafo - eMaxTrafo,eMaxTrafo - eMinTrafo,length = nEnergies));
+        nEnergies = Integer(ceil(maxE/settings.dE));
+        #eTrafo = collect(exp10.(range(log10(eMaxTrafo - eMaxTrafo+0.0001),log10(eMaxTrafo - eMinTrafo -0.0001),length = nEnergies)));
+        eTrafo = collect(range(eMaxTrafo - eMaxTrafo,eMaxTrafo - eMinTrafo,length = nEnergies));
         #println("eTrafo", eTrafo)
         # determine corresponding original energy grid at which material parameters will be evaluated
         ETrafo2ETab = LinearInterpolation(E_transformed, E_tab; extrapolation_bc=Throw())

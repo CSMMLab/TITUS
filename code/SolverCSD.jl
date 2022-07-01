@@ -826,7 +826,7 @@ function SolveFirstCollisionSource(obj::SolverCSD)
         D = Diagonal(sigmaS[1] .- Dvec);
 
         # stream uncollided particles
-        solveFluxUpwind!(obj,psi,flux);
+        solveFlux!(obj,psi,flux);
 
         psi .= psi .- dE*flux;
         
@@ -936,7 +936,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     dE = eTrafo[2]-eTrafo[1];
     obj.settings.dE = dE
 
-    println("CFL = ",dE/min(obj.settings.dx,obj.settings.dy)*maximum(densityInv))
+    println("CFL = ",(eTrafo[end]-eTrafo[end-1])/min(obj.settings.dx,obj.settings.dy)*maximum(densityInv))
 
     flux = zeros(size(psi))
 
@@ -946,6 +946,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     
     #loop over energy
     for n=2:nEnergies
+        dE = eTrafo[n]-eTrafo[n-1];
         # compute scattering coefficients at current energy
         sigmaS = SigmaAtEnergy(obj.csd,eKin[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
 
@@ -973,7 +974,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         obj.dose .+= 0.5*dE * (X*S*W[1,:]+uOUnc) * obj.csd.S[n-1] ./ obj.densityVec ;
 
         # stream uncollided particles
-        solveFluxUpwind!(obj,psi,flux);
+        solveFlux!(obj,psi,flux);
 
         psiBC = psi[obj.boundaryIdx];
 

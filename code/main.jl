@@ -179,13 +179,3 @@ outfiles = vtk_save(vtkfile)
 println("main finished")
 
 include("validationData.jl")
-
-println("distance to kit-RT: eGrid ",norm(E-solver1.csd.eGrid))
-println("distance to kit-RT: eTrafo ",norm(eTrafo-solver1.csd.eTrafo))
-println("distance to kit-RT: S ",norm(S-solver1.csd.S))
-println("distance to kit-RT: SMid ",norm(Smid-solver1.csd.SMid))
-
-AxPlus = readdlm("validationData/AxPlus.csv",',', Float64)
-AxMinus = readdlm("validationData/AxMinus.csv",',', Float64)
-println("distance to kit-RT: AxPlus ",norm(solver1.AxPlus-AxPlus))
-println("distance to kit-RT: AxMinus ",norm(solver1.AxMinus-AxMinus))
