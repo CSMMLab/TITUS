@@ -2799,10 +2799,10 @@ struct MaterialParametersProtons
                         ];
                         
          E_rest = 938.26 #MeV proton rest energy
-         E_tab_PSTAR= dropdims(E_tab_PSTAR, dims = tuple(findall(size(E_tab_PSTAR) .== 1)...)).+ E_rest
-         E_sigmaTab= E_sigmaTab .+ E_rest
          sigmaEl_tab_pp = Proton_Proton_nuclear(E_tab_PSTAR,Omega_sigmaElTab);
          sigma_ce = Coulomb(E_tab_PSTAR,Omega_sigmaElTab)
+         E_tab_PSTAR= dropdims(E_tab_PSTAR, dims = tuple(findall(size(E_tab_PSTAR) .== 1)...)).+ E_rest
+         E_sigmaTab= E_sigmaTab .+ E_rest
          #sigmaTab = 0.88810600 .* sigmaEl_OInt_ICRU .+ 0.11189400.* sigmaEl_tab_pp + sigma_ce;
          S_tab_PSTAR = dropdims(S_tab_PSTAR, dims = tuple(findall(size(S_tab_PSTAR) .== 1)...))
          new(S_tab_PSTAR,E_tab_PSTAR,E_sigmaTab,sigmaEl_OInt_ICRU,sigmaEl_tab_pp, sigma_ce,StarMAPmoments);
