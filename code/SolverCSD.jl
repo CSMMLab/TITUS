@@ -373,9 +373,9 @@ function SetupIC(obj::SolverCSD)
                     sigmaO1Inv = 10000.0;
                     sigmaO3Inv = 10000.0;
                     pos_beam = [0.5*14.5,0.5*14.5,0];
-                    space_beam = normpdf(obj.settings.xMid[i],pos_beam[1],.01).*normpdf(obj.settings.yMid[j],pos_beam[2],.01);
-                    trafo = 1; #obj.csd.S[1]*obj.settings.density[i,j]; 
-                    psi[i,j,k] = 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-obj.Q.pointsxyz[k,1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-obj.Q.pointsxyz[k,3])^2)*space_beam*trafo;
+                    space_beam = normpdf(obj.settings.xMid[i],pos_beam[1],.1).*normpdf(obj.settings.yMid[j],pos_beam[2],.1);
+                    #trafo = obj.csd.S[1]*obj.settings.density[i,j]; 
+                    psi[i,j,k] = 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-obj.Q.pointsxyz[k,1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-obj.Q.pointsxyz[k,3])^2)*space_beam#*trafo;
                 end
             end
         end
@@ -425,7 +425,7 @@ function SetupICMoments(obj::SolverCSD)
                 u[i,j,:] = Float64.(obj.pn.M*psi)*space_beam;
             end
         end
-    elseif obj.settings.problem == "2D" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD"
+    elseif obj.settings.problem == "2D"  || obj.settings.problem == "2DHighLowD"
         for l = 0:obj.settings.nPN
             for k=-l:l
                 i = GlobalIndex( l, k )+1;
@@ -458,11 +458,12 @@ function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y:
     elseif obj.settings.problem == "validation"
         sigmaO1Inv = 10000.0;
         sigmaO3Inv = 10000.0;
+        sigmaEInv = 1000.0;
         densityMin = 1.0;
         pos_beam = [0.5*14.5,0.5*14.5,0];
-        space_beam = normpdf(x,pos_beam[1],.01).*normpdf(y,pos_beam[2],.01);
+        space_beam = normpdf(x,pos_beam[1],.1).*normpdf(y,pos_beam[2],.1);
         #println(space_beam)
-        return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*space_beam*obj.csd.S[n]*densityMin;
+        return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*space_beam*obj.csd.S[n]*densityMin#*exp(-sigmaEInv*(E0-E)^2)#;
     elseif obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD"
         return 0.0;
     end
@@ -754,7 +755,7 @@ function SolveFirstCollisionSource(obj::SolverCSD)
     psi = SetupIC(obj);
     floorPsiAll = 1e-1;
     floorPsi = 1e-17;
-    if obj.settings.problem == "LineSource" # determine relevant directions in IC
+    if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" # determine relevant directions in IC
         idxFullBeam = findall(psi .> floorPsiAll)
         idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
     elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation"# determine relevant directions in beam
@@ -801,6 +802,7 @@ function SolveFirstCollisionSource(obj::SolverCSD)
         sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
 
         # set boundary condition
+        dE = eTrafo[n]-eTrafo[n-1];
         for k = 1:nq
             for j = 1:nx
                 psi[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
@@ -811,6 +813,7 @@ function SolveFirstCollisionSource(obj::SolverCSD)
                 psi[end,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
             end
         end
+    
        
         Dvec = zeros(obj.pn.nTotalEntries)
         for l = 0:obj.pn.N

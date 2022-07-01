@@ -127,8 +127,9 @@ mutable struct Settings
             d = 1.0;
             sigmaS = 1.0;
             sigmaA = 0.0;  
-            cfl = 0.99/sqrt(2)*2.5;    
-            eMax = 1.0
+            cfl = 0.99/sqrt(2)*0.5;    
+            eKin = 80;  
+            eMax = eKin + eRest
             adaptIndex = 0;
             epsAdapt = 0.3;#0.5;
             density[Int(floor(NCellsX*0.56/(b-a))):end,:] .= 5.0;
@@ -140,8 +141,8 @@ mutable struct Settings
             sigmaS = 1.0;
             sigmaA = 0.0;  
             cfl = 0.99/sqrt(2)*2.5;  
-            eKin = 100;  
-            eMax = sqrt(eKin^2 + eRest^2)
+            eKin = 90;  
+            eMax = eKin + eRest
             adaptIndex = 0;
             epsAdapt = 0.3;#0.5;
             Omega1 = -0.0;
@@ -250,7 +251,7 @@ function IC(obj::Settings,x,y)
     out = zeros(length(x),length(y));
     posBeamX = (obj.b+obj.a)/2;
     posBeamY = (obj.d+obj.c)/2;
-    if obj.problem != "LineSource" && obj.problem != "2DHighD" && obj.problem != "2DHighLowD"
+    if obj.problem != "LineSource"  && obj.problem != "2DHighLowD" && obj.problem != "2DHighD"
         return out;
     end
     x0 = x .- posBeamX;

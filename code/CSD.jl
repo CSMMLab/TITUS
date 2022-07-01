@@ -52,7 +52,7 @@ struct CSD
 
         # define minimal and maximal energy for computation
         if settings.particle =="Protons"
-            minE = sqrt.(0.001 .+ settings.eRest.^2);
+            minE = 0.001 .+ settings.eRest;
             maxE = settings.eMax;
         else
             minE = 0.001; # 5e-5+1e-8;
@@ -65,11 +65,13 @@ struct CSD
         eMinTrafo = ETab2ETrafo( minE );
 
         # determine transformed energy Grid for computation
-        nEnergies = 20; #Integer(ceil(maxE/settings.dE));
-        eTrafo = collect(range(eMaxTrafo - eMaxTrafo,eMaxTrafo - eMinTrafo,length = nEnergies));
-
+        nEnergies = 1000; #Integer(ceil(maxE/settings.dE));
+        eTrafo = collect(exp10.(range(log10(eMaxTrafo - eMaxTrafo+0.0001),log10(eMaxTrafo - eMinTrafo -0.0001),length = nEnergies)));
+        #eTrafo = collect(range(eMaxTrafo - eMaxTrafo,eMaxTrafo - eMinTrafo,length = nEnergies));
+        #println("eTrafo", eTrafo)
         # determine corresponding original energy grid at which material parameters will be evaluated
         ETrafo2ETab = LinearInterpolation(E_transformed, E_tab; extrapolation_bc=Throw())
+       
         eGrid = ETrafo2ETab(eMaxTrafo .- eTrafo)
 
         # compute stopping power for computation
@@ -77,10 +79,13 @@ struct CSD
         S = E2S(eGrid)
 
         # compute stopping power at intermediate time points
-        dE = eTrafo[2]-eTrafo[1];
+        dE = zeros(length(eTrafo)-1)
+        for i=1:length(eTrafo)-1
+            dE[i] = eTrafo[i+1]-eTrafo[i];
+        end
         #SMid = E2S(eGrid.+0.5*dE)
 
-        eGridMid = ETrafo2ETab(eMaxTrafo .- (eTrafo[1:(end-1)].+0.5*dE))
+        eGridMid = ETrafo2ETab(eMaxTrafo .- (eTrafo[1:(end-1)].+0.5.*dE))
         SMid = E2S(eGridMid)
         if settings.particle =="Electrons"
             E_tab = E_sigmaTab;
@@ -91,13 +96,13 @@ end
 
 function SigmaAtEnergy(obj::CSD, energy::Float64)
  if obj.settings.particle =="Protons"
-    if energy <= sqrt.(0.001 .+ obj.settings.eRest.^2)
-        energy = sqrt.(0.001 .+ obj.settings.eRest.^2)
+    if energy <= 0.001 .+ obj.settings.eRest
+        energy = 0.001 .+ obj.settings.eRest
     end
     y = zeros(obj.settings.nPN+1)
     for i = 1:(obj.settings.nPN+1)
         # define Sigma mapping for interpolation at moment i
-            if energy<sqrt.(7^2 .+ obj.settings.eRest.^2)
+            if energy<7 .+ obj.settings.eRest
                 E2Sigma_pp = LinearInterpolation(obj.E_Tab, obj.sigma_pp[:,i]; extrapolation_bc=Throw())
                 E2Sigma_ce = LinearInterpolation(obj.E_Tab, obj.sigma_ce[:,i]; extrapolation_bc=Throw())
                 y[i] = 0.88810600 .* 0 .+ 0.11189400.* E2Sigma_pp(energy) + E2Sigma_ce(energy);

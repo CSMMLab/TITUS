@@ -10,9 +10,9 @@ using WriteVTK
 
 #close("all")
 
-nx = 51;
-ny = 51;
-problem = "validation" #"2DHighD"
+nx = 101;
+ny = 101;
+problem ="validation" #"2DHighD"
 particle = "Protons"
 s = Settings(nx,ny,50,problem, particle);
 rhoMin = minimum(s.density);
