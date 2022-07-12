@@ -150,7 +150,8 @@ mutable struct Settings
             x0 = 0.5*b;
             y0 = 0.5*d;
             #epsAdapt = 1e-1;
-           # density[Int(floor(NCellsX*0.5))+1:end,:] .= 5;
+            #density[Int(floor(NCellsX*0.5)):end,:] .= 5; #beam hits interface
+            density[:,Int(floor(NCellsX*0.56/(b-a))):end] .= 5.0; #beam perpendicular to interface
         elseif problem =="lungOrig"
             #img = Float64.(Gray.(load("phantom.png")))
             pathlib = pyimport("pathlib")
