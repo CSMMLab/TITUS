@@ -140,8 +140,8 @@ mutable struct Settings
             d = 14.4516666666667; # upper boundary
             sigmaS = 1.0;
             sigmaA = 0.0;  
-            cfl = 0.99/sqrt(2)*120.5;  
-            eKin = 90;  
+            cfl = 0.99/sqrt(2)*20.5;  
+            eKin = 120;  
             eMax = eKin + eRest
             adaptIndex = 0;
             epsAdapt = 0.3;#0.5;
@@ -150,8 +150,9 @@ mutable struct Settings
             x0 = 0.5*b;
             y0 = 0.5*d;
             #epsAdapt = 1e-1;
-            #density[Int(floor(NCellsX*0.5)):end,:] .= 5; #beam hits interface
-            density[:,Int(floor(NCellsX*0.56/(b-a))):end] .= 5.0; #beam perpendicular to interface
+            #density[Int(floor(NCellsX*0.5)):end,:] .= 5.0; #beam hits interface
+            #density[:,Int(floor(NCellsX*0.56)):end] .= 5.0; #beam perpendicular to interface
+            density[:,Int(floor(NCellsX*0.75)):Int(floor(NCellsX*0.8))] .= 5.0; #inserted box of high density 
         elseif problem =="lungOrig"
             #img = Float64.(Gray.(load("phantom.png")))
             pathlib = pyimport("pathlib")
