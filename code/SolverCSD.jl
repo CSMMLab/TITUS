@@ -360,22 +360,22 @@ mutable struct SolverCSD
     end
 end
 
-function SetupIC(obj::SolverCSD)
-    nq = obj.Q.nquadpoints;
+function SetupIC(obj::SolverCSD,pointsxyz::Matrix{Float64})
+    nq = size(pointsxyz)[1];
     nx = obj.settings.NCellsX;
     ny = obj.settings.NCellsY;
     psi = zeros(obj.settings.NCellsX,obj.settings.NCellsY,nq);
+    pos_beam = [0.5*14.5,0.5*14.5,0];
+    sigmaO1Inv = 10000.0;
+    sigmaO3Inv = 10000.0;
 
     if obj.settings.problem == "validation"
         for i = 1:nx
             for j = 1:ny
-                for k = 1:nq
-                    sigmaO1Inv = 10000.0;
-                    sigmaO3Inv = 10000.0;
-                    pos_beam = [0.5*14.5,0.5*14.5,0];
-                    space_beam = normpdf(obj.settings.xMid[i],pos_beam[1],.1).*normpdf(obj.settings.yMid[j],pos_beam[2],.1);
+                space_beam = normpdf(obj.settings.xMid[i],pos_beam[1],.1).*normpdf(obj.settings.yMid[j],pos_beam[2],.1);
+                for k = 1:nq 
                     #trafo = obj.csd.S[1]*obj.settings.density[i,j]; 
-                    psi[i,j,k] = 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-obj.Q.pointsxyz[k,1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-obj.Q.pointsxyz[k,3])^2)*space_beam#*trafo;
+                    psi[i,j,k] = 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-pointsxyz[k,1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-pointsxyz[k,3])^2)*space_beam#*trafo;
                 end
             end
         end
@@ -877,22 +877,22 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
     N = obj.pn.nTotalEntries;
 
     # Set up initial condition and store as matrix
-    psi = SetupIC(obj);
     floorPsiAll = 1e-1;
     floorPsi = 1e-17;
     if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" # determine relevant directions in IC
-        println(size(psi))
+        psi = SetupIC(obj,obj.Q.pointsxyz);
         idxFullBeam = findall(psi .> floorPsiAll)
-        println(maximum(psi))
         idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
+        psi = psi[:,:,idxBeam]
     elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" # determine relevant directions in beam
         psiBeam = zeros(nq)
         for k = 1:nq
             psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)
         end
         idxBeam = findall( psiBeam .> floorPsi*maximum(psiBeam) );
+        psi = SetupIC(obj,obj.Q.pointsxyz[idxBeam,:]);
     end
-    psi = psi[:,:,idxBeam]
+    
     obj.qReduced = obj.Q.pointsxyz[idxBeam,:]
     obj.MReduced = obj.M[:,idxBeam]
     obj.OReduced = obj.O[idxBeam,:]
@@ -904,18 +904,17 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
     Id = Diagonal(ones(N));
 
     # Low-rank approx of init data:
-    X,S,W = svd(zeros(nx*ny,N));
+    X,_ = qr!(zeros(nx*ny,r));
+    W,_ = qr!(zeros(N,r));
     
     # rank-r truncation:
-    X = X[:,1:r];
-    W = W[:,1:r];
+    X = Matrix(X[:,1:r]);
+    W = Matrix(W[:,1:r]);
     S = zeros(r,r);
     K = zeros(size(X));
 
     WAxW = zeros(r,r)
     WAzW = zeros(r,r)
-    WAbsAxW = zeros(r,r)
-    WAbsAzW = zeros(r,r)
 
     XL2xX = zeros(r,r)
     XL2yX = zeros(r,r)
@@ -1132,26 +1131,25 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     N = obj.pn.nTotalEntries;
 
     # Set up initial condition and store as matrix
-    psi = SetupIC(obj);
     floorPsiAll = 1e-1;
     floorPsi = 1e-17;
     if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" # determine relevant directions in IC
-        println(size(psi))
+        psi = SetupIC(obj,obj.Q.pointsxyz);
         idxFullBeam = findall(psi .> floorPsiAll)
-        println(maximum(psi))
         idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
+        psi = psi[:,:,idxBeam]
     elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" # determine relevant directions in beam
         psiBeam = zeros(nq)
         for k = 1:nq
             psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)
         end
         idxBeam = findall( psiBeam .> floorPsi*maximum(psiBeam) );
+        psi = SetupIC(obj,obj.Q.pointsxyz[idxBeam,:]);
     end
-    psi = psi[:,:,idxBeam]
+    
     obj.qReduced = obj.Q.pointsxyz[idxBeam,:]
     obj.MReduced = obj.M[:,idxBeam]
     obj.OReduced = obj.O[idxBeam,:]
-    println("reduction of ordinates is ",(nq-length(idxBeam))/nq*100.0," percent")
     nq = length(idxBeam);
 
     # define density matrix
@@ -1159,11 +1157,12 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     Id = Diagonal(ones(N));
 
     # Low-rank approx of init data:
-    X,S,W = svd(zeros(nx*ny,N));
+    X,_ = qr!(zeros(nx*ny,r));
+    W,_ = qr!(zeros(N,r));
     
     # rank-r truncation:
-    X = X[:,1:r];
-    W = W[:,1:r];
+    X = Matrix(X[:,1:r]);
+    W = Matrix(W[:,1:r]);
     S = zeros(r,r);
     K = zeros(size(X));
 
