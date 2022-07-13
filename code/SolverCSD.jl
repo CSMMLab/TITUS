@@ -869,7 +869,6 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
     eTrafo = obj.csd.eTrafo;
     energy = obj.csd.eGrid;
-    eKin = sqrt.(obj.csd.eGrid.^2 .- obj.settings.eRest^2);
     S = obj.csd.S;
 
     nx = obj.settings.NCellsX;
@@ -936,7 +935,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     dE = eTrafo[2]-eTrafo[1];
     obj.settings.dE = dE
 
-    println("CFL = ",(eTrafo[end]-eTrafo[end-1])/min(obj.settings.dx,obj.settings.dy)*maximum(densityInv))
+    println("CFL = ",dE/min(obj.settings.dx,obj.settings.dy)*maximum(densityInv))
 
     flux = zeros(size(psi))
 
@@ -946,9 +945,8 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     
     #loop over energy
     for n=2:nEnergies
-        dE = eTrafo[n]-eTrafo[n-1];
         # compute scattering coefficients at current energy
-        sigmaS = SigmaAtEnergy(obj.csd,eKin[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
+        sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
 
         # set boundary condition
         if obj.settings.problem != "validation" # validation testcase sets beam in initial condition
@@ -974,7 +972,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         obj.dose .+= 0.5*dE * (X*S*W[1,:]+uOUnc) * obj.csd.S[n-1] ./ obj.densityVec ;
 
         # stream uncollided particles
-        solveFlux!(obj,psi./obj.density,flux);
+        solveFluxUpwind!(obj,psi./obj.density,flux);
 
         psiBC = psi[obj.boundaryIdx];
 
