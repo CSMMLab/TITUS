@@ -10,11 +10,11 @@ using WriteVTK
 
 #close("all")
 
-nx = 51;
-ny = 51;
+nx = 201;
+ny = 1001;
 problem ="validation" #"2DHighD"
 particle = "Protons"
-s = Settings(nx,ny,50,problem, particle);
+s = Settings(nx,ny,20,problem, particle);
 rhoMin = minimum(s.density);
 
 if s.problem == "AirCavity"
@@ -139,15 +139,11 @@ savefig("output/doseiso_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCel
 # line plot dose
 fig, ax = subplots()
 nyRef = length(yRef)
-#ax.plot(xRef,doseRef[:,Int(floor(s.NCellsY/2))]./maximum(doseRef[:,Int(floor(s.NCellsY/2))]), "r--", linewidth=2, label="CSD", alpha=0.8)
 ax.plot(s.xMid,dose_DLR[:,Int(floor(s.NCellsY/2))]./maximum(dose_DLR[:,Int(floor(s.NCellsY/2))]), "b--", linewidth=2, label="CSD_DLR", alpha=0.8)
 if s.problem == "2DHighD"
    ax.plot(xRef',doseRef[:,Int(floor(nyRef/2))]./maximum(doseRef[:,Int(floor(nyRef/2))]), "k-", linewidth=2, label="Starmap", alpha=0.6)
    ax.plot(yMC,doseMC[Int(floor(nxMC/2)),:]./maximum(doseMC[Int(floor(nxMC/2)),:])*1.3, "r:", linewidth=2, label="MC", alpha=0.6)
-   #ax.plot(xKiTRT,doseKiTRT, "g-.", linewidth=2, label="KiT-RT", alpha=0.6)
-   #ax.plot(xKiTRT,doseKiTRTold, "r-.", linewidth=2, label="KiT-RT old", alpha=0.6)
 end
-#ax.plot(csd.eGrid,csd.S, "r--o", linewidth=2, label="S", alpha=0.6)
 ax.legend(loc="upper left")
 ax.set_xlim([s.c,s.d])
 ax.set_ylim([0,1.05])
@@ -155,6 +151,21 @@ ax.tick_params("both",labelsize=20)
 show()
 tight_layout()
 savefig("output/DoseCutYNx$(s.Nx)")
+
+fig, ax = subplots()
+nyRef = length(yRef)
+ax.plot(s.yMid,dose_DLR[Int(floor(s.NCellsX/2)),:]./maximum(dose_DLR[Int(floor(s.NCellsX/2)),:]), "b--", linewidth=2, label="CSD_DLR", alpha=0.8)
+if s.problem == "2DHighD"
+   ax.plot(xRef',doseRef[:,Int(floor(nyRef/2))]./maximum(doseRef[:,Int(floor(nyRef/2))]), "k-", linewidth=2, label="Starmap", alpha=0.6)
+   ax.plot(yMC,doseMC[Int(floor(nxMC/2)),:]./maximum(doseMC[Int(floor(nxMC/2)),:])*1.3, "r:", linewidth=2, label="MC", alpha=0.6)
+end
+ax.legend(loc="upper left")
+ax.set_xlim([0.5*(s.a+s.b),s.b])
+ax.set_ylim([0,1.05])
+ax.tick_params("both",labelsize=20) 
+show()
+tight_layout()
+savefig("output/DoseCutXNx$(s.Nx)")
 
 fig = figure("u, full",figsize=(10*(s.d/s.b),10),dpi=100)
 ax = gca()
@@ -177,5 +188,3 @@ vtkfile["u"] = u/0.5/sqrt(solver1.gamma[1])
 outfiles = vtk_save(vtkfile)
 
 println("main finished")
-
-include("validationData.jl")
