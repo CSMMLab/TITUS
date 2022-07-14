@@ -10,7 +10,7 @@ using WriteVTK
 
 #close("all")
 
-nx = 201;
+nx = 1001;
 ny = 1001;
 problem ="validation" #"2DHighD"
 particle = "Protons"
@@ -64,7 +64,7 @@ end
 ############################
 
 solver1 = SolverCSD(s);
-X_dlr,S_dlr,W_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR(solver1);
+X_dlr,S_dlr,W_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR2ndOrder(solver1);
 #u, dose_DLR,psi = SolveFirstCollisionSource(solver1);
 u = X_dlr*Diagonal(S_dlr)*W_dlr';
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);

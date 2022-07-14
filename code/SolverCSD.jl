@@ -912,6 +912,8 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
     W = Matrix(W[:,1:r]);
     S = zeros(r,r);
     K = zeros(size(X));
+    k1 = zeros(size(X));
+    L = zeros(size(W));
 
     WAxW = zeros(r,r);
     WAzW = zeros(r,r);
@@ -996,20 +998,20 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
             WAzW .= W'*obj.pn.Az*W # Az  = Az^T
             WAxW .= W'*obj.pn.Ax*W # Ax  = Ax^T
 
-            k1 = -obj.L2x*K*WAxW - obj.L2y*K*WAzW;
-            k2 = -obj.L2x*(K+0.5*dE*k1)*WAxW - obj.L2y*(K+0.5*dE*k1)*WAzW;
-            k3 = -obj.L2x*(K+0.5*dE*k2)*WAxW - obj.L2y*(K+0.5*dE*k2)*WAzW;
-            k4 = -obj.L2x*(K+dE*k3)*WAxW - obj.L2y*(K+dE*k3)*WAzW;
+            k1 .= -obj.L2x*K*WAxW - obj.L2y*K*WAzW;
+            K .= K .+ dE .* k1 ./ 6;
+            k1 .= -obj.L2x*(K+0.5*dE*k1)*WAxW - obj.L2y*(K+0.5*dE*k1)*WAzW;
+            K .+= 2 * dE .* k1 ./ 6;
+            k1 .= -obj.L2x*(K+0.5*dE*k1)*WAxW - obj.L2y*(K+0.5*dE*k1)*WAzW;
+            K .+= 2 * dE .* k1 ./ 6;
+            k1 .= -obj.L2x*(K+dE*k1)*WAxW - obj.L2y*(K+dE*k1)*WAzW;
+            K .+= dE .* k1 ./ 6;
 
-            K .= K .+ dE .* (k1 .+ 2 * k2 .+ 2 * k3 .+ k4) ./ 6;
-
-            XNew,STmp = qr!(K);
-            XNew = Matrix(XNew)
-            XNew = XNew[:,1:r];
+            XNew,_,_ = svd!(K);
 
             MUp .= XNew' * X;
             ################## L-step ##################
-            L = W*S';
+            L .= W*S';
 
             XL2xX .= X'*obj.L2x*X
             XL2yX .= X'*obj.L2y*X
@@ -1023,9 +1025,7 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
 
             L .= L .+ dE .* (l1 .+ 2 * l2 .+ 2 * l3 .+ l4) ./ 6;
                     
-            WNew,STmp = qr(L);
-            WNew = Matrix(WNew)
-            WNew = WNew[:,1:r];
+            WNew,_,_ = svd!(L);
 
             NUp .= WNew' * W;
             W .= WNew;
@@ -1053,19 +1053,15 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
         end
 
         ############## Out Scattering ##############
-        L = W*S';
+        L .= W*S';
 
         for i = 1:r
             L[:,i] = (Id .+ dE*D)\L[:,i]
         end
 
-        W,S = qr(L);
-        W = Matrix(W)
-        W = W[:, 1:r];
-        S = Matrix(S)
-        S = S[1:r, 1:r];
+        W,Sv,T = svd!(L);
 
-        S .= S';
+        S .= (Diagonal(Sv)*T)';
 
         ############## In Scattering ##############
 
@@ -1073,22 +1069,18 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
         X[obj.boundaryIdx,:] .= 0.0;
         K .= X*S;
         #u = u .+dE*Mat2Vec(psiNew)*M'*Diagonal(Dvec);
-        K = K .+dE*Mat2Vec(psi)*obj.MReduced'*Diagonal(Dvec)*W;
+        K .= K .+ dE * Mat2Vec(psi) * (obj.MReduced' * (Diagonal(Dvec) * W) );
         K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
-        XNew,STmp = qr!(K);
-        XNew = Matrix(XNew)
-        XNew = XNew[:,1:r];
+        XNew,_,_ = svd!(K);
 
         MUp .= XNew' * X;
 
         ################## L-step ##################
         L = W*S';
-        L = L .+dE*(Mat2Vec(psi)*obj.MReduced'*Diagonal(Dvec))'*X;
+        L = L .+dE*Diagonal(Dvec)*obj.MReduced*(Mat2Vec(psi)'*X);
 
-        WNew,STmp = qr(L);
-        WNew = Matrix(WNew)
-        WNew = WNew[:,1:r];
+        WNew,_,_ = svd!(L);
 
         NUp .= WNew' * W;
 
@@ -1097,7 +1089,7 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
 
         ################## S-step ##################
         S .= MUp*S*(NUp')
-        S .= S .+dE*X'*Mat2Vec(psi)*obj.MReduced'*Diagonal(Dvec)*W;
+        S .= S .+dE*(X'*Mat2Vec(psi))*obj.MReduced'*(Diagonal(Dvec)*W);
 
         ############## Dose Computation ##############
         for i = 1:nx
@@ -1317,22 +1309,18 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         X[obj.boundaryIdx,:] .= 0.0;
         K .= X*S;
         #u = u .+dE*Mat2Vec(psiNew)*M'*Diagonal(Dvec);
-        K = K .+dE*Mat2Vec(psi)*obj.MReduced'*Diagonal(Dvec)*W;
+        K .= K .+ dE * Mat2Vec(psi) * (obj.MReduced' * (Diagonal(Dvec) * W) );
         K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
-        XNew,STmp = qr!(K);
-        XNew = Matrix(XNew)
-        XNew = XNew[:,1:r];
+        XNew,_,_ = svd!(K);
 
         MUp .= XNew' * X;
 
         ################## L-step ##################
         L = W*S';
-        L = L .+dE*(Mat2Vec(psi)*obj.MReduced'*Diagonal(Dvec))'*X;
+        L = L .+dE*Diagonal(Dvec)*obj.MReduced*(Mat2Vec(psi)'*X);
 
-        WNew,STmp = qr(L);
-        WNew = Matrix(WNew)
-        WNew = WNew[:,1:r];
+        WNew,_,_ = svd!(L);
 
         NUp .= WNew' * W;
 
@@ -1341,7 +1329,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
         ################## S-step ##################
         S .= MUp*S*(NUp')
-        S .= S .+dE*X'*Mat2Vec(psi)*obj.MReduced'*Diagonal(Dvec)*W;
+        S .= S .+dE*(X'*Mat2Vec(psi))*obj.MReduced'*(Diagonal(Dvec)*W);
 
         ############## Dose Computation ##############
         for i = 1:nx
