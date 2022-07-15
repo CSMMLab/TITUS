@@ -1247,9 +1247,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
             K .= K .- dE*(obj.L2x*K*WAxW + obj.L2y*K*WAzW + obj.L1x*K*WAbsAxW + obj.L1y*K*WAbsAzW);
 
-            XNew,STmp = qr!(K);
-            XNew = Matrix(XNew)
-            XNew = XNew[:,1:r];
+            XNew,_,_ = svd!(K);
 
             MUp .= XNew' * X;
             ################## L-step ##################
