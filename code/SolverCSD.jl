@@ -22,24 +22,12 @@ mutable struct SolverCSD
 
     # Solver settings
     settings::Settings;
-
-    # preallocate memory for performance
-    outRhs::Array{Float64,3};
     
     # squared L2 norms of Legendre coeffs
     gamma::Array{Float64,1};
     # Roe matrix
     AbsAx::SparseMatrixCSC{Float64, Int64};
     AbsAz::SparseMatrixCSC{Float64, Int64};
-    AxPlus::Array{Float64,2};
-    AxMinus::Array{Float64,2};
-    AzPlus::Array{Float64,2};
-    AzMinus::Array{Float64,2};
-    # normalized Legendre Polynomials
-    P::Array{Float64,2};
-    # quadrature points
-    mu::Array{Float64,1};
-    w::Array{Float64,1};
 
     # functionalities of the CSD approximation
     csd::CSD;
@@ -59,7 +47,6 @@ mutable struct SolverCSD
     L2x::SparseMatrixCSC{Float64, Int64};
     L2y::SparseMatrixCSC{Float64, Int64};
     boundaryIdx::Array{Int,1}
-    boundaryBeam::Array{Int,1}
 
     Q::Quadrature
     O::Array{Float64,2};
@@ -80,17 +67,6 @@ mutable struct SolverCSD
             n = i-1;
             gamma[i] = 2/(2*n+1);
         end
-        A = zeros(settings.nPN,settings.nPN);
-            # setup flux matrix (alternative analytic computation)
-        for i = 1:(settings.nPN-1)
-            n = i-1;
-            A[i,i+1] = (n+1)/(2*n+1)*sqrt(gamma[i+1])/sqrt(gamma[i]);
-        end
-
-        for i = 2:settings.nPN
-            n = i-1;
-            A[i,i-1] = n/(2*n+1)*sqrt(gamma[i-1])/sqrt(gamma[i]);
-        end
 
         # construct CSD fields
         csd = CSD(settings);
@@ -100,18 +76,10 @@ mutable struct SolverCSD
         Ax,Ay,Az = SetupSystemMatrices(pn);
         SetupSystemMatricesSparse(pn);
 
-        outRhs = zeros(settings.NCellsX,settings.NCellsY,pn.nTotalEntries);
-
         # setup Roe matrix
         S = eigvals(Ax)
         V = eigvecs(Ax)
         AbsAx = V*abs.(diagm(S))*inv(V)
-        idxPos = findall((S.>=0.0))
-        idxNeg = findall((S.<0.0))
-        SPlus = zeros(size(S)); SPlus[idxPos] = S[idxPos];
-        SMinus = zeros(size(S)); SMinus[idxNeg] = S[idxNeg];
-        AxPlus = V*diagm(SPlus)*inv(V)
-        AxMinus = V*diagm(SMinus)*inv(V)
 
         idx = findall(abs.(AbsAx) .> 1e-10)
         Ix = first.(Tuple.(idx)); Jx = last.(Tuple.(idx)); vals = AbsAx[idx];
@@ -120,13 +88,6 @@ mutable struct SolverCSD
         S = eigvals(Az)
         V = eigvecs(Az)
         AbsAz = V*abs.(diagm(S))*inv(V)
-        idxPos = findall((S.>=0.0))
-        idxNeg = findall((S.<0.0))
-        SPlus = zeros(size(S)); SPlus[idxPos] = S[idxPos];
-        SMinus = zeros(size(S)); SMinus[idxNeg] = S[idxNeg];
-        AzPlus = V*diagm(SPlus)*inv(V)
-        AzMinus = V*diagm(SMinus)*inv(V)
-
         idx = findall(abs.(AbsAz) .> 1e-10)
         Iz = first.(Tuple.(idx)); Jz = last.(Tuple.(idx)); valsz = AbsAz[idx];
         AbsAz = sparse(Iz,Jz,valsz,pn.nTotalEntries,pn.nTotalEntries);
@@ -136,17 +97,6 @@ mutable struct SolverCSD
 
         # allocate dose vector
         dose = zeros(settings.NCellsX*settings.NCellsY)
-
-        # compute normalized Legendre Polynomials
-        Nq=200;
-        (mu,w) = gauss(Nq);
-        P=zeros(Nq,settings.nPN);
-        for k=1:Nq
-            PCurrent = collectPl(mu[k],lmax=settings.nPN-1);
-            for i = 1:settings.nPN
-                P[k,i] = PCurrent[i-1]/sqrt(gamma[i]);
-            end
-        end
 
         # setupt stencil matrix
         nx = settings.NCellsX;
@@ -290,19 +240,6 @@ mutable struct SolverCSD
             boundaryIdx[counter] = idx
         end
 
-        boundaryBeam = zeros(Int,2*nx) # boundary indices uncollided particles for beam
-        counter = 0;
-        for i = 1:nx
-            counter += 1;
-            j = 1;
-            idx = (i-1)*ny + j;
-            boundaryBeam[counter] = idx
-            counter += 1;
-            j = 2;
-            idx = (i-1)*ny + j;
-            boundaryBeam[counter] = idx
-        end
-
         # setup spatial grid
         xGrid = zeros(nx*ny,2)
         for i = 1:nx
@@ -356,7 +293,7 @@ mutable struct SolverCSD
             end
         end
 
-        new(x,y,xGrid,settings,outRhs,gamma,AbsAx,AbsAz,AxPlus,AxMinus,AzPlus,AzMinus,P,mu,w,csd,pn,density,vec(density'),dose,L1x,L1y,L2x,L2y,boundaryIdx,boundaryBeam,Q,O,M);
+        new(x,y,xGrid,settings,gamma,AbsAx,AbsAz,csd,pn,density,vec(density'),dose,L1x,L1y,L2x,L2y,boundaryIdx,Q,O,M);
     end
 end
 
@@ -493,75 +430,6 @@ function Slope(u,v,w,dx)
     else
         return 0.0;
     end
-end
-
-function RhsHighOrder(obj::SolverCSD,u::Array{Float64,3},t::Float64=0.0)   
-    #Boundary conditions
-    #obj.outRhs[1,:] = u[1,:];
-    #obj.outRhs[obj.settings.NCells,:] = u[obj.settings.NCells,:];
-    dx = obj.settings.dx
-    dz = obj.settings.dy
-
-    for j=2:obj.settings.NCellsX-1
-        for i=2:obj.settings.NCellsY-1
-            # Idea: use this formulation to define outRhsX and outRhsY, then apply splitting to get u2 = u + dt*outRhsX(u), uNew = u2 + dt*outRhsY(u2)
-            obj.outRhs[j,i,:] = 1/2/dx * obj.pn.Ax * (u[j+1,i,:]/obj.density[j+1,i]-u[j-1,i,:]/obj.density[j-1,i]) - 1/2/dx * obj.AbsAx*( u[j+1,i,:]/obj.density[j+1,i] - 2*u[j,i,:]/obj.density[j,i] + u[j-1,i,:]/obj.density[j-1,i] );
-            obj.outRhs[j,i,:] += 1/2/dz * obj.pn.Az * (u[j,i+1,:]/obj.density[j,i+1]-u[j,i-1,:]/obj.density[j,i-1]) - 1/2/dz * obj.AbsAz*( u[j,i+1,:]/obj.density[j,i+1] - 2*u[j,i,:]/obj.density[j,i] + u[j,i-1,:]/obj.density[j,i-1] );
-        end
-    end
-    return obj.outRhs;
-end
-
-function RhsMatrix(obj::SolverCSD,u::Array{Float64,3},t::Float64=0.0)   
-    #Boundary conditions
-    #obj.outRhs[1,:] = u[1,:];
-    #obj.outRhs[obj.settings.NCells,:] = u[obj.settings.NCells,:];
-    dx = obj.settings.dx
-    dz = obj.settings.dy
-
-    for j=2:obj.settings.NCellsX-1
-        for i=2:obj.settings.NCellsY-1
-            # Idea: use this formulation to define outRhsX and outRhsY, then apply splitting to get u2 = u + dt*outRhsX(u), uNew = u2 + dt*outRhsY(u2)
-            obj.outRhs[j,i,:] = 1/2/dx * obj.pn.Ax * (u[j+1,i,:]/obj.density[j+1,i]-u[j-1,i,:]/obj.density[j-1,i]) - 1/2/dx * obj.AbsAx*( u[j+1,i,:]/obj.density[j+1,i] - 2*u[j,i,:]/obj.density[j,i] + u[j-1,i,:]/obj.density[j-1,i] );
-            obj.outRhs[j,i,:] += 1/2/dz * obj.pn.Az * (u[j,i+1,:]/obj.density[j,i+1]-u[j,i-1,:]/obj.density[j,i-1]) - 1/2/dz * obj.AbsAz*( u[j,i+1,:]/obj.density[j,i+1] - 2*u[j,i,:]/obj.density[j,i] + u[j,i-1,:]/obj.density[j,i-1] );
-        end
-    end
-    return obj.outRhs;
-end
-
-function Rhs(obj::SolverCSD,u::Array{Float64,2},t::Float64=0.0)   
-    xInd = collect(2:(obj.settings.NCellsX-1));
-    yInd = collect(2:(obj.settings.NCellsY-1));
-    out = zeros(size(u))
-    ny = obj.settings.NCellsY;
-    dx = obj.settings.dx;
-    dy = obj.settings.dy;
-    for i=xInd,j=yInd
-
-        # flux NS
-        gNorth = (obj.AzPlus*u[vectorIndex(ny,i,j),:] + obj.AzMinus*u[vectorIndex(ny,i,j+1),:])*dx;
-        gSouth = -(obj.AzPlus*u[vectorIndex(ny,i,j-1),:] + obj.AzMinus*u[vectorIndex(ny,i,j),:])*dx;
-
-        # flux EW
-        gEast = (obj.AxPlus*u[vectorIndex(ny,i,j),:] + obj.AxMinus*u[vectorIndex(ny,i+1,j),:])*dy;
-        gWest = -(obj.AxPlus*u[vectorIndex(ny,i-1,j),:] + obj.AxMinus*u[vectorIndex(ny,i,j),:])*dy;
-
-        #println(vectorIndex(ny,Int(ceil()),j))
-        if vectorIndex(ny,i,j) == 11176 #11325
-            #println("gNorth = ",gNorth)
-            #println("gSouth = ",gSouth)
-            #println("gEast = ",gEast)
-            #println("gWest = ",gWest)
-        end
-
-        out[vectorIndex(ny,i,j),:] = (gNorth+gSouth+gEast+gWest)/dx/dy;
-
-    end
-    return out;
-end
-
-function RhsOld(obj::SolverCSD,u::Array{Float64,2},t::Float64=0.0)   
-    return obj.L2x*u*obj.pn.Ax + obj.L2y*u*obj.pn.Az + obj.L1x*u*obj.AbsAx' + obj.L1y*u*obj.AbsAz';
 end
 
 @inline minmod(x::Float64, y::Float64) = ifelse(x < 0, clamp(y, x, 0.0), clamp(y, 0.0, x))
