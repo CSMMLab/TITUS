@@ -302,7 +302,7 @@ function SetupIC(obj::SolverCSD,pointsxyz::Matrix{Float64})
     nx = obj.settings.NCellsX;
     ny = obj.settings.NCellsY;
     psi = zeros(obj.settings.NCellsX,obj.settings.NCellsY,nq);
-    pos_beam = [0.5*14.5,0.5*14.5,0];
+    pos_beam = [obj.settings.x0,obj.settings.y0,0];
     sigmaO1Inv = 10000.0;
     sigmaO3Inv = 10000.0;
 
@@ -397,7 +397,7 @@ function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y:
         sigmaO3Inv = 10000.0;
         sigmaEInv = 1000.0;
         densityMin = 1.0;
-        pos_beam = [0.5*14.5,0.5*14.5,0];
+        pos_beam = [obj.settings.x0,obj.settings.y0,0];
         space_beam = normpdf(x,pos_beam[1],.1).*normpdf(y,pos_beam[2],.1);
         #println(space_beam)
         return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*space_beam*obj.csd.S[n]*densityMin#*exp(-sigmaEInv*(E0-E)^2)#;
