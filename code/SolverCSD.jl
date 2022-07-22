@@ -701,7 +701,7 @@ function SolveFirstCollisionSource(obj::SolverCSD)
         psiNew .= psi ./ (1+dE*sigmaS[1]);
 
         # stream collided particles
-        uTilde = u .- dE * Rhs(obj,u); 
+        uTilde = u .- dE * obj.L2x*u*obj.pn.Ax - dE * obj.L2y*u*obj.pn.Az - dE * obj.L1x*u*obj.AbsAx' - dE * obj.L1y*u*obj.AbsAz'; 
         uTilde[obj.boundaryIdx,:] .= 0.0;
 
         # scatter particles
