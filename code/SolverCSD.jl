@@ -620,24 +620,25 @@ function SolveFirstCollisionSource(obj::SolverCSD)
     N = obj.pn.nTotalEntries
 
     # Set up initial condition and store as matrix
-    psi = SetupIC(obj);
     floorPsiAll = 1e-1;
     floorPsi = 1e-17;
-    if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" # determine relevant directions in IC
+    if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" # determine relevant directions in IC
+        psi = SetupIC(obj,obj.Q.pointsxyz);
         idxFullBeam = findall(psi .> floorPsiAll)
         idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
-    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation"# determine relevant directions in beam
+        psi = psi[:,:,idxBeam]
+    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" || obj.settings.problem == "protonBeam" # determine relevant directions in beam
         psiBeam = zeros(nq)
         for k = 1:nq
             psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)
         end
         idxBeam = findall( psiBeam .> floorPsi*maximum(psiBeam) );
+        psi = SetupIC(obj,obj.Q.pointsxyz[idxBeam,:]);
     end
-    psi = psi[:,:,idxBeam]
+    
     obj.qReduced = obj.Q.pointsxyz[idxBeam,:]
     obj.MReduced = obj.M[:,idxBeam]
     obj.OReduced = obj.O[idxBeam,:]
-    println("reduction of ordinates is ",(nq-length(idxBeam))/nq*100.0," percent")
     nq = length(idxBeam);
 
     # define density matrix
