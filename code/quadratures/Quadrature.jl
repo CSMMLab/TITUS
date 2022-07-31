@@ -170,6 +170,44 @@ function createWeights(n::Int64,xyz::Array{Float64,2},triangles::Array{Int64,2})
     return weights
 end
 
+function ComputeTrafoMatrices(Q::Quadrature,Norder::Int,nPN::Int)
+	nq = length(Q.weights);
+	qorder = Q.norder
+
+	# Construct Gauss quadrature
+	mu,gaussweights = gausslegendre(qorder)
+
+	# around z axis equidistant
+	phi = [(k+0.5)*pi/qorder for k=0:2*qorder-1]
+
+	# Transform between (mu,phi) and (x,y,z)
+	x = sqrt.(1.0 .- mu.^2).*cos.(phi)'
+	y = sqrt.(1.0 .- mu.^2).*sin.(phi)'
+	z =           mu    .*ones(size(phi))'
+	weights = 2.0*pi/qorder*repeat(gaussweights,1,2*qorder)
+		
+	weights = weights[:]*0.5;
+
+	global counter;
+	counter = 1
+	O = zeros(nq,Norder)
+	M = zeros(Norder,nq)
+	for l=0:nPN
+		for m=-l:l
+			for k = 1:length(mu)
+				for j = 1:length(phi)
+					global counter;
+					O[(j-1)*qorder+k,counter] =  real_sph(mu[k],phi[j],l,m)
+					M[counter,(j-1)*qorder+k] = O[(j-1)*qorder+k,counter]*weights[(j-1)*qorder+k]
+				end
+			end
+			counter += 1
+		end
+	end
+
+    return O, M
+end
+
 function applyinterpolation!(phiNew::Array{Float64,3},phi::Array{Float64,3},Q::Quadrature)
 	nq,ni,nj = size(phi)
 	#@parallel

@@ -13,6 +13,7 @@ include("CSD.jl")
 include("PNSystem.jl")
 include("quadratures/Quadrature.jl")
 include("utils.jl")
+include("stencils.jl")
 
 mutable struct SolverCSD
     # spatial grid of cell interfaces
@@ -35,6 +36,9 @@ mutable struct SolverCSD
     # functionalities of the PN system
     pn::PNSystem;
 
+    # stencil matrices
+    stencil::Stencils;
+
     # material density
     density::Array{Float64,2};
     densityVec::Array{Float64,1};
@@ -42,10 +46,6 @@ mutable struct SolverCSD
     # dose vector
     dose::Array{Float64,1};
 
-    L1x::SparseMatrixCSC{Float64, Int64};
-    L1y::SparseMatrixCSC{Float64, Int64};
-    L2x::SparseMatrixCSC{Float64, Int64};
-    L2y::SparseMatrixCSC{Float64, Int64};
     boundaryIdx::Array{Int,1}
 
     Q::Quadrature
@@ -73,13 +73,13 @@ mutable struct SolverCSD
 
         # construct PN system matrices
         pn = PNSystem(settings)
-        Ax,Ay,Az = SetupSystemMatrices(pn);
+        Ax,_,Az = SetupSystemMatrices(pn);
         SetupSystemMatricesSparse(pn);
 
         # setup Roe matrix
         S = eigvals(Ax)
         V = eigvecs(Ax)
-        AbsAx = V*abs.(diagm(S))*inv(V)
+        AbsAx = V*abs.(Diagonal(S))*inv(V)
 
         idx = findall(abs.(AbsAx) .> 1e-10)
         Ix = first.(Tuple.(idx)); Jx = last.(Tuple.(idx)); vals = AbsAx[idx];
@@ -98,122 +98,8 @@ mutable struct SolverCSD
         # allocate dose vector
         dose = zeros(settings.NCellsX*settings.NCellsY)
 
-        # setupt stencil matrix
         nx = settings.NCellsX;
         ny = settings.NCellsY;
-        N = pn.nTotalEntries;
-        L1x = spzeros(nx*ny,nx*ny);
-        L1y = spzeros(nx*ny,nx*ny);
-        L2x = spzeros(nx*ny,nx*ny);
-        L2y = spzeros(nx*ny,nx*ny);
-
-        # setup index arrays and values for allocation of stencil matrices
-        II = zeros(3*(nx-2)*(ny-2)); J = zeros(3*(nx-2)*(ny-2)); vals = zeros(3*(nx-2)*(ny-2));
-        counter = -2;
-
-        for i = 2:nx-1
-            for j = 2:ny-1
-                counter = counter + 3;
-                # x part
-                index = vectorIndex(ny,i,j);
-                indexPlus = vectorIndex(ny,i+1,j);
-                indexMinus = vectorIndex(ny,i-1,j);
-
-                II[counter+1] = index;
-                J[counter+1] = index;
-                vals[counter+1] = 2.0/2/settings.dx/density[i,j]; 
-                if i > 1
-                    II[counter] = index;
-                    J[counter] = indexMinus;
-                    vals[counter] = -1/2/settings.dx/density[i-1,j];
-                end
-                if i < nx
-                    II[counter+2] = index;
-                    J[counter+2] = indexPlus;
-                    vals[counter+2] = -1/2/settings.dx/density[i+1,j]; 
-                end
-            end
-        end
-        L1x = sparse(II,J,vals,nx*ny,nx*ny);
-
-        II .= zeros(3*(nx-2)*(ny-2)); J .= zeros(3*(nx-2)*(ny-2)); vals .= zeros(3*(nx-2)*(ny-2));
-        counter = -2;
-
-        for i = 2:nx-1
-            for j = 2:ny-1
-                counter = counter + 3;
-                # y part
-                index = vectorIndex(ny,i,j);
-                indexPlus = vectorIndex(ny,i,j+1);
-                indexMinus = vectorIndex(ny,i,j-1);
-
-                II[counter+1] = index;
-                J[counter+1] = index;
-                vals[counter+1] = 2.0/2/settings.dy/density[i,j]; 
-
-                if j > 1
-                    II[counter] = index;
-                    J[counter] = indexMinus;
-                    vals[counter] = -1/2/settings.dy/density[i,j-1];
-                end
-                if j < ny
-                    II[counter+2] = index;
-                    J[counter+2] = indexPlus;
-                    vals[counter+2] = -1/2/settings.dy/density[i,j+1]; 
-                end
-            end
-        end
-        L1y = sparse(II,J,vals,nx*ny,nx*ny);
-
-        II = zeros(2*(nx-2)*(ny-2)); J = zeros(2*(nx-2)*(ny-2)); vals = zeros(2*(nx-2)*(ny-2));
-        counter = -1;
-
-        for i = 2:nx-1
-            for j = 2:ny-1
-                counter = counter + 2;
-                # x part
-                index = vectorIndex(ny,i,j);
-                indexPlus = vectorIndex(ny,i+1,j);
-                indexMinus = vectorIndex(ny,i-1,j);
-
-                if i > 1
-                    II[counter] = index;
-                    J[counter] = indexMinus;
-                    vals[counter] = -1/2/settings.dx/density[i-1,j];
-                end
-                if i < nx
-                    II[counter+1] = index;
-                    J[counter+1] = indexPlus;
-                    vals[counter+1] = 1/2/settings.dx/density[i+1,j];
-                end
-            end
-        end
-        L2x = sparse(II,J,vals,nx*ny,nx*ny);
-
-        II .= zeros(2*(nx-2)*(ny-2)); J .= zeros(2*(nx-2)*(ny-2)); vals .= zeros(2*(nx-2)*(ny-2));
-        counter = -1;
-
-        for i = 2:nx-1
-            for j = 2:ny-1
-                counter = counter + 2;
-                # y part
-                index = vectorIndex(ny,i,j);
-                indexPlus = vectorIndex(ny,i,j+1);
-                indexMinus = vectorIndex(ny,i,j-1);
-
-                if j > 1
-                    II[counter] = index;
-                    J[counter] = indexMinus;
-                    vals[counter] = -1/2/settings.dy/density[i,j-1];
-                end
-                if j < ny
-                    II[counter+1] = index;
-                    J[counter+1] = indexPlus;
-                    vals[counter+1] = 1/2/settings.dy/density[i,j+1];
-                end
-            end
-        end
-        L2y = sparse(II,J,vals,nx*ny,nx*ny);
 
         # collect boundary indices
         boundaryIdx = zeros(Int,2*nx+2*ny)
@@ -256,44 +142,12 @@ mutable struct SolverCSD
         qtype = 1; # Type must be 1 for "standard" or 2 for "octa" and 3 for "ico".
         Q = Quadrature(qorder,qtype)
 
-        weights = Q.weights
-        #Norder = (qorder+1)*(qorder+1)
         Norder = pn.nTotalEntries
-        nq = length(weights);
+        O,M = ComputeTrafoMatrices(Q,Norder,settings.nPN)
 
-        # Construct Gauss quadrature
-        mu,gaussweights = gausslegendre(qorder)
-            
-        # around z axis equidistant
-        phi = [(k+0.5)*pi/qorder for k=0:2*qorder-1]
+        stencil = Stencils(settings);
 
-        # Transform between (mu,phi) and (x,y,z)
-        x = sqrt.(1.0 .- mu.^2).*cos.(phi)'
-        y = sqrt.(1.0 .- mu.^2).*sin.(phi)'
-        z =           mu    .*ones(size(phi))'
-        weights = 2.0*pi/qorder*repeat(gaussweights,1,2*qorder)
-            
-        weights = weights[:]*0.5;
-
-    
-        global counter;
-        counter = 1
-        O = zeros(nq,Norder)
-        M = zeros(Norder,nq)
-        for l=0:settings.nPN
-            for m=-l:l
-                for k = 1:length(mu)
-                    for j = 1:length(phi)
-                        global counter;
-                        O[(j-1)*qorder+k,counter] =  real_sph(mu[k],phi[j],l,m)
-                        M[counter,(j-1)*qorder+k] = O[(j-1)*qorder+k,counter]*weights[(j-1)*qorder+k]
-                    end
-                end
-                counter += 1
-            end
-        end
-
-        new(x,y,xGrid,settings,gamma,AbsAx,AbsAz,csd,pn,density,vec(density'),dose,L1x,L1y,L2x,L2y,boundaryIdx,Q,O,M);
+        new(x,y,xGrid,settings,gamma,AbsAx,AbsAz,csd,pn,stencil,density,vec(density'),dose,boundaryIdx,Q,O,M);
     end
 end
 
@@ -702,7 +556,7 @@ function SolveFirstCollisionSource(obj::SolverCSD)
         psiNew .= psi ./ (1+dE*sigmaS[1]);
 
         # stream collided particles
-        uTilde = u .- dE * obj.L2x*u*obj.pn.Ax - dE * obj.L2y*u*obj.pn.Az - dE * obj.L1x*u*obj.AbsAx' - dE * obj.L1y*u*obj.AbsAz'; 
+        uTilde = u .- dE * obj.stencil.L2x*u*obj.pn.Ax - dE * obj.stencil.L2y*u*obj.pn.Az - dE * obj.stencil.L1x*u*obj.AbsAx' - dE * obj.stencil.L1y*u*obj.AbsAz'; 
         uTilde[obj.boundaryIdx,:] .= 0.0;
 
         # scatter particles
@@ -816,7 +670,7 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
     #loop over energy
     for n=2:nEnergies
         # compute scattering coefficients at current energy
-        sigmaS = SigmaAtEnergy(obj.csd,energy[n]);#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
+        sigmaS = SigmaAtEnergy(obj.csd,energy[n]);
 
         # set boundary condition
         if obj.settings.problem != "validation" # validation testcase sets beam in initial condition
@@ -867,13 +721,13 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
             WAzW .= W'*obj.pn.Az*W # Az  = Az^T
             WAxW .= W'*obj.pn.Ax*W # Ax  = Ax^T
 
-            k1 .= -obj.L2x*K*WAxW - obj.L2y*K*WAzW;
+            k1 .= -obj.stencil.L2x*K*WAxW - obj.stencil.L2y*K*WAzW;
             K .= K .+ dE .* k1 ./ 6;
-            k1 .= -obj.L2x*(K+0.5*dE*k1)*WAxW - obj.L2y*(K+0.5*dE*k1)*WAzW;
+            k1 .= -obj.stencil.L2x*(K+0.5*dE*k1)*WAxW - obj.stencil.L2y*(K+0.5*dE*k1)*WAzW;
             K .+= 2 * dE .* k1 ./ 6;
-            k1 .= -obj.L2x*(K+0.5*dE*k1)*WAxW - obj.L2y*(K+0.5*dE*k1)*WAzW;
+            k1 .= -obj.stencil.L2x*(K+0.5*dE*k1)*WAxW - obj.stencil.L2y*(K+0.5*dE*k1)*WAzW;
             K .+= 2 * dE .* k1 ./ 6;
-            k1 .= -obj.L2x*(K+dE*k1)*WAxW - obj.L2y*(K+dE*k1)*WAzW;
+            k1 .= -obj.stencil.L2x*(K+dE*k1)*WAxW - obj.stencil.L2y*(K+dE*k1)*WAzW;
             K .+= dE .* k1 ./ 6;
 
             XNew,_,_ = svd!(K);
@@ -882,10 +736,10 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
             ################## L-step ##################
             L .= W*S';
 
-            XL2xX .= X'*obj.L2x*X
-            XL2yX .= X'*obj.L2y*X
-            XL1xX .= X'*obj.L1x*X
-            XL1yX .= X'*obj.L1y*X
+            XL2xX .= X'*obj.stencil.L2x*X
+            XL2yX .= X'*obj.stencil.L2y*X
+            XL1xX .= X'*obj.stencil.L1x*X
+            XL1yX .= X'*obj.stencil.L1y*X
 
             l1 = -obj.pn.Ax*L*XL2xX' - obj.pn.Az*L*XL2yX';
             l2 = -obj.pn.Ax*(L+0.5*dE*l1)*XL2xX' - obj.pn.Az*(L+0.5*dE*l1)*XL2yX';
@@ -905,10 +759,10 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
             ################## S-step ##################
             S .= MUp*S*(NUp')
 
-            XL2xX .= X'*obj.L2x*X
-            XL2yX .= X'*obj.L2y*X
-            XL1xX .= X'*obj.L1x*X
-            XL1yX .= X'*obj.L1y*X
+            XL2xX .= X'*obj.stencil.L2x*X
+            XL2yX .= X'*obj.stencil.L2y*X
+            XL1xX .= X'*obj.stencil.L1x*X
+            XL1yX .= X'*obj.stencil.L1y*X
 
             WAzW .= W'*obj.pn.Az'*W
             WAxW .= W'*obj.pn.Ax'*W
@@ -1114,7 +968,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
             WAbsAxW .= W'*obj.AbsAx'*W
             WAxW .= W'*obj.pn.Ax*W # Ax  = Ax^T
 
-            K .= K .- dE*(obj.L2x*K*WAxW + obj.L2y*K*WAzW + obj.L1x*K*WAbsAxW + obj.L1y*K*WAbsAzW);
+            K .= K .- dE*(obj.stencil.L2x*K*WAxW + obj.stencil.L2y*K*WAzW + obj.stencil.L1x*K*WAbsAxW + obj.stencil.L1y*K*WAbsAzW);
 
             XNew,_,_ = svd!(K);
 
@@ -1122,10 +976,10 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
             ################## L-step ##################
             L = W*S';
 
-            XL2xX .= X'*obj.L2x*X
-            XL2yX .= X'*obj.L2y*X
-            XL1xX .= X'*obj.L1x*X
-            XL1yX .= X'*obj.L1y*X
+            XL2xX .= X'*obj.stencil.L2x*X
+            XL2yX .= X'*obj.stencil.L2y*X
+            XL1xX .= X'*obj.stencil.L1x*X
+            XL1yX .= X'*obj.stencil.L1y*X
 
             L .= L .- dE*(obj.pn.Ax*L*XL2xX' + obj.pn.Az*L*XL2yX' + obj.AbsAx*L*XL1xX' + obj.AbsAz*L*XL1yX');
                     
@@ -1142,10 +996,10 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
             ################## S-step ##################
             S .= MUp*S*(NUp')
 
-            XL2xX .= X'*obj.L2x*X
-            XL2yX .= X'*obj.L2y*X
-            XL1xX .= X'*obj.L1x*X
-            XL1yX .= X'*obj.L1y*X
+            XL2xX .= X'*obj.stencil.L2x*X
+            XL2yX .= X'*obj.stencil.L2y*X
+            XL1xX .= X'*obj.stencil.L1x*X
+            XL1yX .= X'*obj.stencil.L1y*X
 
             WAzW .= W'*obj.pn.Az'*W
             WAbsAzW .= W'*obj.AbsAz'*W
@@ -1431,7 +1285,7 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         WAbsAxW = W'*obj.AbsAx'*W
         WAxW = W'*obj.pn.Ax'*W
 
-        K .= K .- dE*(obj.L2x*K*WAxW + obj.L2y*K*WAzW + obj.L1x*K*WAbsAxW + obj.L1y*K*WAbsAzW);
+        K .= K .- dE*(obj.stencil.L2x*K*WAxW + obj.stencil.L2y*K*WAzW + obj.stencil.L1x*K*WAbsAxW + obj.stencil.L1y*K*WAbsAzW);
 
         XNew,STmp = qr!([K X]);
         XNew = Matrix(XNew)
@@ -1444,10 +1298,10 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         ################## L-step ##################
         L = W*S';
 
-        XL2xX = X'*obj.L2x*X
-        XL2yX = X'*obj.L2y*X
-        XL1xX = X'*obj.L1x*X
-        XL1yX = X'*obj.L1y*X
+        XL2xX = X'*obj.stencil.L2x*X
+        XL2yX = X'*obj.stencil.L2y*X
+        XL1xX = X'*obj.stencil.L1x*X
+        XL1yX = X'*obj.stencil.L1y*X
 
         L .= L .- dE*(obj.pn.Ax*L*XL2xX' + obj.pn.Az*L*XL2yX' + obj.AbsAx*L*XL1xX' + obj.AbsAz*L*XL1yX');
                 
@@ -1461,10 +1315,10 @@ function SolveFirstCollisionSourceAdaptiveDLR(obj::SolverCSD)
         ################## S-step ##################
         S = MUp*S*(NUp')
 
-        XL2xX = X'*obj.L2x*X
-        XL2yX = X'*obj.L2y*X
-        XL1xX = X'*obj.L1x*X
-        XL1yX = X'*obj.L1y*X
+        XL2xX = X'*obj.stencil.L2x*X
+        XL2yX = X'*obj.stencil.L2y*X
+        XL1xX = X'*obj.stencil.L1x*X
+        XL1yX = X'*obj.stencil.L1y*X
 
         WAzW = W'*obj.pn.Az'*W
         WAbsAzW = W'*obj.AbsAz'*W
@@ -2068,7 +1922,7 @@ function UpdateUIStreaming(obj::SolverCSD,X::Array{Float64,2},S::Array{Float64,2
     WAbsAxW = W'*obj.AbsAx'*W
     WAxW = W'*obj.pn.Ax'*W
 
-    K .= (K .- dE*(obj.L2x*K*WAxW + obj.L2y*K*WAzW + obj.L1x*K*WAbsAxW + obj.L1y*K*WAbsAzW))/(1+dE*sigmaT);
+    K .= (K .- dE*(obj.stencil.L2x*K*WAxW + obj.stencil.L2y*K*WAzW + obj.stencil.L1x*K*WAbsAxW + obj.stencil.L1y*K*WAbsAzW))/(1+dE*sigmaT);
 
     XNew,STmp = qr!(K);
     XNew = Matrix(XNew)
@@ -2081,10 +1935,10 @@ function UpdateUIStreaming(obj::SolverCSD,X::Array{Float64,2},S::Array{Float64,2
     ################## L-step ##################
     L = W*S';
 
-    XL2xX = X'*obj.L2x*X
-    XL2yX = X'*obj.L2y*X
-    XL1xX = X'*obj.L1x*X
-    XL1yX = X'*obj.L1y*X
+    XL2xX = X'*obj.stencil.L2x*X
+    XL2yX = X'*obj.stencil.L2y*X
+    XL1xX = X'*obj.stencil.L1x*X
+    XL1yX = X'*obj.stencil.L1y*X
 
     L .= (L .- dE*(obj.pn.Ax*L*XL2xX' + obj.pn.Az*L*XL2yX' + obj.AbsAx*L*XL1xX' + obj.AbsAz*L*XL1yX'))/(1+dE*sigmaT);
             
@@ -2098,10 +1952,10 @@ function UpdateUIStreaming(obj::SolverCSD,X::Array{Float64,2},S::Array{Float64,2
     ################## S-step ##################
     S .= MUp*S*(NUp')
 
-    XL2xX .= X'*obj.L2x*X
-    XL2yX .= X'*obj.L2y*X
-    XL1xX .= X'*obj.L1x*X
-    XL1yX .= X'*obj.L1y*X
+    XL2xX .= X'*obj.stencil.L2x*X
+    XL2yX .= X'*obj.stencil.L2y*X
+    XL1xX .= X'*obj.stencil.L1x*X
+    XL1yX .= X'*obj.stencil.L1y*X
 
     WAzW .= W'*obj.pn.Az'*W
     WAbsAzW .= W'*obj.AbsAz'*W
@@ -2126,7 +1980,7 @@ function UpdateUIStreamingAdaptive(obj::SolverCSD,X::Array{Float64,2},S::Array{F
     WAbsAxW = W'*obj.AbsAx'*W
     WAxW = W'*obj.pn.Ax'*W
 
-    K .= (K .- dE*(obj.L2x*K*WAxW + obj.L2y*K*WAzW + obj.L1x*K*WAbsAxW + obj.L1y*K*WAbsAzW))/(1+dE*sigmaT);
+    K .= (K .- dE*(obj.stencil.L2x*K*WAxW + obj.stencil.L2y*K*WAzW + obj.stencil.L1x*K*WAbsAxW + obj.stencil.L1y*K*WAbsAzW))/(1+dE*sigmaT);
 
     XNew,STmp = qr!([K X]);
     XNew = Matrix(XNew)
@@ -2139,10 +1993,10 @@ function UpdateUIStreamingAdaptive(obj::SolverCSD,X::Array{Float64,2},S::Array{F
     ################## L-step ##################
     L = W*S';
 
-    XL2xX = X'*obj.L2x*X
-    XL2yX = X'*obj.L2y*X
-    XL1xX = X'*obj.L1x*X
-    XL1yX = X'*obj.L1y*X
+    XL2xX = X'*obj.stencil.L2x*X
+    XL2yX = X'*obj.stencil.L2y*X
+    XL1xX = X'*obj.stencil.L1x*X
+    XL1yX = X'*obj.stencil.L1y*X
 
     L .= (L .- dE*(obj.pn.Ax*L*XL2xX' + obj.pn.Az*L*XL2yX' + obj.AbsAx*L*XL1xX' + obj.AbsAz*L*XL1yX'))/(1+dE*sigmaT);
             
@@ -2156,10 +2010,10 @@ function UpdateUIStreamingAdaptive(obj::SolverCSD,X::Array{Float64,2},S::Array{F
     ################## S-step ##################
     S = MUp*S*(NUp')
 
-    XL2xX = X'*obj.L2x*X
-    XL2yX = X'*obj.L2y*X
-    XL1xX = X'*obj.L1x*X
-    XL1yX = X'*obj.L1y*X
+    XL2xX = X'*obj.stencil.L2x*X
+    XL2yX = X'*obj.stencil.L2y*X
+    XL1xX = X'*obj.stencil.L1x*X
+    XL1yX = X'*obj.stencil.L1y*X
 
     WAzW = W'*obj.pn.Az'*W
     WAbsAzW = W'*obj.AbsAz'*W
