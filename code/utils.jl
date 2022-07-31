@@ -78,3 +78,64 @@ end
 function vectorIndex(ny,i,j)
     return (i-1)*ny + j;
 end
+
+function vectorIndex(nx,ny,i,j,k)
+    return (k-1)*nx*ny + vectorIndex(ny,i,j);
+end
+
+
+function Vec2Ten(nx,ny,nz,v::Array{Float64,1})
+    m = zeros(nx,ny,nz);
+    for i = 1:nx
+        for j = 1:ny
+            for k = 1:nz
+                m[i,j,k] = v[vectorIndex(nx,ny,i,j,k)]
+            end
+        end
+    end
+    return m;
+end
+
+function Vec2Ten(nx,ny,nz,v::Array{Float64,2})
+    n = size(v,2);
+    m = zeros(nx,ny,nz,n);
+    for i = 1:nx
+        for j = 1:ny
+            for k = 1:nz
+                m[i,j,k,:] = v[vectorIndex(nx,ny,i,j,k),:]
+            end
+        end
+    end
+    return m;
+end
+
+function Ten2Vec(mat::Array{Float64,4})
+    nx = size(mat,1)
+    ny = size(mat,2)
+    nz = size(mat,3)
+    m = size(mat,4)
+    v = zeros(nx*ny*nz,m);
+    for i = 1:nx
+        for j = 1:ny
+            for k = 1:nz
+                v[vectorIndex(nx,ny,i,j,k),:] = mat[i,j,k,:]
+            end
+        end
+    end
+    return v;
+end
+
+function Ten2Vec(mat::Array{Float64,3})
+    nx = size(mat,1)
+    ny = size(mat,2)
+    nz = size(mat,3)
+    v = zeros(nx*ny*nz);
+    for i = 1:nx
+        for j = 1:ny
+            for k = 1:nz
+                v[vectorIndex(nx,ny,i,j,k)] = mat[i,j,k]
+            end
+        end
+    end
+    return v;
+end
