@@ -8,13 +8,14 @@ using PyPlot
 using DelimitedFiles
 using WriteVTK
 
-#close("all")
+close("all")
 
-nx = 201;
-ny = 201;
+nx = 101;
+ny = 101;
+nz = 8;
 problem ="validation" #"2DHighD"
 particle = "Protons"
-s = Settings(nx,ny,5,problem, particle);
+s = Settings(nx,ny,nz,5,problem, particle);
 rhoMin = minimum(s.density);
 
 if s.problem == "AirCavity"
@@ -66,8 +67,9 @@ end
 solver1 = SolverCSD(s);
 X_dlr,S_dlr,W_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR(solver1);
 #u, dose_DLR,psi = SolveFirstCollisionSource(solver1);
-u = Vec2Mat(s.NCellsX,s.NCellsY,X_dlr*Diagonal(S_dlr)*W_dlr[1,:]);
-dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
+u = Vec2Ten(s.NCellsX,s.NCellsY,s.NCellsZ,X_dlr*Diagonal(S_dlr)*W_dlr[1,:]);
+dose_DLR = Vec2Ten(s.NCellsX,s.NCellsY,s.NCellsZ,dose_DLR);
+idxZ = Int(floor(s.NCellsZ/2))
 
 X = (s.xMid[2:end-1]'.*ones(size(s.yMid[2:end-1])))
 Y = (s.yMid[2:end-1]'.*ones(size(s.xMid[2:end-1])))'
@@ -77,8 +79,7 @@ YRef = (yRef[2:end-1]'.*ones(size(yRef[2:end-1])))'
 
 fig = figure("Dose, DLRA",figsize=(10*(s.d/s.b),10),dpi=100)
 ax = gca()
-#pcolormesh(Y,X,dose_DLR[2:end-1,2:end-1]',vmin=0.0,vmax=maximum(dose_DLR[2:end-1,2:end-1]))
-pcolormesh(Y,X,dose_DLR[2:end-1,2:end-1]',vmax=maximum(dose_DLR[2:end-1,2:end-1]))
+pcolormesh(Y,X,dose_DLR[2:end-1,2:end-1,idxZ]',vmax=maximum(dose_DLR[2:end-1,2:end-1,idxZ]))
 ax.tick_params("both",labelsize=20) 
 #colorbar()
 plt.xlabel("x", fontsize=20)
@@ -87,48 +88,11 @@ plt.title(L"dose, DLRA", fontsize=25)
 tight_layout()
 savefig("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
 
-fig = figure("Dose, ref",figsize=(10*(s.d/s.b),10),dpi=100)
-ax = gca()
-#pcolormesh(Y,X,dose_DLR[2:end-1,2:end-1]',vmin=0.0,vmax=maximum(dose_DLR[2:end-1,2:end-1]))
-pcolormesh(YRef,XRef,doseRef[2:end-1,2:end-1]',vmax=maximum(dose_DLR[2:end-1,2:end-1]))
-ax.tick_params("both",labelsize=20) 
-#colorbar()
-plt.xlabel("x", fontsize=20)
-plt.ylabel("y", fontsize=20)
-plt.title(L"dose, Starmap", fontsize=25)
-tight_layout()
-savefig("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
-
-fig = figure("Dose, ref new scale",figsize=(10*(s.d/s.b),10),dpi=100)
-ax = gca()
-#pcolormesh(Y,X,dose_DLR[2:end-1,2:end-1]',vmin=0.0,vmax=maximum(dose_DLR[2:end-1,2:end-1]))
-pcolormesh(YRef,XRef,doseRef[2:end-1,2:end-1]')
-ax.tick_params("both",labelsize=20) 
-#colorbar()
-plt.xlabel("x", fontsize=20)
-plt.ylabel("y", fontsize=20)
-plt.title(L"dose, Starmap scale", fontsize=25)
-tight_layout()
-savefig("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
-
-if s.problem == "2DHighD"
-    fig = figure("Dose, MC",figsize=(10*(s.d/s.b),10),dpi=100)
-    ax = gca()
-    #pcolormesh(Y,X,dose_DLR[2:end-1,2:end-1]',vmin=0.0,vmax=maximum(dose_DLR[2:end-1,2:end-1]))
-    pcolormesh(YMC,XMC,doseMC[2:end-1,2:end-1])
-    ax.tick_params("both",labelsize=20) 
-    #colorbar()
-    plt.xlabel("x", fontsize=20)
-    plt.ylabel("y", fontsize=20)
-    plt.title(L"dose, MC", fontsize=25)
-    tight_layout()
-    savefig("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
-end
 levels = 20;
 fig = figure("Dose countours, DLRA",figsize=(10*(s.d/s.b),10),dpi=100)
 ax = gca()
-pcolormesh(Y,X,solver1.density[2:end-1,2:end-1]',cmap="gray")
-contour(Y,X,dose_DLR[2:end-1,2:end-1]', levels,cmap="plasma")
+pcolormesh(Y,X,solver1.density[2:end-1,2:end-1,idxZ]',cmap="gray")
+contour(Y,X,dose_DLR[2:end-1,2:end-1,idxZ]', levels,cmap="plasma")
 ax.tick_params("both",labelsize=20) 
 plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
@@ -138,11 +102,7 @@ savefig("output/doseiso_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCel
 # line plot dose
 fig, ax = subplots()
 nyRef = length(yRef)
-ax.plot(s.xMid,dose_DLR[:,Int(floor(s.NCellsY/2))]./maximum(dose_DLR[:,Int(floor(s.NCellsY/2))]), "b--", linewidth=2, label="CSD_DLR", alpha=0.8)
-if s.problem == "2DHighD"
-   ax.plot(xRef',doseRef[:,Int(floor(nyRef/2))]./maximum(doseRef[:,Int(floor(nyRef/2))]), "k-", linewidth=2, label="Starmap", alpha=0.6)
-   ax.plot(yMC,doseMC[Int(floor(nxMC/2)),:]./maximum(doseMC[Int(floor(nxMC/2)),:])*1.3, "r:", linewidth=2, label="MC", alpha=0.6)
-end
+ax.plot(s.xMid,dose_DLR[:,Int(floor(s.NCellsY/2)),idxZ]./maximum(dose_DLR[:,Int(floor(s.NCellsY/2)),idxZ]), "b--", linewidth=2, label="CSD_DLR", alpha=0.8)
 ax.legend(loc="upper left")
 ax.set_xlim([s.c,s.d])
 ax.set_ylim([0,1.05])
@@ -153,11 +113,7 @@ savefig("output/DoseCutYNx$(s.Nx)")
 
 fig, ax = subplots()
 nyRef = length(yRef)
-ax.plot(s.yMid,dose_DLR[Int(floor(s.NCellsX/2)),:]./maximum(dose_DLR[Int(floor(s.NCellsX/2)),:]), "b--", linewidth=2, label="CSD_DLR", alpha=0.8)
-if s.problem == "2DHighD"
-   ax.plot(xRef',doseRef[:,Int(floor(nyRef/2))]./maximum(doseRef[:,Int(floor(nyRef/2))]), "k-", linewidth=2, label="Starmap", alpha=0.6)
-   ax.plot(yMC,doseMC[Int(floor(nxMC/2)),:]./maximum(doseMC[Int(floor(nxMC/2)),:])*1.3, "r:", linewidth=2, label="MC", alpha=0.6)
-end
+ax.plot(s.yMid,dose_DLR[Int(floor(s.NCellsX/2)),:,idxZ]./maximum(dose_DLR[Int(floor(s.NCellsX/2)),:,idxZ]), "b--", linewidth=2, label="CSD_DLR", alpha=0.8)
 ax.legend(loc="upper left")
 ax.set_xlim([0.5*(s.a+s.b),s.b])
 ax.set_ylim([0,1.05])
@@ -169,7 +125,7 @@ savefig("output/DoseCutXNx$(s.Nx)")
 fig = figure("u, full",figsize=(10*(s.d/s.b),10),dpi=100)
 ax = gca()
 #pcolormesh(Y,X,dose_DLR[2:end-1,2:end-1]',vmin=0.0,vmax=maximum(dose_DLR[2:end-1,2:end-1]))
-pcolormesh(Y,X,u[2:end-1,2:end-1]')
+pcolormesh(Y,X,u[2:end-1,2:end-1,idxZ]')
 ax.tick_params("both",labelsize=20) 
 #colorbar()
 plt.xlabel("x", fontsize=20)

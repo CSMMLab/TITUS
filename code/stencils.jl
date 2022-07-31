@@ -1,5 +1,7 @@
 __precompile__
 
+using SparseArrays
+
 include("utils.jl")
 
 struct Stencils

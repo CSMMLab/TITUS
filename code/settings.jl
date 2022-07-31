@@ -7,17 +7,22 @@ mutable struct Settings
     # number spatial interfaces
     Nx::Int64;
     Ny::Int64;
+    Nz::Int64;
     # number spatial cells
     NCellsX::Int64;
     NCellsY::Int64;
+    NCellsZ::Int64;
     # start and end point
     a::Float64;
     b::Float64;
     c::Float64;
     d::Float64;
+    e::Float64;
+    f::Float64;
     # grid cell width
     dx::Float64
     dy::Float64
+    dz::Float64
 
     # time settings
     # end time
@@ -36,6 +41,8 @@ mutable struct Settings
     xMid
     y
     yMid
+    z
+    zMid
 
     # problem definitions
     problem::String;
@@ -45,7 +52,9 @@ mutable struct Settings
     # beam properties
     x0::Float64;
     y0::Float64;
+    z0::Float64;
     Omega1::Float64;
+    Omega2::Float64;
     Omega3::Float64;
     densityMin::Float64;
 
@@ -54,7 +63,7 @@ mutable struct Settings
     sigmaS::Float64;    
 
     # patient density
-    density::Array{Float64,2};
+    density::Array{Float64,3};
 
     # rank
     r::Int;
@@ -63,7 +72,7 @@ mutable struct Settings
     epsAdapt::Float64;  
     adaptIndex::Float64;
 
-    function Settings(Nx::Int=102,Ny::Int=102,r::Int=15,problem::String="LineSource",particle::String="Electrons")
+    function Settings(Nx::Int=52,Ny::Int=52,Nz::Int=52,r::Int=15,problem::String="LineSource",particle::String="Electrons")
         #Proton rest energy
         if particle == "Protons"
             eRest = 938.26 #MeV
@@ -73,6 +82,7 @@ mutable struct Settings
         # spatial grid setting
         NCellsX = Nx - 1;
         NCellsY = Ny - 1;
+        NCellsZ = Nz - 1;
 
         a = 0.0; # left boundary
         b = 14.5; # right boundary
@@ -80,7 +90,10 @@ mutable struct Settings
         c = 0.0; # lower boundary
         d = 14.5; # upper boundary
 
-        density = ones(NCellsX,NCellsY);
+        e = 0.0; # left z boundary
+        f = 14.5; # right z boundary
+
+        density = ones(NCellsX,NCellsY,NCellsZ);
 
         # physical parameters
         sigmaS = 0.0;
@@ -88,7 +101,9 @@ mutable struct Settings
         eMax = 1.0;
         x0 = 0.5*b;
         y0 = 1.0*d;
+        z0 = 0.5*f;
         Omega1 = -1.0;
+        Omega2 = -0.0;
         Omega3 = -1.0;
         densityMin = 0.2;
         adaptIndex = 1;
@@ -98,6 +113,8 @@ mutable struct Settings
             b = 1.5;
             c = -1.5;
             d = 1.5;
+            e = -1.5;
+            f = 1.5;
             sigmaS = 1.0;
             sigmaA = 0.0;  
             cfl = 0.99/sqrt(2);    
@@ -110,6 +127,8 @@ mutable struct Settings
             b = 1.0;
             c = 0.0;
             d = 1.0;
+            e = 0.0;
+            f = 1.0;
             sigmaS = 1.0;
             sigmaA = 0.0;  
             cfl = 0.99/sqrt(2)*2.5;    
@@ -125,6 +144,8 @@ mutable struct Settings
             b = 1.0;
             c = 0.0;
             d = 1.0;
+            e = 0.0;
+            f = 1.0;
             sigmaS = 1.0;
             sigmaA = 0.0;  
             cfl = 0.99/sqrt(2)*0.5;    
@@ -138,6 +159,8 @@ mutable struct Settings
             b = 14.4516666666667; # right boundary
             c = 0.0483333333333333; # lower boundary
             d = 14.4516666666667; # upper boundary
+            e = 0.0;
+            f = 1.0;
             sigmaS = 1.0;
             sigmaA = 0.0;  
             cfl = 0.99/sqrt(2)*120.5;  
@@ -146,13 +169,15 @@ mutable struct Settings
             adaptIndex = 0;
             epsAdapt = 0.3;#0.5;
             Omega1 = -0.0;
-            Omega3 = 1.0;
-            x0 = 0.5*b;
-            y0 = 0.5*d;
+            Omega2 = -1.0;
+            Omega3 = 0.0;
+            x0 = 0.5 * b;
+            y0 = 0.5 * d;
+            z0 = 0.5 * f;
             #epsAdapt = 1e-1;
             #density[Int(floor(NCellsX*0.5)):end,:] .= 5.0; #beam hits interface
             #density[:,Int(floor(NCellsX*0.56)):end] .= 5.0; #beam perpendicular to interface
-            density[:,Int(floor(NCellsY*0.75)):Int(floor(NCellsY*0.8))] .= 5.0; #inserted box of high density 
+            #density[:,Int(floor(NCellsY*0.75)):Int(floor(NCellsY*0.8))] .= 5.0; #inserted box of high density 
         elseif problem =="lungOrig"
             #img = Float64.(Gray.(load("phantom.png")))
             pathlib = pyimport("pathlib")
@@ -169,6 +194,7 @@ mutable struct Settings
             end
             b = 14.5; # right boundary
             d = 18.5; # upper boundary
+            f = 1.0;
             eMax = 21.0
             cfl = 1.5
             x0 = 0.5*b;
@@ -193,6 +219,7 @@ mutable struct Settings
             end
             b = 14.5; # right boundary
             d = 14.5; # upper boundary
+            f = 1.0;
             eKin = 21.0
             eMax = sqrt(eKin^2 + eRest^2)
             cfl = 1.5
@@ -216,6 +243,7 @@ mutable struct Settings
             end
             b = 35.0; # right boundary
             d = 35.0; # upper boundary
+            f = 1.0;
             eMax = 60.0
             cfl = 1.5
             x0 = 1.0*b;
@@ -236,16 +264,21 @@ mutable struct Settings
         y = [y[1]-dy;y]; # add ghost cells so that boundary cell centers lie on a and b
         y = y.+dy/2;
         yMid = y[1:(end-1)].+0.5*dy
+        z = collect(range(e,stop = f,length = NCellsZ));
+        dz = z[2]-z[1];
+        z = [z[1]-dz;z]; # add ghost cells so that boundary cell centers lie on a and b
+        z = z.+dz/2;
+        zMid = z[1:(end-1)].+0.5*dz
 
         # time settings
         #cfl = 1.5#1.4 # CFL condition
-        dE = cfl*min(dx,dy)*minimum(density);#1/312;#cfl*min(dx,dy)*minimum(density);
+        dE = cfl*min(dx,dy,dz)*minimum(density);#1/312;#cfl*min(dx,dy)*minimum(density);
         
         # number PN moments
         nPN = 21#7, 13, 21; # use odd number
 
         # build class
-        new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,eRest,dE,cfl,nPN,x,xMid,y,yMid,problem,particle,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex);
+        new(Nx,Ny,Nz,NCellsX,NCellsY,NCellsZ,a,b,c,d,e,f,dx,dy,dz,eMax,eRest,dE,cfl,nPN,x,xMid,y,yMid,z,zMid,problem,particle,x0,y0,z0,Omega1,Omega2,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex);
     end
 end
 
@@ -269,6 +302,36 @@ function IC(obj::Settings,x,y)
     for j = 1:length(x);
         for i = 1:length(y);
             out[j,i] = 1/(s1*sqrt(2*pi))^2*exp.(-(x0[j].^2+y0[i].^2) ./ 2.0./s2)
+        end
+    end
+    
+    return out;
+end
+
+function IC(obj::Settings,x,y,z)
+    out = zeros(length(x),length(y),length(z));
+    posBeamX = (obj.b+obj.a)/2;
+    posBeamY = (obj.d+obj.c)/2;
+    posBeamZ = (obj.f+obj.e)/2;
+    if obj.problem != "LineSource" && obj.problem != "2DHighD"
+        return out;
+    end
+    x0 = x .- posBeamX;
+    y0 = y .- posBeamY;
+    z0 = z .- posBeamZ;
+    
+    s1 = 0.05
+    if obj.problem == "2DHighD"
+        s1 = 0.01
+    end
+
+    s2 = s1^2
+    floor = 1e-4
+    for j = 1:length(x)
+        for i = 1:length(y)
+            for k = 1:length(z)
+                out[j,i,k] = 1/(s1*sqrt(2*pi))^2*exp.(-(x0[j].^2+y0[i].^2+z0[k].^2) ./ 2.0./s2)
+            end
         end
     end
     

@@ -21,7 +21,7 @@ mutable struct SolverCSD
     # spatial grid of cell interfaces
     x::Array{Float64};
     y::Array{Float64};
-    xGrid::Array{Float64,2}
+    z::Array{Float64};
 
     # Solver settings
     settings::Settings;
@@ -30,6 +30,7 @@ mutable struct SolverCSD
     gamma::Array{Float64,1};
     # Roe matrix
     AbsAx::SparseMatrixCSC{Float64, Int64};
+    AbsAy::SparseMatrixCSC{Float64, Int64};
     AbsAz::SparseMatrixCSC{Float64, Int64};
 
     # functionalities of the CSD approximation
@@ -42,7 +43,7 @@ mutable struct SolverCSD
     stencil::Stencils;
 
     # material density
-    density::Array{Float64,2};
+    density::Array{Float64,3};
     densityVec::Array{Float64,1};
 
     # dose vector
@@ -62,6 +63,11 @@ mutable struct SolverCSD
     function SolverCSD(settings)
         x = settings.x;
         y = settings.y;
+        z = settings.z;
+
+        nx = settings.NCellsX;
+        ny = settings.NCellsY;
+        nz = settings.NCellsZ;
 
         # setup flux matrix
         gamma = zeros(settings.nPN+1);
@@ -75,17 +81,23 @@ mutable struct SolverCSD
 
         # construct PN system matrices
         pn = PNSystem(settings)
-        Ax,_,Az = SetupSystemMatrices(pn);
+        Ax,Ay,Az = SetupSystemMatrices(pn);
         SetupSystemMatricesSparse(pn);
 
         # setup Roe matrix
         S = eigvals(Ax)
         V = eigvecs(Ax)
         AbsAx = V*abs.(Diagonal(S))*inv(V)
-
         idx = findall(abs.(AbsAx) .> 1e-10)
         Ix = first.(Tuple.(idx)); Jx = last.(Tuple.(idx)); vals = AbsAx[idx];
         AbsAx = sparse(Ix,Jx,vals,pn.nTotalEntries,pn.nTotalEntries);
+
+        S = eigvals(Ay)
+        V = eigvecs(Ay)
+        AbsAy = V*abs.(diagm(S))*inv(V)
+        idx = findall(abs.(AbsAy) .> 1e-10)
+        Iy = first.(Tuple.(idx)); Jy = last.(Tuple.(idx)); valsy = AbsAy[idx];
+        AbsAy = sparse(Iy,Jy,valsy,pn.nTotalEntries,pn.nTotalEntries);
         
         S = eigvals(Az)
         V = eigvecs(Az)
@@ -98,44 +110,41 @@ mutable struct SolverCSD
         density = settings.density;
 
         # allocate dose vector
-        dose = zeros(settings.NCellsX*settings.NCellsY)
-
-        nx = settings.NCellsX;
-        ny = settings.NCellsY;
+        dose = zeros(nx*ny*nz)
 
         # collect boundary indices
-        boundaryIdx = zeros(Int,2*nx+2*ny)
+        boundaryIdx = zeros(Int,2*nx*ny+2*ny*nz + 2*nx*nz)
         counter = 0;
         for i = 1:nx
-            counter +=1;
-            j = 1;
-            idx = (i-1)*ny + j;
-            boundaryIdx[counter] = idx
-            counter +=1;
-            j = ny;
-            idx = (i-1)*ny + j;
-            boundaryIdx[counter] = idx
+            for k = 1:nz
+                counter +=1;
+                j = 1;
+                boundaryIdx[counter] = vectorIndex(nx,ny,i,j,k)
+                counter +=1;
+                j = ny;
+                boundaryIdx[counter] = vectorIndex(nx,ny,i,j,k)
+            end
+        end
+
+        for i = 1:nx
+            for j = 1:ny
+                counter +=1;
+                k = 1;
+                boundaryIdx[counter] = vectorIndex(nx,ny,i,j,k)
+                counter +=1;
+                k = nz;
+                boundaryIdx[counter] = vectorIndex(nx,ny,i,j,k)
+            end
         end
 
         for j = 1:ny
-            counter +=1;
-            i = 1;
-            idx = (i-1)*ny + j;
-            boundaryIdx[counter] = idx
-            counter +=1;
-            i = nx;
-            idx = (i-1)*ny + j;
-            boundaryIdx[counter] = idx
-        end
-
-        # setup spatial grid
-        xGrid = zeros(nx*ny,2)
-        for i = 1:nx
-            for j = 1:ny
-                # y part
-                index = vectorIndex(ny,i,j);
-                xGrid[index,1] = settings.xMid[i];
-                xGrid[index,2] = settings.yMid[j];
+            for k = 1:nz
+                counter +=1;
+                i = 1;
+                boundaryIdx[counter] = vectorIndex(nx,ny,i,j,k)
+                counter +=1;
+                i = nx;
+                boundaryIdx[counter] = vectorIndex(nx,ny,i,j,k)
             end
         end
 
@@ -149,7 +158,9 @@ mutable struct SolverCSD
 
         stencil = Stencils(settings);
 
-        new(x,y,xGrid,settings,gamma,AbsAx,AbsAz,csd,pn,stencil,density,vec(density'),dose,boundaryIdx,Q,O,M);
+        densityVec = Ten2Vec(density);
+
+        new(x,y,z,settings,gamma,AbsAx,AbsAy,AbsAz,csd,pn,stencil,density,densityVec,dose,boundaryIdx,Q,O,M);
     end
 end
 
@@ -157,24 +168,28 @@ function SetupIC(obj::SolverCSD,pointsxyz::Matrix{Float64})
     nq = size(pointsxyz)[1];
     nx = obj.settings.NCellsX;
     ny = obj.settings.NCellsY;
-    psi = zeros(obj.settings.NCellsX,obj.settings.NCellsY,nq);
-    pos_beam = [obj.settings.x0,obj.settings.y0,0];
+    nz = obj.settings.NCellsZ;
+    psi = zeros(obj.settings.NCellsX,obj.settings.NCellsY,obj.settings.NCellsZ,nq);
+    pos_beam = [obj.settings.x0,obj.settings.y0,obj.settings.z0];
     sigmaO1Inv = 10000.0;
+    sigmaO2Inv = 10000.0;
     sigmaO3Inv = 10000.0;
 
     if obj.settings.problem == "validation"
         for i = 1:nx
             for j = 1:ny
-                space_beam = normpdf(obj.settings.xMid[i],pos_beam[1],.1).*normpdf(obj.settings.yMid[j],pos_beam[2],.1);
-                for k = 1:nq 
-                    #trafo = obj.csd.S[1]*obj.settings.density[i,j]; 
-                    psi[i,j,k] = 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-pointsxyz[k,1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-pointsxyz[k,3])^2)*space_beam#*trafo;
+                for k = 1:nz
+                    space_beam = normpdf(obj.settings.xMid[i],pos_beam[1],.1).*normpdf(obj.settings.yMid[j],pos_beam[2],.1).*normpdf(obj.settings.zMid[k],pos_beam[3],.01);
+                    for q = 1:nq 
+                        #trafo = obj.csd.S[1]*obj.settings.density[i,j,k]; 
+                        psi[i,j,k,q] = 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-pointsxyz[q,1])^2)*exp(-sigmaO2Inv*(obj.settings.Omega2-pointsxyz[q,2])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-pointsxyz[q,3])^2)*space_beam#*trafo;
+                    end
                 end
             end
         end
     else    
         for k = 1:nq
-            psi[:,:,k] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid)
+            psi[:,:,:,k] = IC(obj.settings,obj.settings.xMid,obj.settings.yMid,obj.settings.zMid)
         end
     end
     
@@ -234,7 +249,7 @@ function PsiLeft(obj::SolverCSD,n::Int,mu::Float64)
     return 10^5*exp(-200.0*(1.0-mu)^2)*exp(-50*(E0-E)^2)
 end
 
-function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y::Float64,n::Int)
+function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y::Float64,z::Float64,n::Int)
     E0 = obj.settings.eMax;
     if obj.settings.problem == "lung" || obj.settings.problem == "lungOrig"
         sigmaO1Inv = 0.0;
@@ -250,13 +265,14 @@ function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y:
         sigmaEInv = 10.0;
     elseif obj.settings.problem == "validation"
         sigmaO1Inv = 10000.0;
+        sigmaO2Inv = 10000.0;
         sigmaO3Inv = 10000.0;
         sigmaEInv = 1000.0;
         densityMin = 1.0;
-        pos_beam = [obj.settings.x0,obj.settings.y0,0];
-        space_beam = normpdf(x,pos_beam[1],.1).*normpdf(y,pos_beam[2],.1);
+        pos_beam = [obj.settings.x0,obj.settings.y0,obj.settings.z0];
+        space_beam = normpdf(x,pos_beam[1],.1).*normpdf(y,pos_beam[2],.1).*normpdf(z,pos_beam[3],.01);
         #println(space_beam)
-        return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*space_beam*obj.csd.S[n]*densityMin#*exp(-sigmaEInv*(E0-E)^2)#;
+        return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO2Inv*(obj.settings.Omega2-Omega[2])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*space_beam#*trafo;;
     elseif obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD"
         return 0.0;
     end
@@ -292,176 +308,343 @@ end
 
 @inline function slopefit(left::Float64, center::Float64, right::Float64)
     tmp = minmod(0.5 * (right - left),2.0 * (center - left));
-    return minmod(2.0 * (right - center),tmp);
+    return 0.0 * minmod(2.0 * (right - center),tmp);
 end
 
-function solveFlux!(obj::SolverCSD, phi::Array{Float64,3}, flux::Array{Float64,3})
+function solveFlux!(obj::SolverCSD, phi::Array{Float64,4}, flux::Array{Float64,4})
     # computes the numerical flux over cell boundaries for each ordinate
     # for faster computation, we split the iteration over quadrature points
     # into four different blocks: North West, Nort East, Sout West, South East
     # this corresponds to the direction the ordinates point to
-    idxPosPos = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,3].>=0.0))
-    idxPosNeg = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,3].<0.0))
-    idxNegPos = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,3].>=0.0))
-    idxNegNeg = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,3].<0.0))
+    idxPosPosPos = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,2].>=0.0) .&(obj.qReduced[:,3].>=0.0))
+    idxPosNegPos = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,2].<0.0) .&(obj.qReduced[:,3].>=0.0))
+    idxNegPosPos = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,2].>=0.0) .&(obj.qReduced[:,3].>=0.0))
+    idxNegNegPos = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,2].<0.0) .&(obj.qReduced[:,3].>=0.0))
+
+    idxPosPosNeg = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,2].>=0.0) .&(obj.qReduced[:,3].<0.0))
+    idxPosNegNeg = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,2].<0.0) .&(obj.qReduced[:,3].<0.0))
+    idxNegPosNeg = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,2].>=0.0) .&(obj.qReduced[:,3].<0.0))
+    idxNegNegNeg = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,2].<0.0) .&(obj.qReduced[:,3].<0.0))
 
     nx = collect(3:(obj.settings.NCellsX-2));
     ny = collect(3:(obj.settings.NCellsY-2));
+    nz = collect(3:(obj.settings.NCellsZ-2));
+    
 
     # PosPos
-    for j=nx,i=ny, q = idxPosPos
-        s1 = phi[i,j-2,q]
-        s2 = phi[i,j-1,q]
-        s3 = phi[i,j,q]
-        s4 = phi[i,j+1,q]
-        northflux = s3+0.5 .*slopefit(s2,s3,s4)
-        southflux = s2+0.5 .*slopefit(s1,s2,s3)
+    for j=ny,i=nx,k=nz, q = idxPosPosPos
 
-        s1 = phi[i-2,j,q]
-        s2 = phi[i-1,j,q]
-        s3 = phi[i,j,q]
-        s4 = phi[i+1,j,q]
+        s1 = phi[i-2,j,k,q]
+        s2 = phi[i-1,j,k,q]
+        s3 = phi[i,j,k,q]
+        s4 = phi[i+1,j,k,q]
         eastflux = s3+0.5 .*slopefit(s2,s3,s4)
         westflux = s2+0.5 .*slopefit(s1,s2,s3)
 
-        flux[i,j,q] = obj.qReduced[q,1] ./obj.settings.dx .* (eastflux-westflux) +
-        obj.qReduced[q,3]./obj.settings.dy .* (northflux-southflux)
+        s1 = phi[i,j-2,k,q]
+        s2 = phi[i,j-1,k,q]
+        s3 = phi[i,j,k,q]
+        s4 = phi[i,j+1,k,q]
+        northflux = s3+0.5 .*slopefit(s2,s3,s4)
+        southflux = s2+0.5 .*slopefit(s1,s2,s3)
+
+        s1 = phi[i,j,k-2,q]
+        s2 = phi[i,j,k-1,q]
+        s3 = phi[i,j,k,q]
+        s4 = phi[i,j,k+1,q]
+        upflux = s3+0.5 .*slopefit(s2,s3,s4)
+        downflux = s2+0.5 .*slopefit(s1,s2,s3)
+
+        southfluxT = phi[i,j-1,k,q]
+        northfluxT = phi[i,j,k,q]
+
+        westfluxT = phi[i-1,j,k,q]
+        eastfluxT = phi[i,j,k,q]
+
+        downfluxT = phi[i,j,k-1,q]
+        upfluxT = phi[i,j,k,q]
+
+        #println(southfluxT-southflux," ",northfluxT-northflux," ",westfluxT-westflux," ",eastfluxT-eastflux," ",downfluxT-downflux," ",upfluxT-upflux)
+
+        flux[i,j,k,q] = obj.qReduced[q,1] ./obj.settings.dx .* (eastflux-westflux) +
+        obj.qReduced[q,2]./obj.settings.dy .* (northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (upflux-downflux)
     end
     #PosNeg
-    for j=nx,i=ny,q = idxPosNeg
-        s1 = phi[i,j-1,q]
-        s2 = phi[i,j,q]
-        s3 = phi[i,j+1,q]
-        s4 = phi[i,j+2,q]
+    for j=ny,i=nx,k=nz,q = idxPosNegPos
+
+        s1 = phi[i-2,j,k,q]
+        s2 = phi[i-1,j,k,q]
+        s3 = phi[i,j,k,q]
+        s4 = phi[i+1,j,k,q]
+        eastflux = s3+0.5 .*slopefit(s2,s3,s4)
+        westflux = s2+0.5 .*slopefit(s1,s2,s3)
+
+        s1 = phi[i,j-1,k,q]
+        s2 = phi[i,j,k,q]
+        s3 = phi[i,j+1,k,q]
+        s4 = phi[i,j+2,k,q]
         northflux = s3-0.5 .* slopefit(s2,s3,s4)
         southflux = s2-0.5 .*slopefit(s1,s2,s3)
 
-        s1 = phi[i-2,j,q]
-        s2 = phi[i-1,j,q]
-        s3 = phi[i,j,q]
-        s4 = phi[i+1,j,q]
-        eastflux = s3+0.5 .*slopefit(s2,s3,s4)
-        westflux = s2+0.5 .*slopefit(s1,s2,s3)
+        s1 = phi[i,j,k-2,q]
+        s2 = phi[i,j,k-1,q]
+        s3 = phi[i,j,k,q]
+        s4 = phi[i,j,k+1,q]
+        upflux = s3+0.5 .*slopefit(s2,s3,s4)
+        downflux = s2+0.5 .*slopefit(s1,s2,s3)
 
-        flux[i,j,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
-        obj.qReduced[q,3] ./obj.settings.dy .*(northflux-southflux)
+        southfluxT = phi[i,j,k,q]
+        northfluxT = phi[i,j+1,k,q]
+
+        westfluxT = phi[i-1,j,k,q]
+        eastfluxT = phi[i,j,k,q]
+
+        downfluxT = phi[i,j,k-1,q]
+        upfluxT = phi[i,j,k,q]
+
+        #println(southfluxT-southflux," ",northfluxT-northflux," ",westfluxT-westflux," ",eastfluxT-eastflux," ",downfluxT-downflux," ",upfluxT-upflux)
+
+        flux[i,j,k,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
+        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (upflux-downflux)
     end
 
     # NegPos
-    for j=nx,i=ny,q = idxNegPos
-        s1 = phi[i,j-2,q]
-        s2 = phi[i,j-1,q]
-        s3 = phi[i,j,q]
-        s4 = phi[i,j+1,q]
-        northflux = s3+0.5 .*slopefit(s2,s3,s4)
-        southflux = s2+0.5 .*slopefit(s1,s2,s3)
-
-        s1 = phi[i-1,j,q]
-        s2 = phi[i,j,q]
-        s3 = phi[i+1,j,q]
-        s4 = phi[i+2,j,q]
+    for j=ny,i=nx,k=nz,q = idxNegPosPos
+        s1 = phi[i-1,j,k,q]
+        s2 = phi[i,j,k,q]
+        s3 = phi[i+1,j,k,q]
+        s4 = phi[i+2,j,k,q]
         eastflux = s3-0.5 .*slopefit(s2,s3,s4)
         westflux = s2-0.5 .*slopefit(s1,s2,s3)
 
-        flux[i,j,q] = obj.qReduced[q,1]./obj.settings.dx .*(eastflux-westflux) +
-        obj.qReduced[q,3] ./obj.settings.dy .*(northflux-southflux)
+        s1 = phi[i,j-2,k,q]
+        s2 = phi[i,j-1,k,q]
+        s3 = phi[i,j,k,q]
+        s4 = phi[i,j+1,k,q]
+        northflux = s3+0.5 .*slopefit(s2,s3,s4)
+        southflux = s2+0.5 .*slopefit(s1,s2,s3)
+
+        s1 = phi[i,j,k-2,q]
+        s2 = phi[i,j,k-1,q]
+        s3 = phi[i,j,k,q]
+        s4 = phi[i,j,k+1,q]
+        upflux = s3+0.5 .*slopefit(s2,s3,s4)
+        downflux = s2+0.5 .*slopefit(s1,s2,s3)
+
+        southfluxT = phi[i,j-1,k,q]
+        northfluxT = phi[i,j,k,q]
+
+        westfluxT = phi[i,j,k,q]
+        eastfluxT = phi[i+1,j,k,q]
+
+        downfluxT = phi[i,j,k-1,q]
+        upfluxT = phi[i,j,k,q]
+
+        #println(southfluxT-southflux," ",northfluxT-northflux," ",westfluxT-westflux," ",eastfluxT-eastflux," ",downfluxT-downflux," ",upfluxT-upflux)
+
+        flux[i,j,k,q] = obj.qReduced[q,1]./obj.settings.dx .*(eastflux-westflux) +
+        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (upflux-downflux)
     end
 
     # NegNeg
-    for j=nx,i=ny,q = idxNegNeg
-        s1 = phi[i,j-1,q]
-        s2 = phi[i,j,q]
-        s3 = phi[i,j+1,q]
-        s4 = phi[i,j+2,q]
+    for j=ny,i=nx,k=nz,q = idxNegNegPos
+        s1 = phi[i-1,j,k,q]
+        s2 = phi[i,j,k,q]
+        s3 = phi[i+1,j,k,q]
+        s4 = phi[i+2,j,k,q]
+        eastflux = s3-0.5 .*slopefit(s2,s3,s4)
+        westflux = s2-0.5 .*slopefit(s1,s2,s3)
+
+        s1 = phi[i,j-1,k,q]
+        s2 = phi[i,j,k,q]
+        s3 = phi[i,j+1,k,q]
+        s4 = phi[i,j+2,k,q]
         northflux = s3-0.5 .* slopefit(s2,s3,s4)
-        southflux = s2-0.5 .* slopefit(s1,s2,s3)
+        southflux = s2-0.5 .*slopefit(s1,s2,s3)
 
-        s1 = phi[i-1,j,q]
-        s2 = phi[i,j,q]
-        s3 = phi[i+1,j,q]
-        s4 = phi[i+2,j,q]
-        eastflux = s3-0.5 .* slopefit(s2,s3,s4)
-        westflux = s2-0.5 .* slopefit(s1,s2,s3)
+        s1 = phi[i,j,k-2,q]
+        s2 = phi[i,j,k-1,q]
+        s3 = phi[i,j,k,q]
+        s4 = phi[i,j,k+1,q]
+        upflux = s3+0.5 .*slopefit(s2,s3,s4)
+        downflux = s2+0.5 .*slopefit(s1,s2,s3)
 
-        flux[i,j,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
-        obj.qReduced[q,3] ./obj.settings.dy .*(northflux-southflux)
+        southfluxT = phi[i,j,k,q]
+        northfluxT = phi[i,j+1,k,q]
+
+        s2 = phi[i,j,k,q]
+        s3 = phi[i+1,j,k,q]
+        eastfluxT = s3
+        westfluxT = s2
+
+        downfluxT = phi[i,j,k-1,q]
+        upfluxT = phi[i,j,k,q]
+
+        #println(southfluxT-southflux," ",northfluxT-northflux," ",westfluxT-westflux," ",eastfluxT-eastflux," ",downfluxT-downflux," ",upfluxT-upflux)
+
+        flux[i,j,k,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
+        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (upflux-downflux)
     end
-end
-
-function solveFluxUpwind!(obj::SolverCSD, phi::Array{Float64,3}, flux::Array{Float64,3})
-    # computes the numerical flux over cell boundaries for each ordinate
-    # for faster computation, we split the iteration over quadrature points
-    # into four different blocks: North West, Nort East, Sout West, South East
-    # this corresponds to the direction the ordinates point to
-    idxPosPos = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,3].>=0.0))
-    idxPosNeg = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,3].<0.0))
-    idxNegPos = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,3].>=0.0))
-    idxNegNeg = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,3].<0.0))
-
-    nx = collect(2:(obj.settings.NCellsX-1));
-    ny = collect(2:(obj.settings.NCellsY-1));
 
     # PosPos
-    for j=ny,i=nx, q = idxPosPos
-        s2 = phi[i,j-1,q]
-        s3 = phi[i,j,q]
-        northflux = s3
-        southflux = s2
+    for j=ny,i=nx,k=nz, q = idxPosPosNeg
+        s1 = phi[i-2,j,k,q]
+        s2 = phi[i-1,j,k,q]
+        s3 = phi[i,j,k,q]
+        s4 = phi[i+1,j,k,q]
+        eastflux = s3+0.5 .*slopefit(s2,s3,s4)
+        westflux = s2+0.5 .*slopefit(s1,s2,s3)
 
-        s2 = phi[i-1,j,q]
-        s3 = phi[i,j,q]
-        eastflux = s3
-        westflux = s2
+        s1 = phi[i,j-2,k,q]
+        s2 = phi[i,j-1,k,q]
+        s3 = phi[i,j,k,q]
+        s4 = phi[i,j+1,k,q]
+        northflux = s3+0.5 .*slopefit(s2,s3,s4)
+        southflux = s2+0.5 .*slopefit(s1,s2,s3)
 
-        flux[i,j,q] = obj.qReduced[q,1] ./obj.settings.dx .* (eastflux-westflux) +
-        obj.qReduced[q,3]./obj.settings.dy .* (northflux-southflux)
+        s1 = phi[i,j,k-1,q]
+        s2 = phi[i,j,k,q]
+        s3 = phi[i,j,k+1,q]
+        s4 = phi[i,j,k+2,q]
+        upflux = s3-0.5 .*slopefit(s2,s3,s4)
+        downflux = s2-0.5 .*slopefit(s1,s2,s3)
+
+        s2 = phi[i,j-1,k,q]
+        s3 = phi[i,j,k,q]
+        northfluxT = s3
+        southfluxT = s2
+
+        westfluxT = phi[i-1,j,k,q]
+        eastfluxT = phi[i,j,k,q]
+
+        downfluxT = phi[i,j,k,q]
+        upfluxT = phi[i,j,k+1,q]
+
+        #println(southfluxT-southflux," ",northfluxT-northflux," ",westfluxT-westflux," ",eastfluxT-eastflux," ",downfluxT-downflux," ",upfluxT-upflux)
+
+        flux[i,j,k,q] = obj.qReduced[q,1] ./obj.settings.dx .* (eastflux-westflux) +
+        obj.qReduced[q,2]./obj.settings.dy .* (northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (upflux-downflux)
     end
     #PosNeg
-    for j=ny,i=nx,q = idxPosNeg
-        s2 = phi[i,j,q]
-        s3 = phi[i,j+1,q]
-        northflux = s3
-        southflux = s2
+    for j=ny,i=nx,k=nz,q = idxPosNegNeg
+        s1 = phi[i-2,j,k,q]
+        s2 = phi[i-1,j,k,q]
+        s3 = phi[i,j,k,q]
+        s4 = phi[i+1,j,k,q]
+        eastflux = s3+0.5 .*slopefit(s2,s3,s4)
+        westflux = s2+0.5 .*slopefit(s1,s2,s3)
 
-        s2 = phi[i-1,j,q]
-        s3 = phi[i,j,q]
-        eastflux = s3
-        westflux = s2
+        s1 = phi[i,j-1,k,q]
+        s2 = phi[i,j,k,q]
+        s3 = phi[i,j+1,k,q]
+        s4 = phi[i,j+2,k,q]
+        northflux = s3-0.5 .* slopefit(s2,s3,s4)
+        southflux = s2-0.5 .*slopefit(s1,s2,s3)
 
-        flux[i,j,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
-        obj.qReduced[q,3] ./obj.settings.dy .*(northflux-southflux)
+        s1 = phi[i,j,k-1,q]
+        s2 = phi[i,j,k,q]
+        s3 = phi[i,j,k+1,q]
+        s4 = phi[i,j,k+2,q]
+        upflux = s3-0.5 .*slopefit(s2,s3,s4)
+        downflux = s2-0.5 .*slopefit(s1,s2,s3)
+
+        s2 = phi[i,j,k,q]
+        s3 = phi[i,j+1,k,q]
+        northfluxT = s3
+        southfluxT = s2
+
+        s2 = phi[i-1,j,k,q]
+        s3 = phi[i,j,k,q]
+        eastfluxT = s3
+        westfluxT = s2
+
+        downfluxT = phi[i,j,k,q]
+        upfluxT = phi[i,j,k+1,q]
+
+        #println(southfluxT-southflux," ",northfluxT-northflux," ",westfluxT-westflux," ",eastfluxT-eastflux," ",downfluxT-downflux," ",upfluxT-upflux)
+
+        flux[i,j,k,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
+        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (upflux-downflux)
     end
 
     # NegPos
-    for j=ny,i=nx,q = idxNegPos
-        s2 = phi[i,j-1,q]
-        s3 = phi[i,j,q]
-        northflux = s3
-        southflux = s2
+    for j=ny,i=nx,k=nz,q = idxNegPosNeg
+        s1 = phi[i-1,j,k,q]
+        s2 = phi[i,j,k,q]
+        s3 = phi[i+1,j,k,q]
+        s4 = phi[i+2,j,k,q]
+        eastflux = s3-0.5 .*slopefit(s2,s3,s4)
+        westflux = s2-0.5 .*slopefit(s1,s2,s3)
 
-        s2 = phi[i,j,q]
-        s3 = phi[i+1,j,q]
-        eastflux = s3
-        westflux = s2
+        s1 = phi[i,j-2,k,q]
+        s2 = phi[i,j-1,k,q]
+        s3 = phi[i,j,k,q]
+        s4 = phi[i,j+1,k,q]
+        northflux = s3+0.5 .*slopefit(s2,s3,s4)
+        southflux = s2+0.5 .*slopefit(s1,s2,s3)
 
-        flux[i,j,q] = obj.qReduced[q,1]./obj.settings.dx .*(eastflux-westflux) +
-        obj.qReduced[q,3] ./obj.settings.dy .*(northflux-southflux)
+        s1 = phi[i,j,k-1,q]
+        s2 = phi[i,j,k,q]
+        s3 = phi[i,j,k+1,q]
+        s4 = phi[i,j,k+2,q]
+        upflux = s3-0.5 .*slopefit(s2,s3,s4)
+        downflux = s2-0.5 .*slopefit(s1,s2,s3)
+
+        s2 = phi[i,j-1,k,q]
+        s3 = phi[i,j,k,q]
+        northfluxT = s3
+        southfluxT = s2
+
+        s2 = phi[i,j,k,q]
+        s3 = phi[i+1,j,k,q]
+        eastfluxT = s3
+        westfluxT = s2
+
+        downfluxT = phi[i,j,k,q]
+        upfluxT = phi[i,j,k+1,q]
+
+        #println(southfluxT-southflux," ",northfluxT-northflux," ",westfluxT-westflux," ",eastfluxT-eastflux," ",downfluxT-downflux," ",upfluxT-upflux)
+
+        flux[i,j,k,q] = obj.qReduced[q,1]./obj.settings.dx .*(eastflux-westflux) +
+        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (upflux-downflux)
     end
 
     # NegNeg
-    for j=ny,i=nx,q = idxNegNeg
-        s2 = phi[i,j,q]
-        s3 = phi[i,j+1,q]
-        northflux = s3
-        southflux = s2
+    for j=ny,i=nx,k=nz,q = idxNegNegNeg
+        s1 = phi[i-1,j,k,q]
+        s2 = phi[i,j,k,q]
+        s3 = phi[i+1,j,k,q]
+        s4 = phi[i+2,j,k,q]
+        eastflux = s3-0.5 .*slopefit(s2,s3,s4)
+        westflux = s2-0.5 .*slopefit(s1,s2,s3)
 
-        s2 = phi[i,j,q]
-        s3 = phi[i+1,j,q]
-        eastflux = s3
-        westflux = s2
+        s1 = phi[i,j-1,k,q]
+        s2 = phi[i,j,k,q]
+        s3 = phi[i,j+1,k,q]
+        s4 = phi[i,j+2,k,q]
+        northflux = s3-0.5 .* slopefit(s2,s3,s4)
+        southflux = s2-0.5 .*slopefit(s1,s2,s3)
 
-        flux[i,j,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
-        obj.qReduced[q,3] ./obj.settings.dy .*(northflux-southflux)
+        s1 = phi[i,j,k-1,q]
+        s2 = phi[i,j,k,q]
+        s3 = phi[i,j,k+1,q]
+        s4 = phi[i,j,k+2,q]
+        upflux = s3-0.5 .*slopefit(s2,s3,s4)
+        downflux = s2-0.5 .*slopefit(s1,s2,s3)
+
+        southfluxT = phi[i,j,k,q]
+        northfluxT = phi[i,j+1,k,q]
+
+        westfluxT = phi[i,j,k,q]
+        eastfluxT = phi[i+1,j,k,q]
+
+        downfluxT = phi[i,j,k,q]
+        upfluxT = phi[i,j,k+1,q]
+
+        #println(southfluxT-southflux," ",northfluxT-northflux," ",westfluxT-westflux," ",eastfluxT-eastflux," ",downfluxT-downflux," ",upfluxT-upflux)
+
+        flux[i,j,k,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
+        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (upflux-downflux)
     end
 end
 
@@ -844,6 +1027,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
     nx = obj.settings.NCellsX;
     ny = obj.settings.NCellsY;
+    nz = obj.settings.NCellsZ;
     nq = obj.Q.nquadpoints;
     N = obj.pn.nTotalEntries;
 
@@ -858,11 +1042,12 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" # determine relevant directions in beam
         psiBeam = zeros(nq)
         for k = 1:nq
-            psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)
+            psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,obj.settings.z0,1)
         end
         idxBeam = findall( psiBeam .> floorPsi*maximum(psiBeam) );
         psi = SetupIC(obj,obj.Q.pointsxyz[idxBeam,:]);
     end
+    println("reduction of ordinates is ",(nq-length(idxBeam))/nq*100.0," percent")
     
     obj.qReduced = obj.Q.pointsxyz[idxBeam,:]
     obj.MReduced = obj.M[:,idxBeam]
@@ -870,11 +1055,10 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     nq = length(idxBeam);
 
     # define density matrix
-    densityInv = Diagonal(1.0 ./obj.density);
     Id = Diagonal(ones(N));
 
     # Low-rank approx of init data:
-    X,_,_ = svd!(zeros(nx*ny,r));
+    X,_,_ = svd!(zeros(nx*ny*nz,r));
     W,_,_ = svd!(zeros(N,r));
     
     # rank-r truncation:
@@ -884,20 +1068,23 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     K = zeros(size(X));
 
     WAxW = zeros(r,r)
+    WAyW = zeros(r,r)
     WAzW = zeros(r,r)
     WAbsAxW = zeros(r,r)
+    WAbsAyW = zeros(r,r)
     WAbsAzW = zeros(r,r)
 
     XL2xX = zeros(r,r)
     XL2yX = zeros(r,r)
+    XL2zX = zeros(r,r)
     XL1xX = zeros(r,r)
     XL1yX = zeros(r,r)
+    XL1zX = zeros(r,r)
 
     MUp = zeros(r,r)
     NUp = zeros(r,r)
 
-    XNew = zeros(nx*ny,r)
-    STmp = zeros(r,r)
+    XNew = zeros(nx*ny*nz,r)
 
     # impose boundary condition
     X[obj.boundaryIdx,:] .= 0.0;
@@ -906,38 +1093,26 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     dE = eTrafo[2]-eTrafo[1];
     obj.settings.dE = dE
 
-    println("CFL = ",dE/min(obj.settings.dx,obj.settings.dy)*maximum(densityInv))
+    println("CFL = ",dE/min(obj.settings.dx,obj.settings.dy)/minimum(obj.density))
 
     flux = zeros(size(psi))
 
     prog = Progress(nEnergies-1,1)
 
-    uOUnc = zeros(nx*ny);
+    uOUnc = zeros(nx*ny*nz);
     
     #loop over energy
     for n=2:nEnergies
         # compute scattering coefficients at current energy
         sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
 
-        # set boundary condition
-        if obj.settings.problem != "validation" # validation testcase sets beam in initial condition
-            for k = 1:nq
-                for j = 1:nx
-                    psi[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
-                    psi[j,end,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
-                end
-                for j = 1:ny
-                    psi[1,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
-                    psi[end,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
-                end
-            end
-        end
-
         ############## Dose Computation ##############
         for i = 1:nx
             for j = 1:ny
-                idx = (i-1)*ny + j
-                uOUnc[idx] = psi[i,j,:]'*obj.MReduced[1,:];
+                for k = 1:nz
+                    idx = vectorIndex(nx,ny,i,j,k)
+                    uOUnc[idx] = psi[i,j,k,:]'*obj.MReduced[1,:];
+                end
             end
         end
         obj.dose .+= 0.5*dE * (X*S*W[1,:]+uOUnc) * obj.csd.S[n-1] ./ obj.densityVec ;
@@ -966,11 +1141,13 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
             K .= X*S;
 
             WAzW .= W'*obj.pn.Az*W # Az  = Az^T
+            WAyW .= W'*obj.pn.Ay*W
             WAbsAzW .= W'*obj.AbsAz*W
+            WAbsAyW .= W'*obj.AbsAy*W
             WAbsAxW .= W'*obj.AbsAx*W
             WAxW .= W'*obj.pn.Ax*W # Ax  = Ax^T
 
-            K .= K .- dE*(obj.stencil.L2x*K*WAxW + obj.stencil.L2y*K*WAzW + obj.stencil.L1x*K*WAbsAxW + obj.stencil.L1y*K*WAbsAzW);
+            K .= K .- dE*(obj.stencil.L2x*K*WAxW + obj.stencil.L2y*K*WAyW + obj.stencil.L2z*K*WAzW + obj.stencil.L1x*K*WAbsAxW + obj.stencil.L1y*K*WAbsAyW + obj.stencil.L1z*K*WAbsAzW);
 
             XNew,_,_ = svd!(K);
 
@@ -980,14 +1157,17 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
             XL2xX .= X'*obj.stencil.L2x*X
             XL2yX .= X'*obj.stencil.L2y*X
+            XL2zX .= X'*obj.stencil.L2z*X
             XL1xX .= X'*obj.stencil.L1x*X
             XL1yX .= X'*obj.stencil.L1y*X
+            XL1zX .= X'*obj.stencil.L1z*X
 
-            L .= L .- dE*(obj.pn.Ax*L*XL2xX' + obj.pn.Az*L*XL2yX' + obj.AbsAx*L*XL1xX' + obj.AbsAz*L*XL1yX');
+            L .= L .- dE*(obj.pn.Ax*L*XL2xX' + obj.pn.Ay*L*XL2yX' + obj.pn.Az*L*XL2zX' + obj.AbsAx*L*XL1xX' + obj.AbsAy*L*XL1yX' + obj.AbsAz*L*XL1zX');
                     
             WNew,_ = svd!(L);
 
             NUp .= WNew' * W;
+
             W .= WNew;
             X .= XNew;
 
@@ -998,15 +1178,19 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
             XL2xX .= X'*obj.stencil.L2x*X
             XL2yX .= X'*obj.stencil.L2y*X
+            XL2zX .= X'*obj.stencil.L2z*X
             XL1xX .= X'*obj.stencil.L1x*X
             XL1yX .= X'*obj.stencil.L1y*X
+            XL1zX .= X'*obj.stencil.L1z*X
 
             WAzW .= W'*obj.pn.Az*W
+            WAyW .= W'*obj.pn.Ay*W
             WAbsAzW .= W'*obj.AbsAz*W
+            WAbsAyW .= W'*obj.AbsAy*W
             WAbsAxW .= W'*obj.AbsAx*W
             WAxW .= W'*obj.pn.Ax*W
 
-            S .= S .- dE.*(XL2xX*S*WAxW + XL2yX*S*WAzW + XL1xX*S*WAbsAxW + XL1yX*S*WAbsAzW);
+            S .= S .- dE.*(XL2xX*S*WAxW + XL2yX*S*WAyW + XL2zX*S*WAzW + XL1xX*S*WAbsAxW + XL1yX*S*WAbsAyW + XL1zX*S*WAbsAzW);
         end
 
         ############## Out Scattering ##############
@@ -1025,7 +1209,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         X[obj.boundaryIdx,:] .= 0.0;
         K .= X*S;
         #u = u .+dE*Mat2Vec(psiNew)*M'*Diagonal(Dvec);
-        K .= K .+ dE * Mat2Vec(psi) * (obj.MReduced' * (Diagonal(Dvec) * W) );
+        K .= K .+ dE * Ten2Vec(psi) * (obj.MReduced' * (Diagonal(Dvec) * W) );
         K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
         XNew,_,_ = svd!(K);
@@ -1034,7 +1218,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
         ################## L-step ##################
         L = W*S';
-        L = L .+dE*Diagonal(Dvec)*obj.MReduced*(Mat2Vec(psi)'*X);
+        L = L .+dE*Diagonal(Dvec)*obj.MReduced*(Ten2Vec(psi)'*X);
 
         WNew,_,_ = svd!(L);
 
@@ -1045,13 +1229,15 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
         ################## S-step ##################
         S .= MUp*S*(NUp')
-        S .= S .+dE*(X'*Mat2Vec(psi))*obj.MReduced'*(Diagonal(Dvec)*W);
+        S .= S .+dE*(X'*Ten2Vec(psi))*obj.MReduced'*(Diagonal(Dvec)*W);
 
         ############## Dose Computation ##############
         for i = 1:nx
             for j = 1:ny
-                idx = (i-1)*ny + j
-                uOUnc[idx] = psi[i,j,:]'*obj.MReduced[1,:];
+                for k = 1:nz
+                    idx = vectorIndex(nx,ny,i,j,k)
+                    uOUnc[idx] = psi[i,j,k,:]'*obj.MReduced[1,:];
+                end
             end
         end
         obj.dose .+= 0.5*dE * (X*S*W[1,:]+uOUnc) * obj.csd.S[n] ./ obj.densityVec;
