@@ -249,9 +249,6 @@ function applyinterpolation!(phiNew::Array{Float64,3},phi::Array{Float64,3},Q::Q
 	end
 end
 
-
-
-
 #Get the ID of the triangle to which v belongs
 #if v belongs to multiple triangles because it is on an edge/vertix this
 #returns still just one id as the interpolation would be the same,
@@ -297,8 +294,6 @@ function gettriangleid(v::Array{Float64,1},Q::Quadrature,neighbors::Array{Int64,
 	error("We should not reach this part!")
 end
 
-
-
 function prepareinterpolation!(Q::Quadrature)
 	# find a traingle id
 	for i=1:Q.nquadpoints
@@ -313,7 +308,6 @@ function prepareinterpolation!(Q::Quadrature)
 	end
 end
 
-
 function rotate!(Q::Quadrature)
 	for i=1:size(Q.pointsxyz,1)
 		Q.pointsxyz[i,:] = (Q.rotationmatrix*(Q.pointsxyz[i,:]))';
@@ -322,9 +316,6 @@ function rotate!(Q::Quadrature)
 	xyz2muphi!(Q.pointsxyz,Q.pointsmuphi);
 
 end
-
-
-	
 
 function rotateandinterpolate!(alpha::Float64,beta::Float64,gamma::Float64,
 	Q::Quadrature,phiNew::Array{Float64,3},phi::Array{Float64,3},direction::String)
@@ -343,7 +334,6 @@ function rotateOnly!(u::Array{Float64,1},theta::Float64,
 	Q.muphiOLD = deepcopy(Q.pointsmuphi)
 
 end
-
 
 function rotateandinterpolate!(u::Array{Float64,1},theta::Float64,
 	Q::Quadrature,phiNew::Array{Float64,3},phi::Array{Float64,3},direction::String)

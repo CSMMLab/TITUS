@@ -149,7 +149,8 @@ mutable struct SolverCSD
         end
 
         # setup quadrature
-        qorder = settings.nPN+1; # must be even for standard quadrature
+        qorder = settings.nPN+1; 
+        #if iseven(qorder) qorder += 1; end # make quadrature odd to ensure direction (1,0,0) is contained
         qtype = 1; # Type must be 1 for "standard" or 2 for "octa" and 3 for "ico".
         Q = Quadrature(qorder,qtype)
 
@@ -1060,10 +1061,8 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     # Low-rank approx of init data:
     X,_,_ = svd!(zeros(nx*ny*nz,r));
     W,_,_ = svd!(zeros(N,r));
-    
+
     # rank-r truncation:
-    X = Matrix(X[:,1:r]);
-    W = Matrix(W[:,1:r]);
     S = zeros(r,r);
     K = zeros(size(X));
 
@@ -1115,7 +1114,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
                 end
             end
         end
-        obj.dose .+= 0.5*dE * (X*S*W[1,:]+uOUnc) * obj.csd.S[n-1] ./ obj.densityVec ;
+        obj.dose .+= 0.5*dE * (X*S*W[1,:]+0.0*uOUnc) * obj.csd.S[n-1] ./ obj.densityVec ;
 
         # stream uncollided particles
         solveFlux!(obj,psi./obj.density,flux);
@@ -1140,13 +1139,14 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
             X[obj.boundaryIdx,:] .= 0.0;
             K .= X*S;
 
-            WAzW .= W'*obj.pn.Az*W # Az  = Az^T
+            WAxW .= W'*obj.pn.Ax*W
             WAyW .= W'*obj.pn.Ay*W
+            WAzW .= W'*obj.pn.Az*W
+            
             WAbsAzW .= W'*obj.AbsAz*W
             WAbsAyW .= W'*obj.AbsAy*W
             WAbsAxW .= W'*obj.AbsAx*W
-            WAxW .= W'*obj.pn.Ax*W # Ax  = Ax^T
-
+            
             K .= K .- dE*(obj.stencil.L2x*K*WAxW + obj.stencil.L2y*K*WAyW + obj.stencil.L2z*K*WAzW + obj.stencil.L1x*K*WAbsAxW + obj.stencil.L1y*K*WAbsAyW + obj.stencil.L1z*K*WAbsAzW);
 
             XNew,_,_ = svd!(K);
@@ -1183,12 +1183,13 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
             XL1yX .= X'*obj.stencil.L1y*X
             XL1zX .= X'*obj.stencil.L1z*X
 
-            WAzW .= W'*obj.pn.Az*W
-            WAyW .= W'*obj.pn.Ay*W
-            WAbsAzW .= W'*obj.AbsAz*W
-            WAbsAyW .= W'*obj.AbsAy*W
-            WAbsAxW .= W'*obj.AbsAx*W
             WAxW .= W'*obj.pn.Ax*W
+            WAyW .= W'*obj.pn.Ay*W
+            WAzW .= W'*obj.pn.Az*W
+            
+            WAbsAxW .= W'*obj.AbsAx*W
+            WAbsAyW .= W'*obj.AbsAy*W
+            WAbsAzW .= W'*obj.AbsAz*W
 
             S .= S .- dE.*(XL2xX*S*WAxW + XL2yX*S*WAyW + XL2zX*S*WAzW + XL1xX*S*WAbsAxW + XL1yX*S*WAbsAyW + XL1zX*S*WAbsAzW);
         end
@@ -1240,7 +1241,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
                 end
             end
         end
-        obj.dose .+= 0.5*dE * (X*S*W[1,:]+uOUnc) * obj.csd.S[n] ./ obj.densityVec;
+        obj.dose .+= 0.5*dE * (X*S*W[1,:]+0.0*uOUnc) * obj.csd.S[n] ./ obj.densityVec;
         
         next!(prog) # update progress bar
     end

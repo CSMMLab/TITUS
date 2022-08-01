@@ -10,9 +10,9 @@ using WriteVTK
 
 close("all")
 
-nx = 101;
-ny = 101;
-nz = 8;
+nx = Int(floor(14.4 * 10));
+ny = Int(floor(14.4 * 10));
+nz = Int(floor(1.0 * 10));
 problem ="validation" #"2DHighD"
 particle = "Protons"
 s = Settings(nx,ny,nz,5,problem, particle);
@@ -77,6 +77,23 @@ Y = (s.yMid[2:end-1]'.*ones(size(s.xMid[2:end-1])))'
 XRef = (xRef[2:end-1]'.*ones(size(xRef[2:end-1])))
 YRef = (yRef[2:end-1]'.*ones(size(yRef[2:end-1])))'
 
+doseSum = zeros(nx-1,ny-1);
+for k = 1:nz-1
+    doseSum .+= dose_DLR[:,:,k]
+end
+
+fig = figure("sumDose, DLRA",figsize=(10*(s.d/s.b),10),dpi=100)
+ax = gca()
+pcolormesh(Y,X,doseSum[2:end-1,2:end-1]',vmax=maximum(doseSum[2:end-1,2:end-1]))
+ax.tick_params("both",labelsize=20) 
+#colorbar()
+plt.xlabel("x", fontsize=20)
+plt.ylabel("y", fontsize=20)
+plt.title(L"$\sum$ dose, DLRA", fontsize=25)
+tight_layout()
+savefig("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
+
+
 fig = figure("Dose, DLRA",figsize=(10*(s.d/s.b),10),dpi=100)
 ax = gca()
 pcolormesh(Y,X,dose_DLR[2:end-1,2:end-1,idxZ]',vmax=maximum(dose_DLR[2:end-1,2:end-1,idxZ]))
@@ -122,15 +139,20 @@ show()
 tight_layout()
 savefig("output/DoseCutXNx$(s.Nx)")
 
-fig = figure("u, full",figsize=(10*(s.d/s.b),10),dpi=100)
+uSum = zeros(nx-1,ny-1);
+for k = 1:nz-1
+    uSum .+= u[:,:,k]
+end
+
+fig = figure("sum u",figsize=(10*(s.d/s.b),10),dpi=100)
 ax = gca()
 #pcolormesh(Y,X,dose_DLR[2:end-1,2:end-1]',vmin=0.0,vmax=maximum(dose_DLR[2:end-1,2:end-1]))
-pcolormesh(Y,X,u[2:end-1,2:end-1,idxZ]')
+pcolormesh(Y,X,uSum[2:end-1,2:end-1]')
 ax.tick_params("both",labelsize=20) 
 #colorbar()
 plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
-plt.title(L"u, Full", fontsize=25)
+plt.title(L"$\sum$ u", fontsize=25)
 tight_layout()
 savefig("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
 

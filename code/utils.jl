@@ -60,12 +60,12 @@ end
 function Ten2Vec(ten)
     nx = size(ten,1)
     ny = size(ten,2)
-    nxi = size(ten,3)
+    nz = size(ten,3)
     m = size(ten,4)
-    v = zeros(nx*ny,m*nxi);
+    v = zeros(nx*ny,m*nz);
     for i = 1:nx
         for j = 1:ny
-            for l = 1:nxi
+            for l = 1:nz
                 for k = 1:m
                     v[(i-1)*ny + j,(l-1)*m .+ k] = ten[i,j,l,k]
                 end

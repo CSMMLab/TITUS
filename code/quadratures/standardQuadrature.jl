@@ -15,7 +15,7 @@ function computeXYZandWeights(_norder::Int64)
     mu,gaussweights = gausslegendre(n)
         
     # around z axis equidistant
-    phi = [(k+0.5)*pi/n for k=0:2*n-1]
+    phi = [(k+0.5)*pi/n for k=0:2*n-1] .- 0.5*pi/n
 
     range = 1:Int(ceil(n/1)) # we only use the upper half of the sphere as quadrature point since we do pseudo three d
 
