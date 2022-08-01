@@ -84,6 +84,9 @@ mutable struct SolverCSD
         Ax,Ay,Az = SetupSystemMatrices(pn);
         SetupSystemMatricesSparse(pn);
 
+        #Ax = zeros(size(Ax));
+        #pn.Ax = Ax;
+
         # setup Roe matrix
         S = eigvals(Ax)
         V = eigvecs(Ax)
