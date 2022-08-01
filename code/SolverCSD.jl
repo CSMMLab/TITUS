@@ -904,8 +904,8 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
     Id = Diagonal(ones(N));
 
     # Low-rank approx of init data:
-    X,_ = qr!(zeros(nx*ny,r));
-    W,_ = qr!(zeros(N,r));
+    X,_,_ = svd(zeros(nx*ny,r));
+    W,_,_ = svd(zeros(N,r));
     
     # rank-r truncation:
     X = Matrix(X[:,1:r]);
