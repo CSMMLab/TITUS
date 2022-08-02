@@ -156,11 +156,11 @@ mutable struct Settings
             density[Int(floor(NCellsX*0.56/(b-a))):end,:] .= 5.0;
         elseif problem =="validation"
             a = 0; # left boundary
-            b = 3; # right boundary
+            b = 2; # right boundary
             c = 0; # lower boundary
             d = 8; # upper boundary
-            e = 0.0;
-            f = 3.0;
+            e = 0;
+            f = 2;
             sigmaS = 1.0;
             sigmaA = 0.0;  
             cfl = 0.99/sqrt(2)*120.5;  

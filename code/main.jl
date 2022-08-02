@@ -10,9 +10,9 @@ using WriteVTK
 
 close("all")
 
-nx = Int(floor(3 * 10));
-ny = Int(floor(8 * 10));
-nz = Int(floor(3 * 10));
+nx = Int(floor(2 * 50));
+ny = Int(floor(8 * 50));
+nz = Int(floor(2 * 50));
 problem ="validation" #"2DHighD"
 particle = "Protons"
 s = Settings(nx,ny,nz,3,problem, particle);
@@ -168,6 +168,19 @@ plt.ylabel("y", fontsize=20)
 plt.title(L"u", fontsize=25)
 tight_layout()
 savefig("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
+
+fig = plt.figure()
+ax = fig.gca(projection='3d')
+ax.add_collection3d(poly, zs=zs, zdir='y')
+
+ax.set_xlabel('X')
+ax.set_xlim3d(0, 10)
+ax.set_ylabel('Y')
+ax.set_ylim3d(-1, 4)
+ax.set_zlabel('Z')
+ax.set_zlim3d(0, 1)
+
+plt.show()
 
 
 # write vtk file
