@@ -169,20 +169,6 @@ plt.title(L"u", fontsize=25)
 tight_layout()
 savefig("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
 
-fig = plt.figure()
-ax = fig.gca(projection='3d')
-ax.add_collection3d(poly, zs=zs, zdir='y')
-
-ax.set_xlabel('X')
-ax.set_xlim3d(0, 10)
-ax.set_ylabel('Y')
-ax.set_ylim3d(-1, 4)
-ax.set_zlabel('Z')
-ax.set_zlim3d(0, 1)
-
-plt.show()
-
-
 # write vtk file
 vtkfile = vtk_grid("output/dose_csd_nx$(s.NCellsX)ny$(s.NCellsY)nz$(s.NCellsZ)", s.xMid, s.yMid,s.zMid)
 vtkfile["dose"] = dose_DLR
