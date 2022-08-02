@@ -84,8 +84,8 @@ mutable struct SolverCSD
         Ax,Ay,Az = SetupSystemMatrices(pn);
         SetupSystemMatricesSparse(pn);
 
-        #Ax = zeros(size(Ax));
-        #pn.Ax = Ax;
+        #Ay = zeros(size(Ay));
+        #pn.Ay = Ay;
 
         # setup Roe matrix
         S = eigvals(Ax)
@@ -97,14 +97,14 @@ mutable struct SolverCSD
 
         S = eigvals(Ay)
         V = eigvecs(Ay)
-        AbsAy = V*abs.(diagm(S))*inv(V)
+        AbsAy = V*abs.(Diagonal(S))*inv(V)
         idx = findall(abs.(AbsAy) .> 1e-10)
         Iy = first.(Tuple.(idx)); Jy = last.(Tuple.(idx)); valsy = AbsAy[idx];
         AbsAy = sparse(Iy,Jy,valsy,pn.nTotalEntries,pn.nTotalEntries);
         
         S = eigvals(Az)
         V = eigvecs(Az)
-        AbsAz = V*abs.(diagm(S))*inv(V)
+        AbsAz = V*abs.(Diagonal(S))*inv(V)
         idx = findall(abs.(AbsAz) .> 1e-10)
         Iz = first.(Tuple.(idx)); Jz = last.(Tuple.(idx)); valsz = AbsAz[idx];
         AbsAz = sparse(Iz,Jz,valsz,pn.nTotalEntries,pn.nTotalEntries);
@@ -152,7 +152,7 @@ mutable struct SolverCSD
         end
 
         # setup quadrature
-        qorder = settings.nPN+1; 
+        qorder = settings.nPN+22; 
         #if iseven(qorder) qorder += 1; end # make quadrature odd to ensure direction (1,0,0) is contained
         qtype = 1; # Type must be 1 for "standard" or 2 for "octa" and 3 for "ico".
         Q = Quadrature(qorder,qtype)
@@ -312,7 +312,7 @@ end
 
 @inline function slopefit(left::Float64, center::Float64, right::Float64)
     tmp = minmod(0.5 * (right - left),2.0 * (center - left));
-    return 0.0 * minmod(2.0 * (right - center),tmp);
+    return minmod(2.0 * (right - center),tmp);
 end
 
 function solveFlux!(obj::SolverCSD, phi::Array{Float64,4}, flux::Array{Float64,4})
@@ -359,17 +359,6 @@ function solveFlux!(obj::SolverCSD, phi::Array{Float64,4}, flux::Array{Float64,4
         upflux = s3+0.5 .*slopefit(s2,s3,s4)
         downflux = s2+0.5 .*slopefit(s1,s2,s3)
 
-        southfluxT = phi[i,j-1,k,q]
-        northfluxT = phi[i,j,k,q]
-
-        westfluxT = phi[i-1,j,k,q]
-        eastfluxT = phi[i,j,k,q]
-
-        downfluxT = phi[i,j,k-1,q]
-        upfluxT = phi[i,j,k,q]
-
-        #println(southfluxT-southflux," ",northfluxT-northflux," ",westfluxT-westflux," ",eastfluxT-eastflux," ",downfluxT-downflux," ",upfluxT-upflux)
-
         flux[i,j,k,q] = obj.qReduced[q,1] ./obj.settings.dx .* (eastflux-westflux) +
         obj.qReduced[q,2]./obj.settings.dy .* (northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (upflux-downflux)
     end
@@ -396,17 +385,6 @@ function solveFlux!(obj::SolverCSD, phi::Array{Float64,4}, flux::Array{Float64,4
         s4 = phi[i,j,k+1,q]
         upflux = s3+0.5 .*slopefit(s2,s3,s4)
         downflux = s2+0.5 .*slopefit(s1,s2,s3)
-
-        southfluxT = phi[i,j,k,q]
-        northfluxT = phi[i,j+1,k,q]
-
-        westfluxT = phi[i-1,j,k,q]
-        eastfluxT = phi[i,j,k,q]
-
-        downfluxT = phi[i,j,k-1,q]
-        upfluxT = phi[i,j,k,q]
-
-        #println(southfluxT-southflux," ",northfluxT-northflux," ",westfluxT-westflux," ",eastfluxT-eastflux," ",downfluxT-downflux," ",upfluxT-upflux)
 
         flux[i,j,k,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
         obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (upflux-downflux)
@@ -435,17 +413,6 @@ function solveFlux!(obj::SolverCSD, phi::Array{Float64,4}, flux::Array{Float64,4
         upflux = s3+0.5 .*slopefit(s2,s3,s4)
         downflux = s2+0.5 .*slopefit(s1,s2,s3)
 
-        southfluxT = phi[i,j-1,k,q]
-        northfluxT = phi[i,j,k,q]
-
-        westfluxT = phi[i,j,k,q]
-        eastfluxT = phi[i+1,j,k,q]
-
-        downfluxT = phi[i,j,k-1,q]
-        upfluxT = phi[i,j,k,q]
-
-        #println(southfluxT-southflux," ",northfluxT-northflux," ",westfluxT-westflux," ",eastfluxT-eastflux," ",downfluxT-downflux," ",upfluxT-upflux)
-
         flux[i,j,k,q] = obj.qReduced[q,1]./obj.settings.dx .*(eastflux-westflux) +
         obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (upflux-downflux)
     end
@@ -472,19 +439,6 @@ function solveFlux!(obj::SolverCSD, phi::Array{Float64,4}, flux::Array{Float64,4
         s4 = phi[i,j,k+1,q]
         upflux = s3+0.5 .*slopefit(s2,s3,s4)
         downflux = s2+0.5 .*slopefit(s1,s2,s3)
-
-        southfluxT = phi[i,j,k,q]
-        northfluxT = phi[i,j+1,k,q]
-
-        s2 = phi[i,j,k,q]
-        s3 = phi[i+1,j,k,q]
-        eastfluxT = s3
-        westfluxT = s2
-
-        downfluxT = phi[i,j,k-1,q]
-        upfluxT = phi[i,j,k,q]
-
-        #println(southfluxT-southflux," ",northfluxT-northflux," ",westfluxT-westflux," ",eastfluxT-eastflux," ",downfluxT-downflux," ",upfluxT-upflux)
 
         flux[i,j,k,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
         obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (upflux-downflux)
@@ -515,17 +469,7 @@ function solveFlux!(obj::SolverCSD, phi::Array{Float64,4}, flux::Array{Float64,4
 
         s2 = phi[i,j-1,k,q]
         s3 = phi[i,j,k,q]
-        northfluxT = s3
-        southfluxT = s2
-
-        westfluxT = phi[i-1,j,k,q]
-        eastfluxT = phi[i,j,k,q]
-
-        downfluxT = phi[i,j,k,q]
-        upfluxT = phi[i,j,k+1,q]
-
-        #println(southfluxT-southflux," ",northfluxT-northflux," ",westfluxT-westflux," ",eastfluxT-eastflux," ",downfluxT-downflux," ",upfluxT-upflux)
-
+        
         flux[i,j,k,q] = obj.qReduced[q,1] ./obj.settings.dx .* (eastflux-westflux) +
         obj.qReduced[q,2]./obj.settings.dy .* (northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (upflux-downflux)
     end
@@ -551,21 +495,6 @@ function solveFlux!(obj::SolverCSD, phi::Array{Float64,4}, flux::Array{Float64,4
         s4 = phi[i,j,k+2,q]
         upflux = s3-0.5 .*slopefit(s2,s3,s4)
         downflux = s2-0.5 .*slopefit(s1,s2,s3)
-
-        s2 = phi[i,j,k,q]
-        s3 = phi[i,j+1,k,q]
-        northfluxT = s3
-        southfluxT = s2
-
-        s2 = phi[i-1,j,k,q]
-        s3 = phi[i,j,k,q]
-        eastfluxT = s3
-        westfluxT = s2
-
-        downfluxT = phi[i,j,k,q]
-        upfluxT = phi[i,j,k+1,q]
-
-        #println(southfluxT-southflux," ",northfluxT-northflux," ",westfluxT-westflux," ",eastfluxT-eastflux," ",downfluxT-downflux," ",upfluxT-upflux)
 
         flux[i,j,k,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
         obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (upflux-downflux)
@@ -594,21 +523,6 @@ function solveFlux!(obj::SolverCSD, phi::Array{Float64,4}, flux::Array{Float64,4
         upflux = s3-0.5 .*slopefit(s2,s3,s4)
         downflux = s2-0.5 .*slopefit(s1,s2,s3)
 
-        s2 = phi[i,j-1,k,q]
-        s3 = phi[i,j,k,q]
-        northfluxT = s3
-        southfluxT = s2
-
-        s2 = phi[i,j,k,q]
-        s3 = phi[i+1,j,k,q]
-        eastfluxT = s3
-        westfluxT = s2
-
-        downfluxT = phi[i,j,k,q]
-        upfluxT = phi[i,j,k+1,q]
-
-        #println(southfluxT-southflux," ",northfluxT-northflux," ",westfluxT-westflux," ",eastfluxT-eastflux," ",downfluxT-downflux," ",upfluxT-upflux)
-
         flux[i,j,k,q] = obj.qReduced[q,1]./obj.settings.dx .*(eastflux-westflux) +
         obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (upflux-downflux)
     end
@@ -635,17 +549,6 @@ function solveFlux!(obj::SolverCSD, phi::Array{Float64,4}, flux::Array{Float64,4
         s4 = phi[i,j,k+2,q]
         upflux = s3-0.5 .*slopefit(s2,s3,s4)
         downflux = s2-0.5 .*slopefit(s1,s2,s3)
-
-        southfluxT = phi[i,j,k,q]
-        northfluxT = phi[i,j+1,k,q]
-
-        westfluxT = phi[i,j,k,q]
-        eastfluxT = phi[i+1,j,k,q]
-
-        downfluxT = phi[i,j,k,q]
-        upfluxT = phi[i,j,k+1,q]
-
-        #println(southfluxT-southflux," ",northfluxT-northflux," ",westfluxT-westflux," ",eastfluxT-eastflux," ",downfluxT-downflux," ",upfluxT-upflux)
 
         flux[i,j,k,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
         obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux) + obj.qReduced[q,3]./obj.settings.dz .* (upflux-downflux)
@@ -785,6 +688,7 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
 
     nx = obj.settings.NCellsX;
     ny = obj.settings.NCellsY;
+    nz = obj.settings.NCellsZ;
     nq = obj.Q.nquadpoints;
     N = obj.pn.nTotalEntries;
 
@@ -799,87 +703,74 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
     elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" # determine relevant directions in beam
         psiBeam = zeros(nq)
         for k = 1:nq
-            psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)
+            psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,obj.settings.z0,1)
         end
         idxBeam = findall( psiBeam .> floorPsi*maximum(psiBeam) );
         psi = SetupIC(obj,obj.Q.pointsxyz[idxBeam,:]);
     end
-    
-    obj.qReduced = obj.Q.pointsxyz[idxBeam,:];
-    obj.MReduced = obj.M[:,idxBeam];
-    obj.OReduced = obj.O[idxBeam,:];
     println("reduction of ordinates is ",(nq-length(idxBeam))/nq*100.0," percent")
+    
+    obj.qReduced = obj.Q.pointsxyz[idxBeam,:]
+    obj.MReduced = obj.M[:,idxBeam]
+    obj.OReduced = obj.O[idxBeam,:]
     nq = length(idxBeam);
 
     # define density matrix
-    densityInv = Diagonal(1.0 ./obj.density);
     Id = Diagonal(ones(N));
 
     # Low-rank approx of init data:
-    X,_,_ = svd!(zeros(nx*ny,r));
+    X,_,_ = svd!(zeros(nx*ny*nz,r));
     W,_,_ = svd!(zeros(N,r));
-    
+
     # rank-r truncation:
-    X = Matrix(X[:,1:r]);
-    W = Matrix(W[:,1:r]);
     S = zeros(r,r);
     K = zeros(size(X));
     k1 = zeros(size(X));
     L = zeros(size(W));
 
-    WAxW = zeros(r,r);
-    WAzW = zeros(r,r);
+    WAxW = zeros(r,r)
+    WAyW = zeros(r,r)
+    WAzW = zeros(r,r)
 
-    XL2xX = zeros(r,r);
-    XL2yX = zeros(r,r);
-    XL1xX = zeros(r,r);
-    XL1yX = zeros(r,r);
+    XL2xX = zeros(r,r)
+    XL2yX = zeros(r,r)
+    XL2zX = zeros(r,r)
+    XL1xX = zeros(r,r)
+    XL1yX = zeros(r,r)
+    XL1zX = zeros(r,r)
 
-    MUp = zeros(r,r);
-    NUp = zeros(r,r);
+    MUp = zeros(r,r)
+    NUp = zeros(r,r)
 
-    XNew = zeros(nx*ny,r);
-    STmp = zeros(r,r);
+    XNew = zeros(nx*ny*nz,r)
 
     # impose boundary condition
     X[obj.boundaryIdx,:] .= 0.0;
 
     nEnergies = length(eTrafo);
     dE = eTrafo[2]-eTrafo[1];
-    obj.settings.dE = dE;
+    obj.settings.dE = dE
 
-    println("CFL = ",dE/min(obj.settings.dx,obj.settings.dy)*maximum(densityInv))
+    println("CFL = ",dE/min(obj.settings.dx,obj.settings.dy)/minimum(obj.density))
 
-    flux = zeros(size(psi));
+    flux = zeros(size(psi))
 
-    prog = Progress(nEnergies-1,1);
+    prog = Progress(nEnergies-1,1)
 
-    uOUnc = zeros(nx*ny);
+    uOUnc = zeros(nx*ny*nz);
     
     #loop over energy
     for n=2:nEnergies
         # compute scattering coefficients at current energy
         sigmaS = SigmaAtEnergy(obj.csd,energy[n]);
 
-        # set boundary condition
-        if obj.settings.problem != "validation" # validation testcase sets beam in initial condition
-            for k = 1:nq
-                for j = 1:nx
-                    psi[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
-                    psi[j,end,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
-                end
-                for j = 1:ny
-                    psi[1,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
-                    psi[end,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
-                end
-            end
-        end
-
         ############## Dose Computation ##############
         for i = 1:nx
             for j = 1:ny
-                idx = (i-1)*ny + j
-                uOUnc[idx] = psi[i,j,:]'*obj.MReduced[1,:];
+                for k = 1:nz
+                    idx = vectorIndex(nx,ny,i,j,k)
+                    uOUnc[idx] = psi[i,j,k,:]'*obj.MReduced[1,:];
+                end
             end
         end
         obj.dose .+= 0.5*dE * (X*S*W[1,:]+uOUnc) * obj.csd.S[n-1] ./ obj.densityVec ;
@@ -907,16 +798,17 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
             X[obj.boundaryIdx,:] .= 0.0;
             K .= X*S;
 
-            WAzW .= W'*obj.pn.Az*W # Az  = Az^T
             WAxW .= W'*obj.pn.Ax*W # Ax  = Ax^T
+            WAyW .= W'*obj.pn.Ay*W # Ax  = Ax^T
+            WAzW .= W'*obj.pn.Az*W # Az  = Az^T
 
-            k1 .= -obj.stencil.L2x*K*WAxW - obj.stencil.L2y*K*WAzW;
+            k1 .= -obj.stencil.L2x*K*WAxW .- obj.stencil.L2y*K*WAyW .- obj.stencil.L2z*K*WAzW;
             K .= K .+ dE .* k1 ./ 6;
-            k1 .= -obj.stencil.L2x*(K+0.5*dE*k1)*WAxW - obj.stencil.L2y*(K+0.5*dE*k1)*WAzW;
+            k1 .= -obj.stencil.L2x*(K+0.5*dE*k1)*WAxW .- obj.stencil.L2y*(K+0.5*dE*k1)*WAyW .- obj.stencil.L2z*(K+0.5*dE*k1)*WAzW;
             K .+= 2 * dE .* k1 ./ 6;
-            k1 .= -obj.stencil.L2x*(K+0.5*dE*k1)*WAxW - obj.stencil.L2y*(K+0.5*dE*k1)*WAzW;
+            k1 .= -obj.stencil.L2x*(K+0.5*dE*k1)*WAxW .- obj.stencil.L2y*(K+0.5*dE*k1)*WAyW .- obj.stencil.L2z*(K+0.5*dE*k1)*WAzW;
             K .+= 2 * dE .* k1 ./ 6;
-            k1 .= -obj.stencil.L2x*(K+dE*k1)*WAxW - obj.stencil.L2y*(K+dE*k1)*WAzW;
+            k1 .= -obj.stencil.L2x*(K+dE*k1)*WAxW .- obj.stencil.L2y*(K+dE*k1)*WAyW .- obj.stencil.L2z*(K+dE*k1)*WAzW;
             K .+= dE .* k1 ./ 6;
 
             XNew,_,_ = svd!(K);
@@ -926,14 +818,14 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
             L .= W*S';
 
             XL2xX .= X'*obj.stencil.L2x*X
-            XL2yX .= X'*obj.stencil.L2y*X
+            XL2zX .= X'*obj.stencil.L2z*X
             XL1xX .= X'*obj.stencil.L1x*X
             XL1yX .= X'*obj.stencil.L1y*X
 
-            l1 = -obj.pn.Ax*L*XL2xX' - obj.pn.Az*L*XL2yX';
-            l2 = -obj.pn.Ax*(L+0.5*dE*l1)*XL2xX' - obj.pn.Az*(L+0.5*dE*l1)*XL2yX';
-            l3 = -obj.pn.Ax*(L+0.5*dE*l2)*XL2xX' - obj.pn.Az*(L+0.5*dE*l2)*XL2yX';
-            l4 = -obj.pn.Ax*(L+dE*l3)*XL2xX' - obj.pn.Az*(L+dE*l3)*XL2yX';
+            l1 = -obj.pn.Ax*L*XL2xX' .- obj.pn.Ay*L*XL2yX' .- obj.pn.Az*L*XL2zX';
+            l2 = -obj.pn.Ax*(L+0.5*dE*l1)*XL2xX' .- obj.pn.Ay*(L+0.5*dE*l1)*XL2yX' .- obj.pn.Az*(L+0.5*dE*l1)*XL2zX';
+            l3 = -obj.pn.Ax*(L+0.5*dE*l2)*XL2xX' .- obj.pn.Ay*(L+0.5*dE*l2)*XL2yX' .- obj.pn.Az*(L+0.5*dE*l2)*XL2zX';
+            l4 = -obj.pn.Ax*(L+dE*l3)*XL2xX' .- obj.pn.Ay*(L+dE*l3)*XL2yX' .- obj.pn.Az*(L+dE*l3)*XL2zX';
 
             L .= L .+ dE .* (l1 .+ 2 * l2 .+ 2 * l3 .+ l4) ./ 6;
                     
@@ -949,17 +841,18 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
             S .= MUp*S*(NUp')
 
             XL2xX .= X'*obj.stencil.L2x*X
-            XL2yX .= X'*obj.stencil.L2y*X
+            XL2zX .= X'*obj.stencil.L2z*X
             XL1xX .= X'*obj.stencil.L1x*X
             XL1yX .= X'*obj.stencil.L1y*X
 
-            WAzW .= W'*obj.pn.Az*W
             WAxW .= W'*obj.pn.Ax*W
+            WAyW .= W'*obj.pn.Ay*W
+            WAzW .= W'*obj.pn.Az*W
 
-            s1 = -XL2xX*S*WAxW - XL2yX*S*WAzW;
-            s2 = -XL2xX*(S+0.5*dE*s1)*WAxW - XL2yX*(S+0.5*dE*s1)*WAzW;
-            s3 = -XL2xX*(S+0.5*dE*s2)*WAxW - XL2yX*(S+0.5*dE*s2)*WAzW;
-            s4 = -XL2xX*(S+dE*s3)*WAxW - XL2yX*(S+dE*s3)*WAzW;
+            s1 = -XL2xX*S*WAxW .- XL2yX*S*WAyW .- XL2zX*S*WAzW;
+            s2 = -XL2xX*(S+0.5*dE*s1)*WAxW .- XL2yX*(S+0.5*dE*s1)*WAyW .- XL2zX*(S+0.5*dE*s1)*WAzW;
+            s3 = -XL2xX*(S+0.5*dE*s2)*WAxW .- XL2yX*(S+0.5*dE*s2)*WAyW .- XL2zX*(S+0.5*dE*s2)*WAzW;
+            s4 = -XL2xX*(S+dE*s3)*WAxW .- XL2yX*(S+dE*s3)*WAyW .- XL2zX*(S+dE*s3)*WAzW;
 
             S .= S .+ dE .* (s1 .+ 2 * s2 .+ 2 * s3 .+ s4) ./ 6;
         end
@@ -981,7 +874,7 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
         X[obj.boundaryIdx,:] .= 0.0;
         K .= X*S;
         #u = u .+dE*Mat2Vec(psiNew)*M'*Diagonal(Dvec);
-        K .= K .+ dE * Mat2Vec(psi) * (obj.MReduced' * (Diagonal(Dvec) * W) );
+        K .= K .+ dE * Ten2Vec(psi) * (obj.MReduced' * (Diagonal(Dvec) * W) );
         K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
         XNew,_,_ = svd!(K);
@@ -990,7 +883,7 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
 
         ################## L-step ##################
         L = W*S';
-        L = L .+dE*Diagonal(Dvec)*obj.MReduced*(Mat2Vec(psi)'*X);
+        L = L .+dE*Diagonal(Dvec)*obj.MReduced*(Ten2Vec(psi)'*X);
 
         WNew,_,_ = svd!(L);
 
@@ -1001,23 +894,27 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
 
         ################## S-step ##################
         S .= MUp*S*(NUp')
-        S .= S .+dE*(X'*Mat2Vec(psi))*obj.MReduced'*(Diagonal(Dvec)*W);
+        S .= S .+dE*(X'*Ten2Vec(psi))*obj.MReduced'*(Diagonal(Dvec)*W);
 
         ############## Dose Computation ##############
         for i = 1:nx
             for j = 1:ny
-                idx = (i-1)*ny + j
-                uOUnc[idx] = psi[i,j,:]'*obj.MReduced[1,:];
+                for k = 1:nz
+                    idx = vectorIndex(nx,ny,i,j,k)
+                    uOUnc[idx] = psi[i,j,k,:]'*obj.MReduced[1,:];
+                end
             end
         end
         obj.dose .+= 0.5*dE * (X*S*W[1,:]+uOUnc) * obj.csd.S[n] ./ obj.densityVec;
+
+        #psi .= zeros(size(psi))
         
         next!(prog) # update progress bar
     end
 
     U,Sigma,V = svd!(S);
     # return solution and dose
-    return X*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*W*V,obj.dose,psi;
+    return X*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*W*V,W*V,obj.dose,psi;
 
 end
 
@@ -1117,7 +1014,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
                 end
             end
         end
-        obj.dose .+= 0.5*dE * (X*S*W[1,:]+0.0*uOUnc) * obj.csd.S[n-1] ./ obj.densityVec ;
+        obj.dose .+= 0.5*dE * (X*S*W[1,:]+uOUnc) * obj.csd.S[n-1] ./ obj.densityVec ;
 
         # stream uncollided particles
         solveFlux!(obj,psi./obj.density,flux);
@@ -1167,7 +1064,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
             L .= L .- dE*(obj.pn.Ax*L*XL2xX' + obj.pn.Ay*L*XL2yX' + obj.pn.Az*L*XL2zX' + obj.AbsAx*L*XL1xX' + obj.AbsAy*L*XL1yX' + obj.AbsAz*L*XL1zX');
                     
-            WNew,_ = svd!(L);
+            WNew,_,_ = svd!(L);
 
             NUp .= WNew' * W;
 
@@ -1195,6 +1092,8 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
             WAbsAzW .= W'*obj.AbsAz*W
 
             S .= S .- dE.*(XL2xX*S*WAxW + XL2yX*S*WAyW + XL2zX*S*WAzW + XL1xX*S*WAbsAxW + XL1yX*S*WAbsAyW + XL1zX*S*WAbsAzW);
+
+            #if n > 20 break; end
         end
 
         ############## Out Scattering ##############
@@ -1244,14 +1143,14 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
                 end
             end
         end
-        obj.dose .+= 0.5*dE * (X*S*W[1,:]+0.0*uOUnc) * obj.csd.S[n] ./ obj.densityVec;
+        obj.dose .+= 0.5*dE * (X*S*W[1,:]+uOUnc) * obj.csd.S[n] ./ obj.densityVec;
         
         next!(prog) # update progress bar
     end
 
     U,Sigma,V = svd!(S);
     # return solution and dose
-    return X*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*W*V,obj.dose,psi;
+    return X*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*W*V, W*V,obj.dose,psi;
 
 end
 

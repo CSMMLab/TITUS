@@ -10,12 +10,12 @@ using WriteVTK
 
 close("all")
 
-nx = Int(floor(14.4 * 10));
-ny = Int(floor(14.4 * 10));
-nz = Int(floor(1.0 * 10));
+nx = Int(floor(3 * 10));
+ny = Int(floor(8 * 10));
+nz = Int(floor(3 * 10));
 problem ="validation" #"2DHighD"
 particle = "Protons"
-s = Settings(nx,ny,nz,5,problem, particle);
+s = Settings(nx,ny,nz,3,problem, particle);
 rhoMin = minimum(s.density);
 
 if s.problem == "AirCavity"
@@ -65,7 +65,7 @@ end
 ############################
 
 solver1 = SolverCSD(s);
-X_dlr,S_dlr,W_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR(solver1);
+X_dlr,S_dlr,W_dlr_SN,W_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR2ndOrder(solver1);
 #u, dose_DLR,psi = SolveFirstCollisionSource(solver1);
 u = Vec2Ten(s.NCellsX,s.NCellsY,s.NCellsZ,X_dlr*Diagonal(S_dlr)*W_dlr[1,:]);
 dose_DLR = Vec2Ten(s.NCellsX,s.NCellsY,s.NCellsZ,dose_DLR);
@@ -157,8 +157,21 @@ tight_layout()
 savefig("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
 
 
+fig = figure("u",figsize=(10*(s.d/s.b),10),dpi=100)
+ax = gca()
+#pcolormesh(Y,X,dose_DLR[2:end-1,2:end-1]',vmin=0.0,vmax=maximum(dose_DLR[2:end-1,2:end-1]))
+pcolormesh(Y,X,u[2:end-1,2:end-1,idxZ]')
+ax.tick_params("both",labelsize=20) 
+#colorbar()
+plt.xlabel("x", fontsize=20)
+plt.ylabel("y", fontsize=20)
+plt.title(L"u", fontsize=25)
+tight_layout()
+savefig("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
+
+
 # write vtk file
-vtkfile = vtk_grid("output/dose_csd_nx$(s.NCellsX)ny$(s.NCellsY)", s.xMid, s.yMid)
+vtkfile = vtk_grid("output/dose_csd_nx$(s.NCellsX)ny$(s.NCellsY)nz$(s.NCellsZ)", s.xMid, s.yMid,s.zMid)
 vtkfile["dose"] = dose_DLR
 vtkfile["dose_normalized"] = dose_DLR./maximum(dose_DLR)
 vtkfile["u"] = u/0.5/sqrt(solver1.gamma[1])
