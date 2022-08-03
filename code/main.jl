@@ -14,7 +14,7 @@ nx = 201;
 ny = 201;
 problem ="validation" #"2DHighD"
 particle = "Protons"
-s = Settings(nx,ny,5,problem, particle);
+s = Settings(nx,ny,3,problem, particle);
 rhoMin = minimum(s.density);
 
 if s.problem == "AirCavity"
@@ -64,9 +64,9 @@ end
 ############################
 
 solver1 = SolverCSD(s);
-X_dlr,S_dlr,W_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR(solver1);
+X_dlr,S_dlr,W_dlr,W_mod_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR2ndOrder(solver1);
 #u, dose_DLR,psi = SolveFirstCollisionSource(solver1);
-u = Vec2Mat(s.NCellsX,s.NCellsY,X_dlr*Diagonal(S_dlr)*W_dlr[1,:]);
+u = Vec2Mat(s.NCellsX,s.NCellsY,X_dlr*Diagonal(S_dlr)*W_mod_dlr[1,:]);
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
 
 X = (s.xMid[2:end-1]'.*ones(size(s.yMid[2:end-1])))

@@ -188,20 +188,19 @@ function ComputeTrafoMatrices(Q::Quadrature,Norder::Int,nPN::Int)
 		
 	weights = weights[:]*0.5;
 
-	global counter;
-	counter = 1
 	O = zeros(nq,Norder)
 	M = zeros(Norder,nq)
-	for l=0:nPN
-		for m=-l:l
-			for k = 1:length(mu)
-				for j = 1:length(phi)
-					global counter;
-					O[(j-1)*qorder+k,counter] =  real_sph(mu[k],phi[j],l,m)
+	for k = 1:length(mu)
+		z = computePlmx(mu[k],lmax=nPN,norm=SphericalHarmonics.Unnormalized())
+		for j = 1:length(phi)
+			counter = 1;
+			for l=0:nPN
+				for m=-l:l
+					O[(j-1)*qorder+k,counter] =  real_sph(mu[k],phi[j],l,m,z)
 					M[counter,(j-1)*qorder+k] = O[(j-1)*qorder+k,counter]*weights[(j-1)*qorder+k]
+					counter += 1
 				end
 			end
-			counter += 1
 		end
 	end
 
