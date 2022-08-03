@@ -786,7 +786,7 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
 
         W,Sv,T = svd!(L);
 
-        S .= (Diagonal(Sv)*T)';
+        S .= T * Diagonal(Sv);
 
         ############## In Scattering ##############
 
@@ -824,13 +824,13 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
             end
         end
         obj.dose .+= 0.5*dE * (X*S*W[1,:]+uOUnc) * obj.csd.S[n] ./ obj.densityVec;
-        
+
         next!(prog) # update progress bar
     end
 
     U,Sigma,V = svd!(S);
     # return solution and dose
-    return X*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*W*V,obj.dose,psi;
+    return X*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*W*V,W*V,obj.dose,psi;
 
 end
 
@@ -985,7 +985,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
             L .= L .- dE*(obj.pn.Ax*L*XL2xX' + obj.pn.Az*L*XL2yX' + obj.AbsAx*L*XL1xX' + obj.AbsAz*L*XL1yX');
                     
-            WNew,_ = svd!(L);
+            WNew,_,_ = svd!(L);
 
             NUp .= WNew' * W;
             W .= WNew;
@@ -1017,7 +1017,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         end
 
         W,S1,S2 = svd!(L)
-        S .= (Diagonal(S1) * S2)'
+        S .= S2 * Diagonal(S1)
 
         ############## In Scattering ##############
 
@@ -1257,7 +1257,7 @@ function CSolveFirstCollisionSourceDLR(obj::SolverCSD)
         end
 
         W,S1,S2 = svd!(L)
-        S .= (Diagonal(S1) * S2)'
+        S .= S2 * Diagonal(S1)
 
         ############## In Scattering ##############
 
@@ -1301,7 +1301,7 @@ function CSolveFirstCollisionSourceDLR(obj::SolverCSD)
 
     U,Sigma,V = svd!(S);
     # return solution and dose
-    return X*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*W*V,obj.dose,psi;
+    return X*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*W*V,W*V,obj.dose,psi;
 
 end
 
