@@ -4,7 +4,7 @@ function createPointStandards(n::Int64)
 end
 
 
-function computeXYZandWeights(_norder::Int64)
+function computeXYZandWeights(_norder::Int64,resolve::String="y")
     n = _norder
     pointsxyz = zeros(Float64,2*n*n,3); # Even though we only need the x and y coordinate 
                                     # we still store the corresponding z coordinate
@@ -12,10 +12,16 @@ function computeXYZandWeights(_norder::Int64)
     weights = zeros(n*n);
 
     # Construct Gauss quadrature
-    mu,gaussweights = gausslegendre(n)
+    #mu,gaussweights = gausslegendre(n)
+    mu,gaussweights = gausslobatto(n)
         
     # around z axis equidistant
-    phi = [(k+0.5)*pi/n for k=0:2*n-1] .- 0.5*pi/n
+    phi = [(k+0.5)*pi/n for k=0:2*n-1]
+
+    # make sure direction (1,0,0) lies in quadrature set. Note that _norder must be odd!
+    if resolve == "x"
+        phi .-= 0.5*pi/n;
+    end
 
     # Transform between (mu,phi) and (x,y,z)
     x = sqrt.(1.0 .- mu.^2).*cos.(phi)'

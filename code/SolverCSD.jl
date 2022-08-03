@@ -153,7 +153,7 @@ mutable struct SolverCSD
 
         # setup quadrature
         qorder = settings.nPN+22; 
-        #if iseven(qorder) qorder += 1; end # make quadrature odd to ensure direction (1,0,0) is contained
+        if iseven(qorder) qorder += 1; end # make quadrature odd to ensure direction (0,1,0) is contained
         qtype = 1; # Type must be 1 for "standard" or 2 for "octa" and 3 for "ico".
         Q = Quadrature(qorder,qtype)
 
@@ -724,9 +724,11 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
 
     # rank-r truncation:
     S = zeros(r,r);
+
     K = zeros(size(X));
     k1 = zeros(size(X));
     L = zeros(size(W));
+    l1 = zeros(size(W));
 
     WAxW = zeros(r,r)
     WAyW = zeros(r,r)
@@ -735,9 +737,6 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
     XL2xX = zeros(r,r)
     XL2yX = zeros(r,r)
     XL2zX = zeros(r,r)
-    XL1xX = zeros(r,r)
-    XL1yX = zeros(r,r)
-    XL1zX = zeros(r,r)
 
     MUp = zeros(r,r)
     NUp = zeros(r,r)
@@ -818,16 +817,17 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
             L .= W*S';
 
             XL2xX .= X'*obj.stencil.L2x*X
+            XL2yX .= X'*obj.stencil.L2y*X
             XL2zX .= X'*obj.stencil.L2z*X
-            XL1xX .= X'*obj.stencil.L1x*X
-            XL1yX .= X'*obj.stencil.L1y*X
-
-            l1 = -obj.pn.Ax*L*XL2xX' .- obj.pn.Ay*L*XL2yX' .- obj.pn.Az*L*XL2zX';
-            l2 = -obj.pn.Ax*(L+0.5*dE*l1)*XL2xX' .- obj.pn.Ay*(L+0.5*dE*l1)*XL2yX' .- obj.pn.Az*(L+0.5*dE*l1)*XL2zX';
-            l3 = -obj.pn.Ax*(L+0.5*dE*l2)*XL2xX' .- obj.pn.Ay*(L+0.5*dE*l2)*XL2yX' .- obj.pn.Az*(L+0.5*dE*l2)*XL2zX';
-            l4 = -obj.pn.Ax*(L+dE*l3)*XL2xX' .- obj.pn.Ay*(L+dE*l3)*XL2yX' .- obj.pn.Az*(L+dE*l3)*XL2zX';
-
-            L .= L .+ dE .* (l1 .+ 2 * l2 .+ 2 * l3 .+ l4) ./ 6;
+            
+            l1 .= -obj.pn.Ax*L*XL2xX' .- obj.pn.Ay*L*XL2yX' .- obj.pn.Az*L*XL2zX';
+            L .= L .+ dE .* l1 ./ 6;
+            l1 .= -obj.pn.Ax*(L+0.5*dE*l1)*XL2xX' .- obj.pn.Ay*(L+0.5*dE*l1)*XL2yX' .- obj.pn.Az*(L+0.5*dE*l1)*XL2zX';
+            L .+= 2 * dE .* l1 ./ 6;
+            l1 .= -obj.pn.Ax*(L+0.5*dE*l1)*XL2xX' .- obj.pn.Ay*(L+0.5*dE*l1)*XL2yX' .- obj.pn.Az*(L+0.5*dE*l1)*XL2zX';
+            L .+= 2 * dE .* l1 ./ 6;
+            l1 .= -obj.pn.Ax*(L+dE*l1)*XL2xX' .- obj.pn.Ay*(L+dE*l1)*XL2yX' .- obj.pn.Az*(L+dE*l1)*XL2zX';
+            L .+= dE .* l1 ./ 6;
                     
             WNew,_,_ = svd!(L);
 
@@ -841,9 +841,8 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
             S .= MUp*S*(NUp')
 
             XL2xX .= X'*obj.stencil.L2x*X
+            XL2yX .= X'*obj.stencil.L2y*X
             XL2zX .= X'*obj.stencil.L2z*X
-            XL1xX .= X'*obj.stencil.L1x*X
-            XL1yX .= X'*obj.stencil.L1y*X
 
             WAxW .= W'*obj.pn.Ax*W
             WAyW .= W'*obj.pn.Ay*W
@@ -866,7 +865,7 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
 
         W,Sv,T = svd!(L);
 
-        S .= (Diagonal(Sv)*T)';
+        S .= T*Diagonal(Sv);
 
         ############## In Scattering ##############
 
@@ -1104,7 +1103,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
         end
 
         W,S1,S2 = svd!(L)
-        S .= (Diagonal(S1) * S2)'
+        S .= S2 * Diagonal(S1)
 
         ############## In Scattering ##############
 
@@ -1346,7 +1345,7 @@ function CSolveFirstCollisionSourceDLR(obj::SolverCSD)
         end
 
         W,S1,S2 = svd!(L)
-        S .= (Diagonal(S1) * S2)'
+        S .= S2 * Diagonal(S1)
 
         ############## In Scattering ##############
 
