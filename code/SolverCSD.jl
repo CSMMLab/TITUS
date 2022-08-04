@@ -183,7 +183,7 @@ function SetupIC(obj::SolverCSD,pointsxyz::Matrix{Float64})
         for i = 1:nx
             for j = 1:ny
                 for k = 1:nz
-                    space_beam = normpdf(obj.settings.xMid[i],pos_beam[1],.1).*normpdf(obj.settings.yMid[j],pos_beam[2],.1).*normpdf(obj.settings.zMid[k],pos_beam[3],.01);
+                    space_beam = normpdf(obj.settings.xMid[i],pos_beam[1],.1).*normpdf(obj.settings.yMid[j],pos_beam[2],.1).*normpdf(obj.settings.zMid[k],pos_beam[3],.1);
                     for q = 1:nq 
                         #trafo = obj.csd.S[1]*obj.settings.density[i,j,k]; 
                         psi[i,j,k,q] = 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-pointsxyz[q,1])^2)*exp(-sigmaO2Inv*(obj.settings.Omega2-pointsxyz[q,2])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-pointsxyz[q,3])^2)*space_beam#*trafo;
@@ -711,7 +711,7 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
     println("reduction of ordinates is ",(nq-length(idxBeam))/nq*100.0," percent")
     
     obj.qReduced = obj.Q.pointsxyz[idxBeam,:]
-    obj.MReduced = obj.M[:,idxBeam]
+    obj.M = obj.M[:,idxBeam]
     obj.OReduced = obj.O[idxBeam,:]
     nq = length(idxBeam);
 
@@ -768,7 +768,7 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
             for j = 1:ny
                 for k = 1:nz
                     idx = vectorIndex(nx,ny,i,j,k)
-                    uOUnc[idx] = psi[i,j,k,:]'*obj.MReduced[1,:];
+                    uOUnc[idx] = psi[i,j,k,:]'*obj.M[1,:];
                 end
             end
         end
@@ -873,7 +873,7 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
         X[obj.boundaryIdx,:] .= 0.0;
         K .= X*S;
         #u = u .+dE*Mat2Vec(psiNew)*M'*Diagonal(Dvec);
-        K .= K .+ dE * Ten2Vec(psi) * (obj.MReduced' * (Diagonal(Dvec) * W) );
+        K .= K .+ dE * Ten2Vec(psi) * (obj.M' * (Diagonal(Dvec) * W) );
         K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
         XNew,_,_ = svd!(K);
@@ -882,7 +882,7 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
 
         ################## L-step ##################
         L = W*S';
-        L = L .+dE*Diagonal(Dvec)*obj.MReduced*(Ten2Vec(psi)'*X);
+        L = L .+dE*Diagonal(Dvec)*obj.M*(Ten2Vec(psi)'*X);
 
         WNew,_,_ = svd!(L);
 
@@ -893,14 +893,14 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
 
         ################## S-step ##################
         S .= MUp*S*(NUp')
-        S .= S .+dE*(X'*Ten2Vec(psi))*obj.MReduced'*(Diagonal(Dvec)*W);
+        S .= S .+dE*(X'*Ten2Vec(psi))*obj.M'*(Diagonal(Dvec)*W);
 
         ############## Dose Computation ##############
         for i = 1:nx
             for j = 1:ny
                 for k = 1:nz
                     idx = vectorIndex(nx,ny,i,j,k)
-                    uOUnc[idx] = psi[i,j,k,:]'*obj.MReduced[1,:];
+                    uOUnc[idx] = psi[i,j,k,:]'*obj.M[1,:];
                 end
             end
         end
