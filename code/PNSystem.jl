@@ -4,11 +4,11 @@ function sub2ind(s,row,col)
     return LinearIndices(s)[CartesianIndex.(row,col)]
 end
 
-mutable struct PNSystem
+mutable struct PNSystem{T<:AbstractFloat}
     # symmetric flux matrices
-    Ax::SparseMatrixCSC{Float64, Int64};
-    Ay::SparseMatrixCSC{Float64, Int64};
-    Az::SparseMatrixCSC{Float64, Int64};
+    Ax::SparseMatrixCSC{T, Int64};
+    Ay::SparseMatrixCSC{T, Int64};
+    Az::SparseMatrixCSC{T, Int64};
 
     # Solver settings
     settings::Settings;
@@ -20,8 +20,10 @@ mutable struct PNSystem
 
     M::SparseMatrixCSC{ComplexF64, Int64};
 
+    T::DataType;
+
     # constructor
-    function PNSystem(settings) 
+    function PNSystem(settings::Settings,T::DataType=Float64)
         N = settings.nPN;
         nTotalEntries = GlobalIndex( N, N ) + 1;    # total number of entries for sytem matrix
 
@@ -45,11 +47,11 @@ mutable struct PNSystem
         end
         M = sparse(Int.(IndI),Int.(IndJ),val,nTotalEntries,nTotalEntries);
 
-        AxT = sparse([],[],[],nTotalEntries,nTotalEntries);
-        AyT = sparse([],[],[],nTotalEntries,nTotalEntries);
-        AzT = sparse([],[],[],nTotalEntries,nTotalEntries);
+        Ax = sparse([],[],[],nTotalEntries,nTotalEntries);
+        Ay = sparse([],[],[],nTotalEntries,nTotalEntries);
+        Az = sparse([],[],[],nTotalEntries,nTotalEntries);
 
-        new(AxT,AyT,AzT,settings,nTotalEntries,N,M);
+        new{T}(Ax,Ay,Az,settings,nTotalEntries,N,M,T);
     end
 end
 
@@ -242,7 +244,7 @@ function SetupSystemMatricesSparse(obj::PNSystem)
             if  j >= 0 && j < nTotalEntries  Iz = [Iz;i+1]; Jz = [Jz;j+1]; valsz = [valsz; BParam( l + 1, k )]; end
         end
     end
-    obj.Ax = sparse(Ix,Jx,valsx,obj.nTotalEntries,obj.nTotalEntries);
-    obj.Ay = sparse(Iy,Jy,valsy,obj.nTotalEntries,obj.nTotalEntries);
-    obj.Az = sparse(Iz,Jz,valsz,obj.nTotalEntries,obj.nTotalEntries);
+    obj.Ax = sparse(Ix,Jx,obj.T.(valsx),obj.nTotalEntries,obj.nTotalEntries);
+    obj.Ay = sparse(Iy,Jy,obj.T.(valsy),obj.nTotalEntries,obj.nTotalEntries);
+    obj.Az = sparse(Iz,Jz,obj.T.(valsz),obj.nTotalEntries,obj.nTotalEntries);
 end

@@ -3,28 +3,28 @@ using Interpolations
 include("MaterialParameters.jl")
 include("MaterialParametersProtons.jl")
 
-struct CSD
+struct CSD{T<:AbstractFloat}
     # energy grid
-    eGrid::Array{Float64,1};
+    eGrid::Array{T,1};
     # transformed energy grid
-    eTrafo::Array{Float64,1};
+    eTrafo::Array{T,1};
     # stopping power for computational energy grid
-    S::Array{Float64,1};
-    SMid::Array{Float64,1};
+    S::Array{T,1};
+    SMid::Array{T,1};
     # tabulated energy for sigma
-    E_Tab::Array{Float64,1};
-    E_sigmaTab::Array{Float64,1};
+    E_Tab::Array{T,1};
+    E_sigmaTab::Array{T,1};
     # tabulated sigma
-    sigma_tab::Array{Float64,2};
-    sigma_pp::Array{Float64,2};
-    sigma_ce::Array{Float64,2};
+    sigma_tab::Array{T,2};
+    sigma_pp::Array{T,2};
+    sigma_ce::Array{T,2};
     # moment values for IC
-    StarMAPmoments::Array{Float64,1};
+    StarMAPmoments::Array{T,1};
     # settings
     settings::Settings
 
     # constructor
-    function CSD(settings::Settings)
+    function CSD(settings::Settings,T::DataType=Float64)
         # read tabulated material parameters
         if settings.particle =="Protons"
             param = MaterialParametersProtons();
@@ -90,18 +90,18 @@ struct CSD
         if settings.particle =="Electrons"
             E_tab = E_sigmaTab;
         end
-        new(eGrid,eTrafo,S,SMid,E_tab,E_sigmaTab,sigma_tab,sigma_pp,sigma_ce,param.StarMAPmoments,settings);
+        new{T}(eGrid,eTrafo,S,SMid,E_tab,E_sigmaTab,sigma_tab,sigma_pp,sigma_ce,param.StarMAPmoments,settings);
     end
 end
 
-function SigmaAtEnergy(obj::CSD, energy::Float64)
- if obj.settings.particle =="Protons"
-    if energy <= 0.001 .+ obj.settings.eRest
-        energy = 0.001 .+ obj.settings.eRest
-    end
-    y = zeros(obj.settings.nPN+1)
-    for i = 1:(obj.settings.nPN+1)
-        # define Sigma mapping for interpolation at moment i
+function SigmaAtEnergy(obj::CSD{T}, energy::T) where {T<:AbstractFloat}
+    if obj.settings.particle =="Protons"
+        if energy <= 0.001 .+ obj.settings.eRest
+            energy = 0.001 .+ obj.settings.eRest
+        end
+        y = zeros(obj.settings.nPN+1)
+        for i = 1:(obj.settings.nPN+1)
+            # define Sigma mapping for interpolation at moment i
             if energy<7 .+ obj.settings.eRest
                 E2Sigma_pp = LinearInterpolation(obj.E_Tab, obj.sigma_pp[:,i]; extrapolation_bc=Throw())
                 E2Sigma_ce = LinearInterpolation(obj.E_Tab, obj.sigma_ce[:,i]; extrapolation_bc=Throw())
@@ -112,16 +112,16 @@ function SigmaAtEnergy(obj::CSD, energy::Float64)
                 E2Sigma_ce = LinearInterpolation(obj.E_Tab, obj.sigma_ce[:,i]; extrapolation_bc=Throw())
                 y[i] = 0.88810600 .* E2Sigma_O(energy) .+ 0.11189400.* E2Sigma_pp(energy) + E2Sigma_ce(energy);
             end
-    end
+        end
     else
-    if energy <= 5e-5
-        energy = 5e-5+1e-9
+        if energy <= 5e-5
+            energy = 5e-5+1e-9
+        end
+        y = zeros(obj.settings.nPN+1)
+        for i = 1:(obj.settings.nPN+1)
+            E2Sigma = LinearInterpolation(obj.E_Tab, obj.sigma_tab[:,i]; extrapolation_bc=Throw())
+            y[i] = E2Sigma(energy)
+        end
     end
-    y = zeros(obj.settings.nPN+1)
-    for i = 1:(obj.settings.nPN+1)
-        E2Sigma = LinearInterpolation(obj.E_Tab, obj.sigma_tab[:,i]; extrapolation_bc=Throw())
-        y[i] = E2Sigma(energy)
-    end
-end
-    return y;
+    return T.(y);
 end

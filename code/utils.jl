@@ -104,8 +104,8 @@ function vectorIndex(nx,ny,i,j,k)
 end
 
 
-function Vec2Ten(nx,ny,nz,v::Array{Float64,1})
-    m = zeros(nx,ny,nz);
+function Vec2Ten(nx,ny,nz,v::Array{T,1}) where {T<:AbstractFloat}
+    m = zeros(T,nx,ny,nz);
     for i = 1:nx
         for j = 1:ny
             for k = 1:nz
@@ -116,9 +116,9 @@ function Vec2Ten(nx,ny,nz,v::Array{Float64,1})
     return m;
 end
 
-function Vec2Ten(nx,ny,nz,v::Array{Float64,2})
+function Vec2Ten(nx,ny,nz,v::Array{T,2}) where {T<:AbstractFloat}
     n = size(v,2);
-    m = zeros(nx,ny,nz,n);
+    m = zeros(T,nx,ny,nz,n);
     for i = 1:nx
         for j = 1:ny
             for k = 1:nz
@@ -129,12 +129,12 @@ function Vec2Ten(nx,ny,nz,v::Array{Float64,2})
     return m;
 end
 
-function Ten2Vec(mat::Array{Float64,4})
+function Ten2Vec(mat::Array{T,4}) where {T<:AbstractFloat}
     nx = size(mat,1)
     ny = size(mat,2)
     nz = size(mat,3)
     m = size(mat,4)
-    v = zeros(nx*ny*nz,m);
+    v = zeros(T,nx*ny*nz,m);
     for i = 1:nx
         for j = 1:ny
             for k = 1:nz
@@ -145,11 +145,11 @@ function Ten2Vec(mat::Array{Float64,4})
     return v;
 end
 
-function Ten2Vec(mat::Array{Float64,3})
+function Ten2Vec(mat::Array{T,3}) where {T<:AbstractFloat}
     nx = size(mat,1)
     ny = size(mat,2)
     nz = size(mat,3)
-    v = zeros(nx*ny*nz);
+    v = zeros(T,nx*ny*nz);
     for i = 1:nx
         for j = 1:ny
             for k = 1:nz

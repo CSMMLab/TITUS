@@ -9,9 +9,9 @@ using WriteVTK
 
 close("all")
 
-nx = Int(floor(2 * 60));
-ny = Int(floor(8 * 60));
-nz = Int(floor(2 * 60));
+nx = Int(floor(2 * 20));
+ny = Int(floor(8 * 20));
+nz = Int(floor(2 * 20));
 problem ="validation" #"2DHighD"
 particle = "Protons"
 s = Settings(nx,ny,nz,5,problem, particle);
@@ -64,7 +64,7 @@ end
 ############################
 
 solver1 = SolverCSD(s);
-X_dlr,S_dlr,W_dlr_SN,W_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR2ndOrder(solver1);
+X_dlr,S_dlr,W_dlr_SN,W_dlr, dose_DLR, psi_DLR = CudaFullSolveFirstCollisionSourceDLR4thOrder(solver1);
 #u, dose_DLR,psi = SolveFirstCollisionSource(solver1);
 u = Vec2Ten(s.NCellsX,s.NCellsY,s.NCellsZ,X_dlr*Diagonal(S_dlr)*W_dlr[1,:]);
 dose_DLR = Vec2Ten(s.NCellsX,s.NCellsY,s.NCellsZ,dose_DLR);
@@ -84,8 +84,8 @@ YRef = (yRef[2:end-1]'.*ones(size(yRef[2:end-1])))'
 # write vtk file
 vtkfile = vtk_grid("output/dose_csd_nx$(s.NCellsX)ny$(s.NCellsY)nz$(s.NCellsZ)", s.xMid, s.yMid,s.zMid)
 vtkfile["dose"] = dose_DLR
-vtkfile["dose_normalized"] = dose_DLR./maximum(dose_DLR)
-vtkfile["u"] = u/0.5/sqrt(solver1.gamma[1])
+#vtkfile["dose_normalized"] = dose_DLR./maximum(dose_DLR)
+#vtkfile["u"] = u/0.5/sqrt(solver1.gamma[1])
 outfiles = vtk_save(vtkfile)
 
 doseSum = zeros(nx-1,ny-1);
@@ -114,7 +114,7 @@ plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
 plt.title(L"dose, DLRA", fontsize=25)
 tight_layout()
-savefig("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
+savefig("output/doseYX_csd_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nz$(s.NCellsZ)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
 
 fig = figure("Dose, DLRA cut z",figsize=(10*(s.d/s.b),10),dpi=100)
 ax = gca()
@@ -125,7 +125,7 @@ plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
 plt.title(L"dose, DLRA", fontsize=25)
 tight_layout()
-savefig("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
+savefig("output/doseYZ_csd_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nz$(s.NCellsZ)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
 
 levels = 20;
 fig = figure("Dose countours, DLRA",figsize=(10*(s.d/s.b),10),dpi=100)
@@ -136,7 +136,7 @@ ax.tick_params("both",labelsize=20)
 plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
 tight_layout()
-savefig("output/doseiso_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
+savefig("output/doseYXcontour_csd_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nz$(s.NCellsZ)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
 
 # line plot dose
 fig, ax = subplots()
@@ -176,7 +176,7 @@ plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
 plt.title(L"$\sum$ u", fontsize=25)
 tight_layout()
-savefig("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
+savefig("output/sum_uYX_csd_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nz$(s.NCellsZ)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
 
 
 fig = figure("u",figsize=(10*(s.d/s.b),10),dpi=100)
@@ -189,6 +189,6 @@ plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
 plt.title(L"u", fontsize=25)
 tight_layout()
-savefig("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
+savefig("output/uYX_csd_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nz$(s.NCellsZ)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
 
 println("main finished")
