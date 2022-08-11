@@ -2800,7 +2800,8 @@ struct MaterialParametersProtons
                         
          E_rest = 938.26 #MeV proton rest energy
          sigmaEl_tab_pp = Proton_Proton_nuclear(E_tab_PSTAR,Omega_sigmaElTab);
-         sigma_ce = Coulomb(E_tab_PSTAR,Omega_sigmaElTab)
+        #  sigma_ce = Coulomb(E_tab_PSTAR,Omega_sigmaElTab) #multiple coulomb scattering (dependent on unknown spacial stepsize)
+         sigma_ce = Rutherford(E_tab_PSTAR,Omega_sigmaElTab) #single coulomb scattering
          E_tab_PSTAR= dropdims(E_tab_PSTAR, dims = tuple(findall(size(E_tab_PSTAR) .== 1)...)).+ E_rest
          E_sigmaTab= E_sigmaTab .+ E_rest
          #sigmaTab = 0.88810600 .* sigmaEl_OInt_ICRU .+ 0.11189400.* sigmaEl_tab_pp + sigma_ce;
@@ -2881,6 +2882,23 @@ struct MaterialParametersProtons
 
     function Highland(energy,thickness,x0)
         return 0.0136 ./energy.*sqrt.(thickness./x0).*(1 .+ 0.038*log(thickness./x0)) #width of multiple coulomb scattering distribution in rad
+    end
+     
+    function Rutherford(E,Omega)
+        #This is valid for single Coulomb scattering events
+        Z_effH2O = 7.42 #effective atomic number of water
+        M_H2O = 18.02 #g/mol~=amu
+        Z_p = 1 #atomic number of protons
+        M_p = 1.007276466621 #unit amu/Da
+        e = 1.602176634*10^-19 #elementary electric charge
+        eps0 = 8.8541878128*10^-12 #elektrische Feldkonstante
+        sigma=zeros(size(E,1),size(Omega,1));
+        for i=1:size(E,1)
+             sigma[i,:] = (4*pi*eps0).^-2 .* (Z_effH2O*Z_p*e^2/(4*E[i]))^2 .* (1 ./ (sind.(Omega./2).^4)) #in b/sr [Otter, G., Honecker, R. (1993). Klassische Atomphysik. In: Atome — Moleküle — Kerne. Vieweg+Teubner Verlag. https://doi.org/10.1007/978-3-322-94764-2_2]
+        end
+        N = 40;
+        xi = integrateXS_Poly(N,cosd.(Omega),E,sigma)
+        return xi
     end
 end
 

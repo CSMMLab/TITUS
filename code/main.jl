@@ -10,7 +10,7 @@ using WriteVTK
 close("all")
 
 nx = Int(floor(2 * 50));
-ny = Int(floor(8 * 50));
+ny = Int(floor(8 * 100));
 nz = Int(floor(2 * 50));
 problem ="validation" #"2DHighD"
 particle = "Protons"
