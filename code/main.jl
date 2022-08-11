@@ -10,8 +10,8 @@ using WriteVTK
 
 #close("all")
 
-nx = 201;
-ny = 201;
+nx = 501;
+ny = 501;
 problem ="validation" #"2DHighD"
 particle = "Protons"
 s = Settings(nx,ny,3,problem, particle);

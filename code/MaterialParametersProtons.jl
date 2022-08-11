@@ -2800,7 +2800,8 @@ struct MaterialParametersProtons
                         
          E_rest = 938.26 #MeV proton rest energy
          sigmaEl_tab_pp = Proton_Proton_nuclear(E_tab_PSTAR,Omega_sigmaElTab);
-         sigma_ce = Coulomb(E_tab_PSTAR,Omega_sigmaElTab)
+         #sigma_ce = Coulomb(E_tab_PSTAR,Omega_sigmaElTab)
+         sigma_ce = Rutherford(E_tab_PSTAR,Omega_sigmaElTab)
          E_tab_PSTAR= dropdims(E_tab_PSTAR, dims = tuple(findall(size(E_tab_PSTAR) .== 1)...)).+ E_rest
          E_sigmaTab= E_sigmaTab .+ E_rest
          #sigmaTab = 0.88810600 .* sigmaEl_OInt_ICRU .+ 0.11189400.* sigmaEl_tab_pp + sigma_ce;
@@ -2881,6 +2882,18 @@ struct MaterialParametersProtons
 
     function Highland(energy,thickness,x0)
         return 0.0136 ./energy.*sqrt.(thickness./x0).*(1 .+ 0.038*log(thickness./x0)) #width of multiple coulomb scattering distribution in rad
+    end
+
+    
+    function Rutherford(E,Omega)
+        #This is valid for single Coulomb scattering events
+        Z_effH2O = 7.42 #effective atomic number of water
+        Z_p = 1 #atomic number of protons
+
+        sigma = 1.3*10^-3.*(Z_effH2O*Z_p/E).^2./(sind.(Omega./2).^4)
+        N = 40;
+        xi = integrateXS_Poly(N,cosd.(Omega_sigmaElTab),E,sigma)
+        return xi
     end
 end
 
