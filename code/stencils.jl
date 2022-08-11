@@ -217,22 +217,22 @@ struct Stencils{T<:AbstractFloat}
                         if i > 2
                             II[counter] = index;
                             J[counter] = indexMM;
-                            vals[counter] = -1/12/settings.dx/density[i-2,j,k];
+                            vals[counter] = 1/12/settings.dx/density[i-2,j,k];
                         end
                         if i > 1
                             II[counter+1] = index;
                             J[counter+1] = indexMinus;
-                            vals[counter+1] = 8/12/settings.dx/density[i-1,j,k];
+                            vals[counter+1] = -8/12/settings.dx/density[i-1,j,k];
                         end
                         if i < nx
                             II[counter+2] = index;
                             J[counter+2] = indexPlus;
-                            vals[counter+2] = -8/12/settings.dx/density[i+1,j,k]; 
+                            vals[counter+2] = +8/12/settings.dx/density[i+1,j,k]; 
                         end
                         if i < nx-1
                             II[counter+3] = index;
                             J[counter+3] = indexPP;
-                            vals[counter+3] = 1/12/settings.dx/density[i+2,j,k]; 
+                            vals[counter+3] = -1/12/settings.dx/density[i+2,j,k]; 
                         end
                     end
                 end
@@ -256,22 +256,22 @@ struct Stencils{T<:AbstractFloat}
                         if j > 2
                             II[counter] = index;
                             J[counter] = indexMM;
-                            vals[counter] = -1/12/settings.dx/density[i,j-2,k];
+                            vals[counter] = 1/12/settings.dx/density[i,j-2,k];
                         end
                         if j > 1
                             II[counter+1] = index;
                             J[counter+1] = indexMinus;
-                            vals[counter+1] = 8/12/settings.dx/density[i,j-1,k];
+                            vals[counter+1] = -8/12/settings.dx/density[i,j-1,k];
                         end
                         if j < ny
                             II[counter+2] = index;
                             J[counter+2] = indexPlus;
-                            vals[counter+2] = -8/12/settings.dx/density[i,j+1,k]; 
+                            vals[counter+2] = 8/12/settings.dx/density[i,j+1,k]; 
                         end
                         if j < ny-1
                             II[counter+3] = index;
                             J[counter+3] = indexPP;
-                            vals[counter+3] = 1/12/settings.dx/density[i,j+2,k]; 
+                            vals[counter+3] = -1/12/settings.dx/density[i,j+2,k]; 
                         end
                     end
                 end
@@ -295,22 +295,22 @@ struct Stencils{T<:AbstractFloat}
                         if k > 2
                             II[counter] = index;
                             J[counter] = indexMM;
-                            vals[counter] = -1/12/settings.dx/density[i,j,k-2];
+                            vals[counter] = 1/12/settings.dx/density[i,j,k-2];
                         end
                         if k > 1
                             II[counter+1] = index;
                             J[counter+1] = indexMinus;
-                            vals[counter+1] = 8/12/settings.dx/density[i,j,k-1];
+                            vals[counter+1] = -8/12/settings.dx/density[i,j,k-1];
                         end
                         if k < nz
                             II[counter+2] = index;
                             J[counter+2] = indexPlus;
-                            vals[counter+2] = -8/12/settings.dx/density[i,j,k+1]; 
+                            vals[counter+2] = +8/12/settings.dx/density[i,j,k+1]; 
                         end
                         if k < nz-1
                             II[counter+3] = index;
                             J[counter+3] = indexPP;
-                            vals[counter+3] = 1/12/settings.dx/density[i,j,k+2]; 
+                            vals[counter+3] = -1/12/settings.dx/density[i,j,k+2]; 
                         end
                     end
                 end
