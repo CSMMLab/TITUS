@@ -2888,10 +2888,14 @@ struct MaterialParametersProtons
     function Rutherford(E,Omega)
         #This is valid for single Coulomb scattering events
         Z_effH2O = 7.42 #effective atomic number of water
+        M_H2O = 18.02 #g/mol~=amu
         Z_p = 1 #atomic number of protons
+        M_p = 1.007276466621 #unit amu/Da
+        e = 1.602176634*10^-19 #elementary electric charge
+        eps0 = 8.8541878128*10^-12 #elektrische Feldkonstante
         sigma=zeros(size(E,1),size(Omega,1));
         for i=1:size(E,1)
-             sigma[i,:] = (1.3*10^-3) .*(Z_effH2O*Z_p/E[i]).^2 ./(sind.(Omega./2).^4)
+             sigma[i,:] = (4*pi*eps0).^-2 .* (Z_effH2O*Z_p*e^2/(4*E[i]))^2 .* (1 ./ (sind.(Omega./2).^4)) #in b/sr [Otter, G., Honecker, R. (1993). Klassische Atomphysik. In: Atome — Moleküle — Kerne. Vieweg+Teubner Verlag. https://doi.org/10.1007/978-3-322-94764-2_2]
         end
         N = 40;
         xi = integrateXS_Poly(N,cosd.(Omega),E,sigma)
