@@ -2889,10 +2889,12 @@ struct MaterialParametersProtons
         #This is valid for single Coulomb scattering events
         Z_effH2O = 7.42 #effective atomic number of water
         Z_p = 1 #atomic number of protons
-
-        sigma = 1.3*10^-3.*(Z_effH2O*Z_p/E).^2./(sind.(Omega./2).^4)
+        sigma=zeros(size(E,1),size(Omega,1));
+        for i=1:size(E,1)
+             sigma[i,:] = (1.3*10^-3) .*(Z_effH2O*Z_p/E[i]).^2 ./(sind.(Omega./2).^4)
+        end
         N = 40;
-        xi = integrateXS_Poly(N,cosd.(Omega_sigmaElTab),E,sigma)
+        xi = integrateXS_Poly(N,cosd.(Omega),E,sigma)
         return xi
     end
 end
