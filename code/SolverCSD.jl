@@ -158,14 +158,18 @@ function SetupIC(obj::SolverCSD,pointsxyz::Matrix{Float64})
     nx = obj.settings.NCellsX;
     ny = obj.settings.NCellsY;
     psi = zeros(obj.settings.NCellsX,obj.settings.NCellsY,nq);
-    pos_beam = [obj.settings.x0,obj.settings.y0,0];
+    pos_beam = [obj.settings.x0, obj.settings.y0,0];
     sigmaO1Inv = 10000.0;
     sigmaO3Inv = 10000.0;
 
-    if obj.settings.problem == "validation"
-        for i = 1:nx
-            for j = 1:ny
-                space_beam = normpdf(obj.settings.xMid[i],pos_beam[1],.1).*normpdf(obj.settings.yMid[j],pos_beam[2],.1);
+    if obj.settings.problem == "validation" || obj.settings.problem == "protonBeam"
+        for i = 3:nx - 2
+            for j = 3:ny - 2
+                if obj.settings.problem == "protonBeam"
+                    space_beam = normpdf(obj.settings.xMid[i],pos_beam[1],.1).*normpdf(obj.settings.yMid[j],pos_beam[2],.1);
+                else
+                    space_beam = normpdf(obj.settings.xMid[i],pos_beam[1],.4).*normpdf(obj.settings.yMid[j],pos_beam[2],.4);
+                end
                 for k = 1:nq 
                     #trafo = obj.csd.S[1]*obj.settings.density[i,j]; 
                     psi[i,j,k] = 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-pointsxyz[k,1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-pointsxyz[k,3])^2)*space_beam#*trafo;

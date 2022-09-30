@@ -134,25 +134,43 @@ mutable struct Settings
             epsAdapt = 0.3;#0.5;
             density[Int(floor(NCellsX*0.56/(b-a))):end,:] .= 5.0;
         elseif problem =="validation"
-            a = 0.0483333333333333; # left boundary
-            b = 14.4516666666667; # right boundary
-            c = 0.0483333333333333; # lower boundary
-            d = 14.4516666666667; # upper boundary
+            pathlib = pyimport("pathlib")
+            path = pathlib.Path(pwd())
+            println(path)
+            img = Float64.(Gray.(load("5-070_part.png")))
+            nx = size(img,1)
+            ny = size(img,2)
+            densityMin = 0.2
+
+            for i = 1:NCellsX
+                for j = 1:NCellsY
+                    idx1 = max( Int(floor(i/(NCellsX)*nx)), 1);
+                    idx2 = max( Int(floor(j/(NCellsY)*ny)), 1);
+                    density[i,j] = max(1.85*img[idx1,idx2],densityMin) # 1.85 bone, 1.04 muscle, 0.3 lung
+                end
+            end
+            #density = ones(size(density))
+
+            a = 0.0; # left boundary
+            b = 14.5; # right boundary
+            c = 0.0; # lower boundary
+            d = 14.5; # upper boundary
             sigmaS = 1.0;
             sigmaA = 0.0;  
             cfl = 0.99/sqrt(2)*120.5;  
-            eKin = 90;
+            eKin = 85;
             eMax = eKin + eRest
             adaptIndex = 0;
             epsAdapt = 0.3;#0.5;
-            Omega1 = -0.0;
-            Omega3 = 1.0;
-            x0 = 0.5*b;
-            y0 = 0.5*d;
-            #epsAdapt = 1e-1;
-            #density[Int(floor(NCellsX*0.5)):end,:] .= 5.0; #beam hits interface
-            #density[:,Int(floor(NCellsX*0.56)):end] .= 5.0; #beam perpendicular to interface
-            #density[:,Int(floor(NCellsY*0.75)):Int(floor(NCellsY*0.8))] .= 5.0; #inserted box of high density 
+
+            Omega1 = -1.0;
+            Omega3 = 0.1;
+            x0 = 0.95*b;
+            y0 = 0.5*d; 
+            #Omega1 = -0.0;
+            #Omega3 = 1.0;
+            #x0 = 0.5*b;
+            #y0 = 0.5*d;
         elseif problem =="lungOrig"
             #img = Float64.(Gray.(load("phantom.png")))
             pathlib = pyimport("pathlib")

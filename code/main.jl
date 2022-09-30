@@ -10,8 +10,8 @@ using WriteVTK
 
 #close("all")
 
-nx = 501;
-ny = 501;
+nx = 201;
+ny = 201;
 problem ="validation" #"2DHighD"
 particle = "Protons"
 s = Settings(nx,ny,3,problem, particle);
@@ -153,14 +153,16 @@ savefig("output/DoseCutYNx$(s.Nx)")
 
 fig, ax = subplots()
 nyRef = length(yRef)
-ax.plot(s.yMid,dose_DLR[Int(floor(s.NCellsX/2)),:]./maximum(dose_DLR[Int(floor(s.NCellsX/2)),:]), "b--", linewidth=2, label="CSD_DLR", alpha=0.8)
+#ax.plot(s.yMid,dose_DLR[Int(floor(s.NCellsX/2)),:]./maximum(dose_DLR[Int(floor(s.NCellsX/2)),:]), "b--", linewidth=2, label="CSD_DLR", alpha=0.8)
+ax.plot(s.yMid,dose_DLR[Int(floor(s.NCellsX/2)),:], "b--", linewidth=2, label="CSD_DLR", alpha=0.8)
+
 if s.problem == "2DHighD"
    ax.plot(xRef',doseRef[:,Int(floor(nyRef/2))]./maximum(doseRef[:,Int(floor(nyRef/2))]), "k-", linewidth=2, label="Starmap", alpha=0.6)
    ax.plot(yMC,doseMC[Int(floor(nxMC/2)),:]./maximum(doseMC[Int(floor(nxMC/2)),:])*1.3, "r:", linewidth=2, label="MC", alpha=0.6)
 end
 ax.legend(loc="upper left")
 ax.set_xlim([0.5*(s.a+s.b),s.b])
-ax.set_ylim([0,1.05])
+#ax.set_ylim([0,1.05])
 ax.tick_params("both",labelsize=20) 
 show()
 tight_layout()
