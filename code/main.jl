@@ -10,11 +10,11 @@ using WriteVTK
 
 #close("all")
 
-nx = 201;
-ny = 201;
-problem ="validation" #"2DHighD"
+nx = 101;
+ny = 401;
+problem ="waterBeam" #"2DHighD"
 particle = "Protons"
-s = Settings(nx,ny,3,problem, particle);
+s = Settings(nx,ny,5,problem, particle);
 rhoMin = minimum(s.density);
 
 if s.problem == "AirCavity"
@@ -25,7 +25,7 @@ elseif s.problem == "WaterPhantomKerstin"
     smapIn = readdlm("doseStarmapWaterPhantom.txt", ',', Float64)
     xRef = smapIn[:,1]
     doseRef = smapIn[:,2]
-elseif s.problem == "validation"
+elseif s.problem == "validation" || s.problem == "waterBeam"
     doseRef = readdlm("validationData/dose_starmap_full150.txt", Float64)
     xRef = readdlm("validationData/x_starmap_nx150.txt", Float64)
     yRef = readdlm("validationData/y_starmap_ny150.txt", Float64)
