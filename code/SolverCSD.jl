@@ -17,20 +17,19 @@ include("quadratures/Quadrature.jl")
 include("utils.jl")
 include("stencils.jl")
 
-mutable struct SolverCSD
+mutable struct SolverCSD{T<:AbstractFloat}
     # spatial grid of cell interfaces
-    x::Array{Float64};
-    y::Array{Float64};
-    xGrid::Array{Float64,2}
+    x::Array{T};
+    y::Array{T};
 
     # Solver settings
     settings::Settings;
     
     # squared L2 norms of Legendre coeffs
-    gamma::Array{Float64,1};
+    gamma::Array{T,1};
     # Roe matrix
-    AbsAx::SparseMatrixCSC{Float64, Int64};
-    AbsAz::SparseMatrixCSC{Float64, Int64};
+    AbsAx::SparseMatrixCSC{T, Int64};
+    AbsAz::SparseMatrixCSC{T, Int64};
 
     # functionalities of the CSD approximation
     csd::CSD;
@@ -42,39 +41,42 @@ mutable struct SolverCSD
     stencil::Stencils;
 
     # material density
-    density::Array{Float64,2};
-    densityVec::Array{Float64,1};
+    density::Array{T,2};
+    densityVec::Array{T,1};
 
     # dose vector
-    dose::Array{Float64,1};
+    dose::Array{T,1};
 
     boundaryIdx::Array{Int,1}
 
     Q::Quadrature
-    O::Array{Float64,2};
-    M::Array{Float64,2};
+    O::Array{T,2};
+    M::Array{T,2};
 
-    OReduced::Array{Float64,2};
-    MReduced::Array{Float64,2};
-    qReduced::Array{Float64,2};
+    T::DataType;
+
+    OReduced::Array{T,2};
+    MReduced::Array{T,2};
+    qReduced::Array{T,2};
 
     # constructor
     function SolverCSD(settings)
+        T = Float32; # define accuracy 
         x = settings.x;
         y = settings.y;
 
         # setup flux matrix
-        gamma = zeros(settings.nPN+1);
+        gamma = zeros(T,settings.nPN+1);
         for i = 1:settings.nPN+1
             n = i-1;
             gamma[i] = 2/(2*n+1);
         end
 
         # construct CSD fields
-        csd = CSD(settings);
+        csd = CSD(settings,T);
 
         # construct PN system matrices
-        pn = PNSystem(settings)
+        pn = PNSystem(settings,T)
         Ax,_,Az = SetupSystemMatrices(pn);
         SetupSystemMatricesSparse(pn);
 
@@ -85,20 +87,20 @@ mutable struct SolverCSD
 
         idx = findall(abs.(AbsAx) .> 1e-10)
         Ix = first.(Tuple.(idx)); Jx = last.(Tuple.(idx)); vals = AbsAx[idx];
-        AbsAx = sparse(Ix,Jx,vals,pn.nTotalEntries,pn.nTotalEntries);
+        AbsAx = sparse(Ix,Jx,T.(vals),pn.nTotalEntries,pn.nTotalEntries);
         
         S = eigvals(Az)
         V = eigvecs(Az)
         AbsAz = V*abs.(diagm(S))*inv(V)
         idx = findall(abs.(AbsAz) .> 1e-10)
         Iz = first.(Tuple.(idx)); Jz = last.(Tuple.(idx)); valsz = AbsAz[idx];
-        AbsAz = sparse(Iz,Jz,valsz,pn.nTotalEntries,pn.nTotalEntries);
+        AbsAz = sparse(Iz,Jz,T.(valsz),pn.nTotalEntries,pn.nTotalEntries);
 
         # set density vector
-        density = settings.density;
+        density = T.(settings.density);
 
         # allocate dose vector
-        dose = zeros(settings.NCellsX*settings.NCellsY)
+        dose = zeros(T, settings.NCellsX*settings.NCellsY)
 
         nx = settings.NCellsX;
         ny = settings.NCellsY;
@@ -128,17 +130,6 @@ mutable struct SolverCSD
             boundaryIdx[counter] = idx
         end
 
-        # setup spatial grid
-        xGrid = zeros(nx*ny,2)
-        for i = 1:nx
-            for j = 1:ny
-                # y part
-                index = vectorIndex(ny,i,j);
-                xGrid[index,1] = settings.xMid[i];
-                xGrid[index,2] = settings.yMid[j];
-            end
-        end
-
         # setup quadrature
         qorder = settings.nPN+1; # must be even for standard quadrature
         qtype = 1; # Type must be 1 for "standard" or 2 for "octa" and 3 for "ico".
@@ -147,9 +138,11 @@ mutable struct SolverCSD
         Norder = pn.nTotalEntries
         O,M = ComputeTrafoMatrices(Q,Norder,settings.nPN)
 
-        stencil = Stencils(settings);
+        stencil = Stencils(settings,T);
 
-        new(x,y,xGrid,settings,gamma,AbsAx,AbsAz,csd,pn,stencil,density,vec(density'),dose,boundaryIdx,Q,O,M);
+        densityVec = vec(Mat2Vec(density));
+
+        new{T}(T.(x),T.(y),settings,gamma,AbsAx,AbsAz,csd,pn,stencil,density,T.(densityVec),dose,boundaryIdx,Q,T.(O),T.(M),T);
     end
 end
 
@@ -159,11 +152,11 @@ def qr(A):
     return numpy.linalg.qr(A)
 """
 
-function SetupIC(obj::SolverCSD,pointsxyz::Matrix{Float64})
+function SetupIC(obj::SolverCSD{T},pointsxyz::Matrix{Float64}) where {T<:AbstractFloat}
     nq = size(pointsxyz)[1];
     nx = obj.settings.NCellsX;
     ny = obj.settings.NCellsY;
-    psi = zeros(obj.settings.NCellsX,obj.settings.NCellsY,nq);
+    psi = zeros(T, obj.settings.NCellsX,obj.settings.NCellsY,nq);
     pos_beam = [obj.settings.x0, obj.settings.y0,0];
     sigmaO1Inv = 10000.0;
     sigmaO3Inv = 10000.0;
@@ -191,7 +184,7 @@ function SetupIC(obj::SolverCSD,pointsxyz::Matrix{Float64})
     return psi;
 end
 
-function SetupICMoments(obj::SolverCSD)
+function SetupICMoments(obj::SolverCSD{T}) where {T<:AbstractFloat}
     u = zeros(obj.settings.NCellsX,obj.settings.NCellsY,obj.pn.nTotalEntries);
     
     if obj.settings.problem == "CT"
@@ -239,12 +232,12 @@ function SetupICMoments(obj::SolverCSD)
     return u;
 end
 
-function PsiLeft(obj::SolverCSD,n::Int,mu::Float64)
+function PsiLeft(obj::SolverCSD{T},n::Int,mu::Float64) where {T<:AbstractFloat}
     E0 = obj.settings.eMax;
     return 10^5*exp(-200.0*(1.0-mu)^2)*exp(-50*(E0-E)^2)
 end
 
-function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y::Float64,n::Int)
+function PsiBeam(obj::SolverCSD{T},Omega::Array{Float64,1},E::Float64,x::Float64,y::Float64,n::Int) where {T<:AbstractFloat}
     E0 = obj.settings.eMax;
     if obj.settings.problem == "lung" || obj.settings.problem == "lungOrig"
         sigmaO1Inv = 0.0;
@@ -282,7 +275,7 @@ function PsiBeam(obj::SolverCSD,Omega::Array{Float64,1},E::Float64,x::Float64,y:
     return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*exp(-sigmaEInv*(E0-E)^2)*exp(-sigmaXInv*(x-obj.settings.x0)^2)*exp(-sigmaYInv*(y-obj.settings.y0)^2)*obj.csd.S[n]*obj.settings.densityMin;
 end
 
-function BCLeft(obj::SolverCSD,n::Int)
+function BCLeft(obj::SolverCSD{T},n::Int) where {T<:AbstractFloat}
     if obj.settings.problem == "WaterPhantomEdgar"
         E0 = obj.settings.eMax;
         E = obj.csd.eGrid[n];
@@ -314,7 +307,7 @@ end
     return minmod(2.0 * (right - center),tmp);
 end
 
-function solveFlux!(obj::SolverCSD, phi::Array{Float64,3}, flux::Array{Float64,3})
+function solveFlux!(obj::SolverCSD{T}, phi::Array{Float64,3}, flux::Array{Float64,3}) where {T<:AbstractFloat}
     # computes the numerical flux over cell boundaries for each ordinate
     # for faster computation, we split the iteration over quadrature points
     # into four different blocks: North West, Nort East, Sout West, South East
@@ -407,7 +400,7 @@ function solveFlux!(obj::SolverCSD, phi::Array{Float64,3}, flux::Array{Float64,3
     end
 end
 
-function solveFluxUpwind!(obj::SolverCSD, phi::Array{Float64,3}, flux::Array{Float64,3})
+function solveFluxUpwind!(obj::SolverCSD{T}, phi::Array{Float64,3}, flux::Array{Float64,3}) where {T<:AbstractFloat}
     # computes the numerical flux over cell boundaries for each ordinate
     # for faster computation, we split the iteration over quadrature points
     # into four different blocks: North West, Nort East, Sout West, South East
@@ -484,7 +477,7 @@ function solveFluxUpwind!(obj::SolverCSD, phi::Array{Float64,3}, flux::Array{Flo
     end
 end
 
-function SolveFirstCollisionSource(obj::SolverCSD)
+function SolveFirstCollisionSource(obj::SolverCSD{T}) where {T<:AbstractFloat}
     eTrafo = obj.csd.eTrafo;
     energy = obj.csd.eGrid;
     S = obj.csd.S;
@@ -607,7 +600,7 @@ function SolveFirstCollisionSource(obj::SolverCSD)
 
 end
 
-function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
+function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD{T}) where {T<:AbstractFloat}
     # Get rank
     r=obj.settings.r;
 
@@ -812,9 +805,9 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
             L[:,i] = (Id .+ dE*D)\L[:,i]
         end
 
-        W,Sv,T = svd!(L);
+        W,Sv,Ts = svd!(L);
 
-        S .= T * Diagonal(Sv);
+        S .= Ts * Diagonal(Sv);
 
         ############## In Scattering ##############
 
@@ -910,7 +903,7 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
 
 end
 
-function SolveFullyParallelGianlucaJonas(obj::SolverCSD)
+function SolveFullyParallelGianlucaJonas(obj::SolverCSD{T}) where {T<:AbstractFloat}
     # Get rank
     r=obj.settings.r;
 
@@ -1097,9 +1090,9 @@ function SolveFullyParallelGianlucaJonas(obj::SolverCSD)
             L[:,i] = (Id .+ dE*D)\L[:,i]
         end
 
-        W,Sv,T = svd!(L);
+        W,Sv,Ts = svd!(L);
 
-        S .= T * Diagonal(Sv);
+        S .= Ts * Diagonal(Sv);
 
         ############## In Scattering ##############
 
@@ -1194,8 +1187,7 @@ function SolveFullyParallelGianlucaJonas(obj::SolverCSD)
     return X*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*W*V,W*V,obj.dose,psi;
 end
 
-
-function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
+function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD{T}) where {T<:AbstractFloat}
     # Get rank
     r=obj.settings.r;
 
@@ -1400,9 +1392,9 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
             L[:,i] = (Id .+ dE*D)\L[:,i]
         end
 
-        W,Sv,T = svd!(L);
+        W,Sv,Ts = svd!(L);
 
-        S .= T * Diagonal(Sv);
+        S .= Ts * Diagonal(Sv);
 
         ############## In Scattering ##############
 
@@ -1497,7 +1489,7 @@ function SolveFirstCollisionSourceDLR2ndOrder(obj::SolverCSD)
     return X*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*W*V,W*V,obj.dose,psi;
 end
 
-function SolveFirstCollisionSourceDLR(obj::SolverCSD)
+function SolveFirstCollisionSourceDLR(obj::SolverCSD{T}) where {T<:AbstractFloat}
     # Get rank
     r=obj.settings.r;
 
@@ -1728,7 +1720,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD)
 
 end
 
-function CSolveFirstCollisionSourceDLR(obj::SolverCSD)
+function CSolveFirstCollisionSourceDLR(obj::SolverCSD{T}) where {T<:AbstractFloat}
     # Get rank
     r=obj.settings.r;
 
@@ -1968,7 +1960,7 @@ function CSolveFirstCollisionSourceDLR(obj::SolverCSD)
 
 end
 
-function Solve(obj::SolverCSD)
+function Solve(obj::SolverCSD{T}) where {T<:AbstractFloat}
     eTrafo = obj.csd.eTrafo;
     energy = obj.csd.eGrid;
 
@@ -2006,11 +1998,8 @@ function Solve(obj::SolverCSD)
                 Dvec[i+1] = sigmaS[l+1]
             end
         end
-        #ET = expm1div.(-(sigmaS[1] .- Dvec)*dE);
 
         D = Diagonal((sigmaS[1] .- Dvec));#.*ET);
-        #println("E = ",energy[n]," ",sigmaS[1])
-        #println("ETrafo = ",eTrafo[n]," ",sigmaS[1].-sigmaS)
 
         # perform time update
         uTilde = u .- dE * RhsOld(obj,u);
@@ -2018,12 +2007,9 @@ function Solve(obj::SolverCSD)
         for j = 1:size(uNew,1)
             uNew[j,:] = (Id .+ dE*D)\uTilde[j,:];
         end
-        #uNew[obj.boundaryIdx] .= u[obj.boundaryIdx]; # no scattering in boundary cells
         
         # update dose
-        #println("weight = ", obj.csd.SMid[n-1] ./( 1 + (n==2||n==nEnergies)))
         obj.dose .+= dE * uNew[:,1] * obj.csd.SMid[n-1] ./( 1 + (n==2||n==nEnergies));
-        #obj.dose .+= dE * uNew[:,1] * obj.csd.SMid[n-1] ./( 1 + (n==2||n==nEnergies));
 
         u .= uNew;
 
@@ -2031,5 +2017,306 @@ function Solve(obj::SolverCSD)
     end
     # return end time and solution
     return 0.5*sqrt(obj.gamma[1])*u,obj.dose./ obj.densityVec;
+
+end
+
+function CudaSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {T<:AbstractFloat}
+    # Get rank
+    r=obj.settings.r;
+
+    eTrafo = T.(obj.csd.eTrafo);
+    energy = T.(obj.csd.eGrid);
+    S = obj.csd.S;
+
+    nx = obj.settings.NCellsX;
+    ny = obj.settings.NCellsY;
+    nq = obj.Q.nquadpoints;
+    N = obj.pn.nTotalEntries;
+
+    x = obj.settings.xMid;
+    y = obj.settings.yMid;
+
+    sigmaO1Inv = 10000.0;
+    sigmaO3Inv = 10000.0;
+    pos_beam = [obj.settings.x0,obj.settings.y0];
+
+    counterPNG = 0
+
+    # Set up initial condition and store as matrix
+    floorPsiAll = 1e-1;
+    floorPsi = 1e-17;
+    if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" # determine relevant directions in IC
+        psi = SetupIC(obj,obj.Q.pointsxyz);
+        idxFullBeam = findall(psi .> floorPsiAll)
+        idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
+        psi = psi[:,:,idxBeam]
+    else #if obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" # determine relevant directions in beam
+        psiBeam = zeros(nq)
+        for k = 1:nq
+            psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)
+        end
+        idxBeam = findall( psiBeam .> floorPsi*maximum(psiBeam) );
+        psi = SetupIC(obj,obj.Q.pointsxyz[idxBeam,:]);
+    end
+    
+    obj.qReduced = obj.Q.pointsxyz[idxBeam,:];
+    obj.MReduced = obj.M[:,idxBeam];
+    obj.OReduced = obj.O[idxBeam,:];
+    obj.M = obj.M[:,idxBeam]
+    nq = length(idxBeam);
+    
+    println("reduction of ordinates is ",(nq-length(idxBeam))/nq*100.0," percent")
+    nq = length(idxBeam);
+
+    # define density matrix
+    densityInv = Diagonal(1.0 ./obj.density);
+    # define identity matrix
+    Id = Diagonal(ones(T,N));
+
+    # Low-rank approx of init data:
+    X,_,_ = svd!(zeros(T,nx*ny,r));
+    W,_,_ = svd!(zeros(T,N,r));
+    
+    # rank-r truncation:
+    X = CuArray(X[:,1:r]);
+    W = CuArray(W[:,1:r]);
+
+    # rank-r truncation:
+    S = CUDA.zeros(T,r,r);
+
+    K = CUDA.zeros(T,size(X));
+    k1 = CUDA.zeros(T,size(X));
+    L = CUDA.zeros(T,size(W));
+    l1 = CUDA.zeros(T,size(W));
+
+    WAxW = CUDA.zeros(T,r,r)
+    WAzW = CUDA.zeros(T,r,r)
+
+    XL2xX = CUDA.zeros(T,r,r)
+    XL2yX = CUDA.zeros(T,r,r)
+
+    MUp = CUDA.zeros(T,r,r)
+    NUp = CUDA.zeros(T,r,r)
+
+    L2x = CuSparseMatrixCSC(obj.stencil.L2x);
+    L2y = CuSparseMatrixCSC(obj.stencil.L2y);
+
+    Ax = CuSparseMatrixCSC(obj.pn.Ax)
+    Az = CuSparseMatrixCSC(obj.pn.Az)
+
+    XNew = CUDA.zeros(T,nx*ny,r)
+
+    # impose boundary condition
+    X[obj.boundaryIdx,:] .= 0.0;
+
+    nEnergies = length(eTrafo);
+    dE = eTrafo[2]-eTrafo[1];
+    obj.settings.dE = dE;
+
+    println("CFL = ",dE/min(obj.settings.dx,obj.settings.dy)*maximum(densityInv))
+
+    psiCPU = Ten2Vec(psi)
+    psi = CuArray(psiCPU);
+    M1 = CuArray(obj.M[1,:])
+    M = CuArray(obj.M)
+    sPow = CuArray(obj.csd.S)
+    densityVec = CuArray(obj.densityVec);
+    dose = CuArray(obj.dose);
+
+    prog = Progress(nEnergies-1,1);
+
+    uOUnc = zeros(nx*ny);
+
+    XX = (s.xMid[2:end-1]'.*ones(size(s.yMid[2:end-1])))
+    YY = (s.yMid[2:end-1]'.*ones(size(s.xMid[2:end-1])))'
+
+    dE12 = Float32(0.5*dE);
+
+    intSigma = dE * SigmaAtEnergy(obj.csd,energy[1])[1];
+    
+    #loop over energy
+    for n=2:nEnergies
+        # compute scattering coefficients at current energy
+        sigmaS = CuArray(SigmaAtEnergy(obj.csd,energy[n]));
+
+        ############## Dose Computation ##############
+        dose .+= dE12 * (X*S*W[1,:]+ psi * M1) * sPow[n-1] ./ densityVec ;
+
+        intSigma += dE * sigmaS[1];
+
+        for q = 1:nq
+            beamOmega = 10^5 * exp(-sigmaO1Inv*(obj.settings.Omega1-obj.qReduced[q,1])^2) * exp(-sigmaO3Inv*(obj.settings.Omega3-obj.qReduced[q,3])^2) * exp(-intSigma);
+            for j = 1:ny
+                beamy = normpdf(y[j] - eTrafo[n]*obj.qReduced[q,3],pos_beam[2],.1)
+                if beamy < 1e-6 continue; end
+                for i = 1:nx
+                    beamx = normpdf(x[i] - eTrafo[n]*obj.qReduced[q,1],pos_beam[1],.1)
+                    if beamx < 1e-6 continue; end
+                    idx = vectorIndex(ny,i,j)
+                    psiCPU[idx,q] = T(beamOmega * beamx * beamy )             
+                end
+            end
+        end
+
+        psi .= CuArray(psiCPU)
+
+        Dvec = CUDA.zeros(T,obj.pn.nTotalEntries)
+        for l = 0:obj.pn.N
+            for k=-l:l
+                i = GlobalIndex( l, k );
+                Dvec[i+1] = sigmaS[l+1]
+            end
+        end
+
+        if n > 2 # perform streaming update after first collision (before solution is zero)
+            ################## K-step ##################
+            K .= X*S;
+
+            WAxW .= (Ax*W)'*W # Ax  = Ax^T
+            WAzW .= (Az*W)'*W # Az  = Az^T
+
+            k1 .= -L2x*K*WAxW .- L2y*K*WAzW;
+            K .= K .+ dE .* k1 ./ 6;
+            k1 .= -L2x*(K.+dE12.*k1)*WAxW .- L2y*(K.+dE12.*k1)*WAzW;
+            K .+= 2 * dE .* k1 ./ 6;
+            k1 .= -L2x*(K.+dE12.*k1)*WAxW .- L2y*(K.+dE12.*k1)*WAzW;
+            K .+= 2 * dE .* k1 ./ 6;
+            k1 .= -L2x*(K.+dE.*k1)*WAxW .- L2y*(K.+dE.*k1)*WAzW;
+            K .+= dE .* k1 ./ 6;
+
+            XNew,_,_ = svd!(K);
+
+            MUp .= XNew' * X;
+            ################## L-step ##################
+            L .= W*S';
+
+            XL2xX .= X'*(L2x*X)
+            XL2yX .= X'*(L2y*X)
+
+            l1 .= -Ax*L*XL2xX' .- Az*L*XL2yX';
+            L .= L .+ dE .* l1 ./ 6;
+            l1 .= -Ax*(L+dE12*l1)*XL2xX' .- Az*(L+dE12*l1)*XL2yX';
+            L .+= 2 * dE .* l1 ./ 6;
+            l1 .= -Ax*(L+dE12*l1)*XL2xX' .- Az*(L+dE12*l1)*XL2yX';
+            L .+= 2 * dE .* l1 ./ 6;
+            l1 .= -Ax*(L+dE*l1)*XL2xX' .- Az*(L+dE*l1)*XL2yX';
+            L .+= dE .* l1 ./ 6;
+                    
+            WNew,_,_ = svd!(L);
+
+            NUp .= WNew' * W;
+            W .= WNew;
+            X .= XNew;
+
+            ################## S-step ##################
+            S .= MUp*S*(NUp')
+
+            XL2xX .= X'*(L2x*X)
+            XL2yX .= X'*(L2y*X)
+
+            WAxW .= W'*(Ax*W)
+            WAzW .= W'*(Az*W)
+
+            s1 = -XL2xX*S*WAxW .- XL2yX*S*WAzW;
+            s2 = -XL2xX*(S+dE12*s1)*WAxW .- XL2yX*(S+dE12*s1)*WAzW;
+            s3 = -XL2xX*(S+dE12*s2)*WAxW .- XL2yX*(S+dE12*s2)*WAzW;
+            s4 = -XL2xX*(S+dE*s3)*WAxW .- XL2yX*(S+dE*s3)*WAzW;
+
+            S .= S .+ dE .* (s1 .+ 2 * s2 .+ 2 * s3 .+ s4) ./ 6;
+        end
+
+        ############## Out Scattering ##############
+        L .= W*S';
+
+        for i = 1:r
+            L[:,i] ./= (1 .+ dE*(sigmaS[1] .- Dvec))
+        end
+
+        W,Sv,Tv = svd!(L);
+
+        S .= Tv*Diagonal(Sv);
+
+        ############## In Scattering ##############
+
+        ################## K-step ##################
+        K .= X*S;
+        K .= K .+ dE * psi * (M' * (Diagonal(Dvec) * W) );
+
+        XNew,_,_ = svd!(K);
+
+        MUp .= XNew' * X;
+
+        ################## L-step ##################
+        L .= W*S';
+        L .= L .+dE*Diagonal(Dvec)*M*(psi'*X);
+
+        WNew,_,_ = svd!(L);
+
+        NUp .= WNew' * W;
+
+        W .= WNew;
+        X .= XNew;
+
+        ################## S-step ##################
+        S .= MUp*S*(NUp')
+        S .= S .+dE*(X'*psi)*M'*(Diagonal(Dvec)*W);
+
+        ############## Dose Computation ##############
+        dose .+= dE12 * (X*S*W[1,:]+psi * M1) * sPow[n] ./ densityVec;
+
+        ######## Plotting #########
+        if mod(n-1,Int(round(7*nEnergies/474/7))) == 0
+            counterPNG += 1;
+            
+            U,Sigma,V = svd(S);
+            close("all")
+            fig = figure("Dose, DLRA",figsize=(10*(s.d/s.b),10),dpi=100)
+            ax = gca()
+            pcolormesh(YY,XX,Vec2Mat(s.NCellsX,s.NCellsY,X*S*W[1,:]+psi * M1)[2:end-1,2:end-1]')
+            ax.tick_params("both",labelsize=20) 
+            plt.xlabel("x", fontsize=20)
+            plt.ylabel("y", fontsize=20)
+            plt.title("scalar flux,  E = $(round(obj.csd.eGrid[n], digits=3)) MeV", fontsize=25)
+            tight_layout()
+            if counterPNG < 10
+                savefig("output/gifPhi/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)_000$(counterPNG).png")
+            elseif counterPNG < 100
+                savefig("output/gifPhi/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)_00$(counterPNG).png")
+            elseif counterPNG < 1000
+                savefig("output/gifPhi/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)_0$(counterPNG).png")
+            else
+                savefig("output/gifPhi/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)_$(counterPNG).png")
+            end
+
+            close("all")
+            fig = figure("Dose, DLRA",figsize=(10*(s.d/s.b),10),dpi=100)
+            ax = gca()
+            pcolormesh(YY,XX,Vec2Mat(s.NCellsX,s.NCellsY,X*U[:,1])[2:end-1,2:end-1]')
+            ax.tick_params("both",labelsize=20) 
+            #plt.xlabel("x", fontsize=20)
+            #plt.ylabel("y", fontsize=20)
+            plt.title("dominant spatial mode,  E = $(round(obj.csd.eGrid[n], digits=3)) MeV", fontsize=25)
+            tight_layout()
+            if counterPNG < 10
+                savefig("output/gifX/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)_000$(counterPNG).png")
+            elseif counterPNG < 100
+                savefig("output/gifX/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)_00$(counterPNG).png")
+            elseif counterPNG < 1000
+                savefig("output/gifX/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)_0$(counterPNG).png")
+            else
+                savefig("output/gifX/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)_$(counterPNG).png")
+            end
+            
+            # write modal basis
+            writedlm("output/gifW/W_$(counterPNG)",W*V)
+            #break
+        end
+
+        next!(prog) # update progress bar
+    end
+
+    U,Sigma,V = svd!(Matrix(S));
+    # return solution and dose
+    return Matrix(X)*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*Matrix(W)*V,Matrix(W)*V,Vector(dose),Matrix(psi);
 
 end

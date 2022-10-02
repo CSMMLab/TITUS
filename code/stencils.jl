@@ -1,11 +1,15 @@
 __precompile__
 
-struct Stencils
-    L1x::SparseMatrixCSC{Float64, Int64};
-    L1y::SparseMatrixCSC{Float64, Int64};
-    L2x::SparseMatrixCSC{Float64, Int64};
-    L2y::SparseMatrixCSC{Float64, Int64};
-    function Stencils(settings)
+using SparseArrays
+
+include("utils.jl")
+
+struct Stencils{T<:AbstractFloat}
+    L1x::SparseMatrixCSC{T, Int64};
+    L1y::SparseMatrixCSC{T, Int64};
+    L2x::SparseMatrixCSC{T, Int64};
+    L2y::SparseMatrixCSC{T, Int64};
+    function Stencils(settings::Settings,T::DataType=Float64,order::Int=2)
         density = settings.density;
         # setupt stencil matrix
         nx = settings.NCellsX;
@@ -16,7 +20,7 @@ struct Stencils
         L2y = spzeros(nx*ny,nx*ny);
 
         # setup index arrays and values for allocation of stencil matrices
-        II = zeros(3*(nx-2)*(ny-2)); J = zeros(3*(nx-2)*(ny-2)); vals = zeros(3*(nx-2)*(ny-2));
+        II = zeros(3*(nx-2)*(ny-2)); J = zeros(3*(nx-2)*(ny-2)); vals = zeros(T,3*(nx-2)*(ny-2));
         counter = -2;
 
         for i = 2:nx-1
@@ -44,7 +48,7 @@ struct Stencils
         end
         L1x = sparse(II,J,vals,nx*ny,nx*ny);
 
-        II .= zeros(3*(nx-2)*(ny-2)); J .= zeros(3*(nx-2)*(ny-2)); vals .= zeros(3*(nx-2)*(ny-2));
+        II .= zeros(3*(nx-2)*(ny-2)); J .= zeros(3*(nx-2)*(ny-2)); vals .= zeros(T,3*(nx-2)*(ny-2));
         counter = -2;
 
         for i = 2:nx-1
@@ -73,7 +77,7 @@ struct Stencils
         end
         L1y = sparse(II,J,vals,nx*ny,nx*ny);
 
-        II = zeros(2*(nx-2)*(ny-2)); J = zeros(2*(nx-2)*(ny-2)); vals = zeros(2*(nx-2)*(ny-2));
+        II = zeros(2*(nx-2)*(ny-2)); J = zeros(2*(nx-2)*(ny-2)); vals = zeros(T,2*(nx-2)*(ny-2));
         counter = -1;
 
         for i = 2:nx-1
@@ -98,7 +102,7 @@ struct Stencils
         end
         L2x = sparse(II,J,vals,nx*ny,nx*ny);
 
-        II .= zeros(2*(nx-2)*(ny-2)); J .= zeros(2*(nx-2)*(ny-2)); vals .= zeros(2*(nx-2)*(ny-2));
+        II .= zeros(2*(nx-2)*(ny-2)); J .= zeros(2*(nx-2)*(ny-2)); vals = zeros(T,2*(nx-2)*(ny-2));
         counter = -1;
 
         for i = 2:nx-1
@@ -122,6 +126,6 @@ struct Stencils
             end
         end
         L2y = sparse(II,J,vals,nx*ny,nx*ny);
-        new(L1x,L1y,L2x,L2y)
+        new{T}(L1x,L1y,L2x,L2y)
     end
 end

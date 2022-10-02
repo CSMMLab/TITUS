@@ -1,12 +1,12 @@
 using Base: Float64
-include("settings.jl")
-include("SolverCSD.jl")
-include("SolverMLCSD.jl")
-
 using PyCall
 using PyPlot
 using DelimitedFiles
 using WriteVTK
+
+include("settings.jl")
+include("SolverCSD.jl")
+
 
 #close("all")
 
@@ -64,7 +64,7 @@ end
 ############################
 
 solver1 = SolverCSD(s);
-X_dlr,S_dlr,W_dlr,W_mod_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR2ndOrder(solver1);
+X_dlr,S_dlr,W_dlr,W_mod_dlr, dose_DLR, psi_DLR = CudaSolveFirstCollisionSourceDLR4thOrder(solver1);
 #u, dose_DLR,psi = SolveFirstCollisionSource(solver1);
 u = Vec2Mat(s.NCellsX,s.NCellsY,X_dlr*Diagonal(S_dlr)*W_mod_dlr[1,:]);
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);

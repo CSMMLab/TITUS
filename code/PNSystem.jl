@@ -4,11 +4,11 @@ function sub2ind(s,row,col)
     return LinearIndices(s)[CartesianIndex.(row,col)]
 end
 
-mutable struct PNSystem
+mutable struct PNSystem{T<:AbstractFloat}
     # symmetric flux matrices
-    Ax::SparseMatrixCSC{Float64, Int64};
-    Ay::SparseMatrixCSC{Float64, Int64};
-    Az::SparseMatrixCSC{Float64, Int64};
+    Ax::SparseMatrixCSC{T, Int64};
+    Ay::SparseMatrixCSC{T, Int64};
+    Az::SparseMatrixCSC{T, Int64};
 
     # Solver settings
     settings::Settings;
@@ -20,8 +20,10 @@ mutable struct PNSystem
 
     M::SparseMatrixCSC{ComplexF64, Int64};
 
+    T::DataType;
+
     # constructor
-    function PNSystem(settings) 
+    function PNSystem(settings, T::DataType=Float64) 
         N = settings.nPN;
         nTotalEntries = GlobalIndex( N, N ) + 1;    # total number of entries for sytem matrix
 
@@ -49,7 +51,7 @@ mutable struct PNSystem
         AyT = sparse([],[],[],nTotalEntries,nTotalEntries);
         AzT = sparse([],[],[],nTotalEntries,nTotalEntries);
 
-        new(AxT,AyT,AzT,settings,nTotalEntries,N,M);
+        new{T}(AxT,AyT,AzT,settings,nTotalEntries,N,M,T);
     end
 end
 
