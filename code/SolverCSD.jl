@@ -309,7 +309,7 @@ end
     return minmod(2.0 * (right - center),tmp);
 end
 
-function solveFlux!(obj::SolverCSD{T}, phi::Array{Float64,4}, flux::Array{Float64,4}) where {T<:AbstractFloat}
+function solveFlux!(obj::SolverCSD{T}, phi::Array{T,4}, flux::Array{Float64,4}) where {T<:AbstractFloat}
     # computes the numerical flux over cell boundaries for each ordinate
     # for faster computation, we split the iteration over quadrature points
     # into four different blocks: North West, Nort East, Sout West, South East

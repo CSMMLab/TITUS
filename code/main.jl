@@ -10,7 +10,7 @@ using WriteVTK
 close("all")
 
 nx = Int(floor(2 * 50));
-ny = Int(floor(8 * 100));
+ny = Int(floor(8 * 50));
 nz = Int(floor(2 * 50));
 problem ="validation" #"2DHighD"
 particle = "Protons"
@@ -65,6 +65,7 @@ end
 
 solver1 = SolverCSD(s);
 X_dlr,S_dlr,W_dlr_SN,W_dlr, dose_DLR, psi_DLR = CudaFullSolveFirstCollisionSourceDLR4thOrder(solver1);
+#X_dlr,S_dlr,W_dlr_SN,W_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR2ndOrder(solver1);
 #u, dose_DLR,psi = SolveFirstCollisionSource(solver1);
 u = Vec2Ten(s.NCellsX,s.NCellsY,s.NCellsZ,X_dlr*Diagonal(S_dlr)*W_dlr[1,:]);
 dose_DLR = Vec2Ten(s.NCellsX,s.NCellsY,s.NCellsZ,dose_DLR);

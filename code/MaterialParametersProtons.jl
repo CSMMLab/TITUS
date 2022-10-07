@@ -2801,10 +2801,12 @@ struct MaterialParametersProtons
          E_rest = 938.26 #MeV proton rest energy
          sigmaEl_tab_pp = Proton_Proton_nuclear(E_tab_PSTAR,Omega_sigmaElTab);
         #  sigma_ce = Coulomb(E_tab_PSTAR,Omega_sigmaElTab) #multiple coulomb scattering (dependent on unknown spacial stepsize)
-         sigma_ce = Rutherford(E_tab_PSTAR,Omega_sigmaElTab) #single coulomb scattering
+         #sigma_ce = Rutherford(E_tab_PSTAR,Omega_sigmaElTab) #single coulomb scattering
+         sigma_ce = CoulombOlbrant(E_tab_PSTAR,Omega_sigmaElTab) 
          E_tab_PSTAR= dropdims(E_tab_PSTAR, dims = tuple(findall(size(E_tab_PSTAR) .== 1)...)).+ E_rest
          E_sigmaTab= E_sigmaTab .+ E_rest
          #sigmaTab = 0.88810600 .* sigmaEl_OInt_ICRU .+ 0.11189400.* sigmaEl_tab_pp + sigma_ce;
+         #S_tab_PSTAR = StoppingPower(E_tab_PSTAR)
          S_tab_PSTAR = dropdims(S_tab_PSTAR, dims = tuple(findall(size(S_tab_PSTAR) .== 1)...))
          new(S_tab_PSTAR,E_tab_PSTAR,E_sigmaTab,sigmaEl_OInt_ICRU,sigmaEl_tab_pp, sigma_ce,StarMAPmoments);
      end
@@ -2824,7 +2826,31 @@ struct MaterialParametersProtons
         for n = 1:nE
             for i = 1:N
                 for k = 1:nMu-1
-                    xi[n,i] -= 0.5*(mu[k+1]-mu[k])*(sigma[n,k]*P[i,k] + sigma[n,k+1]*P[i,k+1]);
+                     xi[n,i] += 0.5*(mu[k+1]-mu[k])*(sigma[n,k]*P[i,k] + sigma[n,k+1]*P[i,k+1]);
+                end
+            end
+        end
+        return xi
+    end
+
+    function integrateRutherfordXS_Poly3D(N,theta,E,sigma)
+        Z_effH2O = 7.42 #effective atomic number of water
+        Z_p = 1 #atomic number of protons
+        mu = cosd.(theta)
+        nMu = length(mu);
+        nE = length(E);
+        P = zeros(N,nMu)
+        for k = 1:nMu
+            for i = 1:N
+                Ptmp = collectPl(mu[k], lmax = N-1);
+                P[i,k] = Ptmp[i-1]
+            end
+        end
+        xi = zeros(nE,N)
+        for n = 1:nE
+            for i = 1:N
+                for k = 1:nMu-1
+                    xi[n,i] -= 0.5*(mu[k+1]-mu[k])*(2*pi*sind(theta[k])*sigma[n,k]*P[i,k] + 2*pi*sind(theta[k+1])*sigma[n,k+1]*P[i,k+1]);
                 end
             end
         end
@@ -2833,13 +2859,17 @@ struct MaterialParametersProtons
     # function for proton-proton nuclear interactions
     function Proton_Proton_nuclear(E,Omega_sigmaElTab)
         #nuclear elastic proton-proton xs
+        N_A = 6.02214076*10^23 #Avogadro constant
+        w_H = 0.1111 #weight fraction hydrogen in water
+        A_H = 1.0078250322 #atomic weight of hydrogen
+
         idx = findall(x->x>=10, E)
-        sigma_pp_ne = zeros(size(E,1),1)
-        sigma_pp_ne[idx] = 0.315.*E[idx].^(-1.126).+3.78e-6.*E[idx]; #formula fit from SAID databasem see Fippel 2004
-        
+        sigma_pp_macro = zeros(size(E,1),1)
+        sigma_pp_macro[idx] = 0.315.*E[idx].^(-1.126).+3.78e-6.*E[idx]; #formula fit from SAID databasem see Fippel 2004
+        sigma_pp_micro = sigma_pp_macro*A_H/w_H/N_A
         sigma =zeros(size(E,1),size(Omega_sigmaElTab,1));
         for i=1:size(E,1)
-            sigma[i,:].=sigma_pp_ne[i]
+            sigma[i,:].=sigma_pp_micro[i]
         end
 
         mu = cosd.(Omega_sigmaElTab)
@@ -2894,11 +2924,106 @@ struct MaterialParametersProtons
         eps0 = 8.8541878128*10^-12 #elektrische Feldkonstante
         sigma=zeros(size(E,1),size(Omega,1));
         for i=1:size(E,1)
-             sigma[i,:] = (4*pi*eps0).^-2 .* (Z_effH2O*Z_p*e^2/(4*E[i]))^2 .* (1 ./ (sind.(Omega./2).^4)) #in b/sr [Otter, G., Honecker, R. (1993). Klassische Atomphysik. In: Atome — Moleküle — Kerne. Vieweg+Teubner Verlag. https://doi.org/10.1007/978-3-322-94764-2_2]
+             #sigma[i,:] = (4*pi*eps0).^-2 .* (Z_effH2O*Z_p*e^2/(4*E[i]))^2 .* (1 ./ (sind.(Omega./2).^4)) #in b/sr [Otter, G., Honecker, R. (1993). Klassische Atomphysik. In: Atome — Moleküle — Kerne. Vieweg+Teubner Verlag. https://doi.org/10.1007/978-3-322-94764-2_2]
+             sigma[i,:] =  1.3*10^-3 .*(Z_effH2O*Z_p/(4*E[i]))^2 .* (1 ./ (sind.(Omega./2).^4)) #in b/sr [Otter, G., Honecker, R. (1993). Klassische Atomphysik. In: Atome — Moleküle — Kerne. Vieweg+Teubner Verlag. https://doi.org/10.1007/978-3-322-94764-2_2]
+        end
+        io = open("RutherfordXS.txt", "w") do io
+            for x in sigma
+              println(io, x)
+            end
+          end
+        N = 40;
+        xi = integrateRutherfordXS_Poly3D(N,Omega,E,sigma)
+        return xi
+    end
+
+    function ScreenedRutherford(E,Omega)
+        #This is valid for single Coulomb scattering events
+        #screened crosssection transforms xs from center of mass to laboratory frame and accounts for singularity at cos(1)
+        #[Uikema, 2012]
+        Z_effH2O = 7.42 #effective atomic number of water
+        M_H2O = 18.02 #atomic mass number of water g/mol~=amu 
+        mH2O_kg = 2.988*10^-26 #H2O molecule mass in kg
+        Z_p = 1 #atomic number of protons
+        M_p = 1.007276466621 # proton mass number unit amu/Da
+        mp_kg = 1.67262192*10^-27 #proton mass in kg
+        e = 1.602176634*10^-19 #elementary electric charge
+        eps0 = 8.8541878128*10^-12 #elektrische Feldkonstante
+        mu = cosd.(Omega)
+        sigma=zeros(size(E,1),size(Omega,1));
+        m0 =  1/(1/mH2O_kg + 1/mp_kg) #reduced proton mass
+        v02 = 2 .*E./mp_kg #squared initial velocity of protons
+        alpha = 0.0072973525 #fine-structure constant
+        me =  9.1093837015*10^-31 #electron mass in kg
+        c = 299792458 #speed of light in m/s
+        p = mp_kg*sqrt.(v02) #momentum of protons
+        eta = ( Z_effH2O^(1/3) .* alpha .* me .*c ./ p ).^2 #lower bound for scattering angle due to screening of the nucleus
+        for i=1:size(E,1)
+             sigma[i,:] = ((1 .+ 2 .* mu ./ M_H2O .+ 1/M_H2O^2).^(3/2)) ./(1 .+ mu ./ M_H2O) .* (4 .*pi .*eps0).^-2 .*(Z_effH2O .*Z_p .*(e^2) ./(m0.*v02[i])).^2 .* 1 ./(1 .- mu .+ 2 .*eta[i]).^2 #in b/sr [Uikema, 2012]
         end
         N = 40;
         xi = integrateXS_Poly(N,cosd.(Omega),E,sigma)
         return xi
     end
+
+    function CoulombOlbrant(E,Omega)
+        #This is valid for single Coulomb scattering events
+        #screened crosssection transforms xs from center of mass to laboratory frame and accounts for singularity at cos(1)
+        #[Uikema, 2012]
+        Z_effH2O = 7.42 #effective atomic number of water
+        M_H2O = 18.02 #atomic mass number of water g/mol~=amu 
+        M_H = 15.999 #atomic mass number (AMU)
+        mH2O_kg = 2.988*10^-26 #H2O molecule mass in kg
+        Z_p = 1 #atomic number of protons
+        Z_O = 8 #atomic number of oxygen
+        M_p = 1.007276466621 # proton mass number unit amu/Da
+        mu =  collect(-0.99:0.1:0.99) #cosd.(Omega) #cosine of scattering angle in center of mass system
+        s=0.5 #spin
+        #ratios of target to projectile masses
+        A_O = M_H/M_p
+        A_H = 1 #because here protons interact only with protons in nucleaus
+        sigma=zeros(size(E,1),size(mu,1));
+        sigma_cd=zeros(size(E,1),size(mu,1));
+        sigma_ci=zeros(size(E,1),size(mu,1));
+        sigma_ciLab=zeros(size(E,1),size(mu,1));
+
+        for i=1:size(E,1)
+            eta_O = A_O/(1+A_O) * sqrt.(4.78453* 10^-6 * M_p .* E[i])
+            k_O = Z_p * Z_O * sqrt.(2.48058 * 10^4 * M_p ./(E[i]))
+            sigma_cd[i,:] = eta_O.^2 ./(k_O.^2 .* (1 .- mu.^2))  #coulomb scattering for different particles (i.e. proton, O)
+            eta_H = A_H/(1+A_H) * sqrt.(4.78453*10^-6 * M_p .* E[i])
+            k_H = Z_p * Z_p * sqrt.(2.48058 * 10^4 * M_p ./(E[i]))
+            sigma_ci[i,:] = 2 .* eta_H.^2 ./(k_H.^2 .* (1 .- mu.^2)) .*  ((1 .+ mu.^2)./(1 .- mu.^2) .+ (-1)^(2*s) ./ (2*s+1) .* cos.(eta_H .* log.((1 .+mu)./(1 .-mu))))#coulomb scattering for same particles (i.e. proton-proton (projectile with proton in H core))
+        end
+         
+        N = 40;
+        
+        io = open("sigmacd_int.txt", "w") do io
+            for x in sigma_cd[65,:]
+              println(io, x)
+            end
+        end
+       
+        sigma_cdInt = integrateXS_Poly(N,mu,E,sigma_cd)
+        mu_Lab = sqrt.((1 .+mu)./2)
+        for i=1:size(E,1)
+            sigma_ciLab[i,:] = 4 .* sqrt.((1 .+mu)./2) .* sigma_ci[i,:]
+        end
+        io = open("sigmaci_Lab.txt", "w") do io
+            for x in sigma_ciLab[65,:]
+              println(io, x)
+            end
+        end
+        io = open("mu_Lab.txt", "w") do io
+            for x in mu_Lab
+              println(io, x)
+            end
+        end
+        sigma_ciInt = integrateXS_Poly(N,mu_Lab,E,sigma_ciLab)
+        #need transformation from  center of mass to laboratory system 
+        xi = sigma_cdInt .+ 2 .* sigma_ciInt
+        return xi
+    end
+
 end
 

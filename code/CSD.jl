@@ -66,6 +66,7 @@ struct CSD{T<:AbstractFloat}
 
         # determine transformed energy Grid for computation
         nEnergies = Integer(ceil(maxE/settings.dE));
+        print(nEnergies)
         #eTrafo = collect(exp10.(range(log10(eMaxTrafo - eMaxTrafo+0.0001),log10(eMaxTrafo - eMinTrafo -0.0001),length = nEnergies)));
         eTrafo = collect(range(eMaxTrafo - eMaxTrafo,eMaxTrafo - eMinTrafo,length = nEnergies));
         #println("eTrafo", eTrafo)
