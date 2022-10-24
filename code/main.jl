@@ -6,15 +6,18 @@ using PyCall
 using PyPlot
 using DelimitedFiles
 using WriteVTK
+using ReadVTK
 
 close("all")
+
+info = "GPU"
 
 nx = Int(floor(2 * 50));
 ny = Int(floor(8 * 50));
 nz = Int(floor(2 * 50));
 problem ="validation" #"2DHighD"
 particle = "Protons"
-s = Settings(nx,ny,nz,15,problem, particle);
+s = Settings(nx,ny,nz,5,problem, particle);
 rhoMin = minimum(s.density);
 
 if s.problem == "AirCavity"
@@ -65,6 +68,7 @@ end
 
 solver1 = SolverCSD(s);
 X_dlr,S_dlr,W_dlr_SN,W_dlr, dose_DLR, psi_DLR = CudaFullSolveFirstCollisionSourceDLR4thOrder(solver1);
+#X_dlr,S_dlr,W_dlr_SN,W_dlr, dose_DLR, psi_DLR = CudaSolveFirstCollisionSourceDLR4thOrderSN(solver1);
 #u, dose_DLR,psi = SolveFirstCollisionSource(solver1);
 u = Vec2Ten(s.NCellsX,s.NCellsY,s.NCellsZ,X_dlr*Diagonal(S_dlr)*W_dlr[1,:]);
 dose_DLR = Vec2Ten(s.NCellsX,s.NCellsY,s.NCellsZ,dose_DLR);
@@ -143,23 +147,23 @@ fig, ax = subplots()
 nyRef = length(yRef)
 ax.plot(s.xMid,dose_DLR[:,Int(floor(s.NCellsY/2)),idxZ]./maximum(dose_DLR[:,Int(floor(s.NCellsY/2)),idxZ]), "b--", linewidth=2, label="CSD_DLR", alpha=0.8)
 ax.legend(loc="upper left")
-ax.set_xlim([s.c,s.d])
+ax.set_xlim([s.xMid[1],s.xMid[end]])
 ax.set_ylim([0,1.05])
 ax.tick_params("both",labelsize=20) 
 show()
 tight_layout()
-savefig("output/DoseCutYNx$(s.Nx)")
+savefig("output/DoseCutYNx$(s.Nx)nPN$(s.nPN)$(info)")
 
 fig, ax = subplots()
 nyRef = length(yRef)
 ax.plot(s.yMid,dose_DLR[Int(floor(s.NCellsX/2)),:,idxZ]./maximum(dose_DLR[Int(floor(s.NCellsX/2)),:,idxZ]), "b--", linewidth=2, label="CSD_DLR", alpha=0.8)
 ax.legend(loc="upper left")
-ax.set_xlim([0.5*(s.a+s.b),s.b])
+ax.set_xlim([s.yMid[1],s.yMid[end]])
 ax.set_ylim([0,1.05])
 ax.tick_params("both",labelsize=20) 
 show()
 tight_layout()
-savefig("output/DoseCutXNx$(s.Nx)")
+savefig("output/DoseCutXNx$(s.Nx)nPN$(s.nPN)$(info)")
 
 uSum = zeros(nx-1,ny-1);
 for k = 1:nz-1
