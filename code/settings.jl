@@ -58,6 +58,8 @@ mutable struct Settings
     Omega3::Float64;
     densityMin::Float64;
     sigmaX::Float64; # spatial std of initial beam
+    sigmaY::Float64; # spatial std of initial beam
+    sigmaZ::Float64; # spatial std of initial beam
 
     # physical parameters
     sigmaT::Float64;
@@ -110,6 +112,8 @@ mutable struct Settings
         adaptIndex = 1;
         epsAdapt = 1e-2;
         sigmaX = 0.1;
+        sigmaY = 0.02;
+        sigmaZ = 0.1;
         if problem =="LineSource"
             a = -1.5
             b = 1.5;
@@ -160,12 +164,12 @@ mutable struct Settings
             a = 0; # left boundary
             b = 2; # right boundary
             c = 0; # lower boundary
-            d = 8; # upper boundary
+            d = 7.5; # upper boundary
             e = 0;
             f = 2;
             sigmaS = 1.0;
             sigmaA = 0.0;  
-            cfl = 0.99/sqrt(2)*120.5;  
+            cfl = 0.99/sqrt(2)*120.5* 1.3;  
             eKin = 90;
             eMax = eKin + eRest
             adaptIndex = 0;
@@ -277,10 +281,10 @@ mutable struct Settings
         dE = cfl*min(dx,dy,dz)*minimum(density);#1/312;#cfl*min(dx,dy)*minimum(density);
         
         # number PN moments
-        nPN = 11#37, 21; # use odd number
+        nPN = 37#37, 21; # use odd number
 
         # build class
-        new(Nx,Ny,Nz,NCellsX,NCellsY,NCellsZ,a,b,c,d,e,f,dx,dy,dz,eMax,eRest,dE,cfl,nPN,x,xMid,y,yMid,z,zMid,problem,particle,x0,y0,z0,Omega1,Omega2,Omega3,densityMin,sigmaX,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex);
+        new(Nx,Ny,Nz,NCellsX,NCellsY,NCellsZ,a,b,c,d,e,f,dx,dy,dz,eMax,eRest,dE,cfl,nPN,x,xMid,y,yMid,z,zMid,problem,particle,x0,y0,z0,Omega1,Omega2,Omega3,densityMin,sigmaX,sigmaY,sigmaZ,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex);
     end
 end
 

@@ -181,27 +181,35 @@ function ComputeTrafoMatrices(Q::Quadrature,Norder::Int,nPN::Int)
 	phi = [(k+0.5)*pi/qorder for k=0:2*qorder-1]
 
 	# Transform between (mu,phi) and (x,y,z)
-	x = sqrt.(1.0 .- mu.^2).*cos.(phi)'
-	y = sqrt.(1.0 .- mu.^2).*sin.(phi)'
+	x = -sqrt.(1.0 .- mu.^2).*cos.(phi[end:-1:1])'
+	y = sqrt.(1.0 .- mu.^2).*sin.(phi[end:-1:1])'
 	z =           mu    .*ones(size(phi))'
 	weights = 2.0*pi/qorder*repeat(gaussweights,1,2*qorder)
 		
-	weights = weights[:]*0.5;
+	weights = weights[:]*0.5;	
 
 	O = zeros(nq,Norder)
 	M = zeros(Norder,nq)
 	for k = 1:length(mu)
-		z = computePlmx(mu[k],lmax=nPN,norm=SphericalHarmonics.Unnormalized())
+		P = computePlmx(mu[k],lmax=nPN,norm=SphericalHarmonics.Unnormalized())
 		for j = 1:length(phi)
 			counter = 1;
 			for l=0:nPN
 				for m=-l:l
-					O[(j-1)*qorder+k,counter] =  real_sph(mu[k],phi[j],l,m,z)
+					O[(j-1)*qorder+k,counter] =  real_sph(mu[k],phi[j],l,m,P)
 					M[counter,(j-1)*qorder+k] = O[(j-1)*qorder+k,counter]*weights[(j-1)*qorder+k]
 					counter += 1
 				end
 			end
 		end
+	end
+
+	testFluxMatrices = false;
+
+	if testFluxMatrices
+		AxTest = M * ( x[:] .* O );
+		AyTest = M * ( y[:] .* O );
+		AzTest = M * ( z[:] .* O );
 	end
 
     return O, M
