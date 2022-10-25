@@ -6,7 +6,6 @@ using PyCall
 using PyPlot
 using DelimitedFiles
 using WriteVTK
-using ReadVTK
 
 close("all")
 
@@ -60,7 +59,9 @@ elseif s.problem == "2DHighLowD"
     nyMC = size(doseMC,1);
     xMC = collect(range( s.a,stop=s.b,length = nxMC));
     yMC = collect(range( s.c,stop=s.d,length = nxMC));
-else
+elseif s.problem == "validation"
+    u_MC = zeros(200,200,200);
+    read!("validationData/proton_validation_doseMC.bin",u_MC)
     xRef = 0; doseRef = 1;
 end
 
