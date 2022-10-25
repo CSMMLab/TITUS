@@ -244,7 +244,7 @@ function SetupICMoments(obj::SolverCSD{T}) where {T<:AbstractFloat}
     return u;
 end
 
-function PsiLeft(obj::SolverCSD,n::Int,mu::Float64) where {T<:AbstractFloat}
+function PsiLeft(obj::SolverCSD,n::Int,mu::Float64)
     E0 = obj.settings.eMax;
     return 10^5*exp(-200.0*(1.0-mu)^2)*exp(-50*(E0-E)^2)
 end
@@ -269,7 +269,7 @@ function PsiBeam(obj::SolverCSD{T},Omega::Array{Float64,1},E::Float64,x::Float64
         sigmaO3Inv = 10000.0;
         sigmaEInv = 1000.0;
         pos_beam = [obj.settings.x0,obj.settings.y0,obj.settings.z0];
-        space_beam = normpdf(x,pos_beam[1],.1).*normpdf(y,pos_beam[2],.1).*normpdf(z,pos_beam[3],.1);
+        space_beam = normpdf(x,pos_beam[1],obj.settings.sigmaX).*normpdf(y,pos_beam[2],obj.settings.sigmaX).*normpdf(z,pos_beam[3],obj.settings.sigmaX);
         return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO2Inv*(obj.settings.Omega2-Omega[2])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*space_beam#*trafo;;
     elseif obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD"
         return 0.0;
@@ -302,14 +302,14 @@ function Slope(u,v,w,dx)
     end
 end
 
-@inline minmod(x::Float64, y::Float64) = ifelse(x < 0, clamp(y, x, 0.0), clamp(y, 0.0, x))
+@inline minmod(x::T, y::T) where {T<:AbstractFloat} = ifelse(x < 0, clamp(y, x, 0.0), clamp(y, 0.0, x))
 
-@inline function slopefit(left::Float64, center::Float64, right::Float64)
+@inline function slopefit(left::T, center::T, right::T) where {T<:AbstractFloat}
     tmp = minmod(0.5 * (right - left),2.0 * (center - left));
     return minmod(2.0 * (right - center),tmp);
 end
 
-function solveFlux!(obj::SolverCSD{T}, phi::Array{T,4}, flux::Array{Float64,4}) where {T<:AbstractFloat}
+function solveFlux!(obj::SolverCSD{T}, phi::Array{T,4}, flux::Array{T,4}) where {T<:AbstractFloat}
     # computes the numerical flux over cell boundaries for each ordinate
     # for faster computation, we split the iteration over quadrature points
     # into four different blocks: North West, Nort East, Sout West, South East
@@ -1012,13 +1012,13 @@ function SolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {T<:Abstr
         for q = 1:nq
             beamOmega = 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-obj.qReduced[q,1])^2)*exp(-sigmaO2Inv*(obj.settings.Omega2-obj.qReduced[q,2])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-obj.qReduced[q,3])^2) * exp(-intSigma);
             for j = 1:ny
-                beamy = normpdf(y[j] - eTrafo[n]*obj.qReduced[q,2],pos_beam[2],.1)
+                beamy = normpdf(y[j] - eTrafo[n]*obj.qReduced[q,2],pos_beam[2],obj.settings.sigmaX)
                 if beamy < 1e-6 continue; end
                 for i = 1:nx
-                    beamx = normpdf(x[i] - eTrafo[n]*obj.qReduced[q,1],pos_beam[1],.1)
+                    beamx = normpdf(x[i] - eTrafo[n]*obj.qReduced[q,1],pos_beam[1],obj.settings.sigmaX)
                     if beamx < 1e-6 continue; end
                     for k = 1:nz
-                        beamz = normpdf(z[k] - eTrafo[n]*obj.qReduced[q,3],pos_beam[3],.1)
+                        beamz = normpdf(z[k] - eTrafo[n]*obj.qReduced[q,3],pos_beam[3],obj.settings.sigmaX)
                         idx = vectorIndex(nx,ny,i,j,k)
                         psi[idx,q] = beamOmega * beamx * beamy * beamz             
                     end
@@ -1151,6 +1151,264 @@ function SolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {T<:Abstr
 
 end
 
+# only K-step computed with CUDA, not using characteristics
+function CudaSolveFirstCollisionSourceDLR4thOrderSN(obj::SolverCSD{T}) where {T<:AbstractFloat}
+    # Get rank
+    r=obj.settings.r;
+
+    eTrafo = T.(obj.csd.eTrafo);
+    energy = T.(obj.csd.eGrid);
+
+    nx = obj.settings.NCellsX;
+    ny = obj.settings.NCellsY;
+    nz = obj.settings.NCellsZ;
+    nq = obj.Q.nquadpoints;
+    N = obj.pn.nTotalEntries;
+
+    x = obj.settings.xMid;
+    y = obj.settings.yMid;
+    z = obj.settings.zMid;
+
+    sigmaO1Inv = 10000.0;
+    sigmaO2Inv = 10000.0;
+    sigmaO3Inv = 10000.0;
+    pos_beam = [obj.settings.x0,obj.settings.y0,obj.settings.z0];
+
+    # Set up initiandition and store as matrix
+    floorPsiAll = 1e-1;
+    floorPsi = 1e-17;
+    if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" # determine relevant directions in IC
+        psi = SetupIC(obj,obj.Q.pointsxyz);
+        idxFullBeam = findall(psi .> floorPsiAll)
+        idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
+        psi = psi[:,:,idxBeam]
+    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" # determine relevant directions in beam
+        psiBeam = zeros(nq)
+        for k = 1:nq
+            psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,obj.settings.z0,1)
+        end
+        idxBeam = findall( psiBeam .> floorPsi*maximum(psiBeam) );
+        psi = SetupIC(obj,obj.Q.pointsxyz[idxBeam,:]);
+    end
+    println("reduction of ordinates is ",(nq-length(idxBeam))/nq*100.0," percent")
+    
+    obj.qReduced = obj.Q.pointsxyz[idxBeam,:]
+    obj.M = obj.M[:,idxBeam]
+    obj.OReduced = obj.O[idxBeam,:]
+    nq = length(idxBeam);
+
+    # define density matrix
+    Id = Diagonal(ones(T,N));
+
+    # Low-rank approx of init data:
+    X,_,_ = svd!(zeros(T,nx*ny*nz,r));
+    W,_,_ = svd!(zeros(T,N,r));
+
+    # rank-r truncation:
+    X = X[:,1:r];
+    W = W[:,1:r];
+
+    # rank-r truncation:
+    S = zeros(T,r,r);
+
+    KC = CUDA.zeros(T,size(X));
+    K = zeros(T,size(X));
+    k1 = CUDA.zeros(T,size(X));
+    L = zeros(T,size(W));
+    l1 = zeros(T,size(W));
+
+    WAxWC = CuArray(zeros(T,r,r))
+    WAyWC = CuArray(zeros(T,r,r))
+    WAzWC = CuArray(zeros(T,r,r))
+
+    WAxW = zeros(T,r,r)
+    WAyW = zeros(T,r,r)
+    WAzW = zeros(T,r,r)
+
+    XL2xX = zeros(T,r,r)
+    XL2yX = zeros(T,r,r)
+    XL2zX = zeros(T,r,r)
+
+    MUp = zeros(T,r,r)
+    NUp = zeros(T,r,r)
+
+    L2x = CuSparseMatrixCSC(obj.stencil.L2x);
+    L2y = CuSparseMatrixCSC(obj.stencil.L2y);
+    L2z = CuSparseMatrixCSC(obj.stencil.L2z);
+
+    XNew = zeros(T,nx*ny*nz,r)
+
+    # impose boundary condition
+    X[obj.boundaryIdx,:] .= 0.0;
+
+    nEnergies = length(eTrafo);
+    dE = eTrafo[2]-eTrafo[1];
+    obj.settings.dE = dE
+
+    println("CFL = ",dE/min(obj.settings.dx,obj.settings.dy)/minimum(obj.density))
+
+    #psi = Ten2Vec(psi);
+    flux = zeros(T, size(psi))
+    uOUnc = zeros(T, nx * nz * ny)
+
+    prog = Progress(nEnergies-1,1)
+
+    intSigma = dE * SigmaAtEnergy(obj.csd,energy[1])[1];
+    
+    #loop over energy
+    for n=2:nEnergies
+        # compute scattering coefficients at current energy
+        sigmaS = SigmaAtEnergy(obj.csd,energy[n]);
+
+        ############## Dose Computation ##############
+
+        for i = 1:nx
+            for j = 1:ny
+                for k = 1:nz
+                    idx = vectorIndex(nx,ny,i,j,k)
+                    uOUnc[idx] = psi[i,j,k,:]'*obj.M[1,:];
+                end
+            end
+        end
+
+        obj.dose .+= 0.5*dE * (X*S*W[1,:] + uOUnc) * obj.csd.S[n-1] ./ obj.densityVec ;
+
+        Dvec = zeros(obj.pn.nTotalEntries)
+        for l = 0:obj.pn.N
+            for k=-l:l
+                i = GlobalIndex( l, k );
+                Dvec[i+1] = sigmaS[l+1]
+            end
+        end
+
+        D = Diagonal(sigmaS[1] .- Dvec);
+
+        # stream uncollided particles
+        solveFlux!(obj,psi,flux);
+
+        psi .= psi .- dE*flux;
+
+        psi .= psi ./ (1+dE*sigmaS[1]);
+
+        if n > 2 # perform streaming update after first collision (before solution is zero)
+            ################## K-step ##################
+            X[obj.boundaryIdx,:] .= 0.0;
+            KC .= CuArray(X*S);
+
+            WAxWC .= CuArray(W'*obj.pn.Ax*W) # Ax  = Ax^T
+            WAyWC .= CuArray(W'*obj.pn.Ay*W) # Ax  = Ax^T
+            WAzWC .= CuArray(W'*obj.pn.Az*W) # Az  = Az^T
+
+            dE12 = Float32(0.5*dE);
+            dEf32 = Float32(dE);
+
+            k1 .= -L2x*KC*WAxWC .- L2y*KC*WAyWC .- L2z*KC*WAzWC;
+            KC .= KC .+ dE .* k1 ./ 6;
+            k1 .= -L2x*(KC.+dE12.*k1)*WAxWC .- L2y*(KC.+dE12.*k1)*WAyWC .- L2z*(KC.+dE12.*k1)*WAzWC;
+            KC .+= 2 * dE .* k1 ./ 6;
+            k1 .= -L2x*(KC.+dE12.*k1)*WAxWC .- L2y*(KC.+dE12.*k1)*WAyWC .- L2z*(KC.+dE12.*k1)*WAzWC;
+            KC .+= 2 * dE .* k1 ./ 6;
+            k1 .= -L2x*(KC.+dEf32.*k1)*WAxWC .- L2y*(KC.+dEf32.*k1)*WAyWC .- L2z*(KC.+dEf32.*k1)*WAzWC;
+            KC .+= dE .* k1 ./ 6;
+
+            XNew,_,_ = svd!(Matrix(KC));
+
+            MUp .= XNew' * X;
+            ################## L-step ##################
+            L .= W*S';
+
+            XL2xX .= X'*obj.stencil.L2x*X
+            XL2yX .= X'*obj.stencil.L2y*X
+            XL2zX .= X'*obj.stencil.L2z*X
+            
+            l1 .= -obj.pn.Ax*L*XL2xX' .- obj.pn.Ay*L*XL2yX' .- obj.pn.Az*L*XL2zX';
+            L .= L .+ dE .* l1 ./ 6;
+            l1 .= -obj.pn.Ax*(L+0.5*dE*l1)*XL2xX' .- obj.pn.Ay*(L+0.5*dE*l1)*XL2yX' .- obj.pn.Az*(L+0.5*dE*l1)*XL2zX';
+            L .+= 2 * dE .* l1 ./ 6;
+            l1 .= -obj.pn.Ax*(L+0.5*dE*l1)*XL2xX' .- obj.pn.Ay*(L+0.5*dE*l1)*XL2yX' .- obj.pn.Az*(L+0.5*dE*l1)*XL2zX';
+            L .+= 2 * dE .* l1 ./ 6;
+            l1 .= -obj.pn.Ax*(L+dE*l1)*XL2xX' .- obj.pn.Ay*(L+dE*l1)*XL2yX' .- obj.pn.Az*(L+dE*l1)*XL2zX';
+            L .+= dE .* l1 ./ 6;
+                    
+            WNew,_,_ = svd!(L);
+
+            NUp .= WNew' * W;
+            W .= WNew;
+            X .= XNew;
+
+            # impose boundary condition
+            #X[obj.boundaryIdx,:] .= 0.0;
+            ################## S-step ##################
+            S .= MUp*S*(NUp')
+
+            XL2xX .= X'*obj.stencil.L2x*X
+            XL2yX .= X'*obj.stencil.L2y*X
+            XL2zX .= X'*obj.stencil.L2z*X
+
+            WAxW .= W'*obj.pn.Ax*W
+            WAyW .= W'*obj.pn.Ay*W
+            WAzW .= W'*obj.pn.Az*W
+
+            s1 = -XL2xX*S*WAxW .- XL2yX*S*WAyW .- XL2zX*S*WAzW;
+            s2 = -XL2xX*(S+0.5*dE*s1)*WAxW .- XL2yX*(S+0.5*dE*s1)*WAyW .- XL2zX*(S+0.5*dE*s1)*WAzW;
+            s3 = -XL2xX*(S+0.5*dE*s2)*WAxW .- XL2yX*(S+0.5*dE*s2)*WAyW .- XL2zX*(S+0.5*dE*s2)*WAzW;
+            s4 = -XL2xX*(S+dE*s3)*WAxW .- XL2yX*(S+dE*s3)*WAyW .- XL2zX*(S+dE*s3)*WAzW;
+
+            S .= S .+ dE .* (s1 .+ 2 * s2 .+ 2 * s3 .+ s4) ./ 6;
+        end
+
+        ############## Out Scattering ##############
+        L .= W*S';
+
+        for i = 1:r
+            L[:,i] = (Id .+ dE*D)\L[:,i]
+        end
+
+        W,Sv,Tv = svd!(L);
+
+        S .= Tv*Diagonal(Sv);
+
+        ############## In Scattering ##############
+
+        ################## K-step ##################
+        X[obj.boundaryIdx,:] .= 0.0;
+        K .= X*S;
+        #u = u .+dE*Mat2Vec(psiNew)*M'*Diagonal(Dvec);
+        K .= K .+ dE * Ten2Vec(psi) * (obj.M' * (Diagonal(Dvec) * W) );
+        K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
+
+        XNew,_,_ = svd!(K);
+
+        MUp .= XNew' * X;
+
+        ################## L-step ##################
+        L = W*S';
+        L = L .+dE*Diagonal(Dvec)*obj.M*(Ten2Vec(psi)'*X);
+
+        WNew,_,_ = svd!(L);
+
+        NUp .= WNew' * W;
+
+        W .= WNew;
+        X .= XNew;
+
+        ################## S-step ##################
+        S .= MUp*S*(NUp')
+        S .= S .+dE*(X'*Ten2Vec(psi))*obj.M'*(Diagonal(Dvec)*W);
+
+        ############## Dose Computation ##############
+        obj.dose .+= 0.5*dE * (X*S*W[1,:]+Ten2Vec(psi) * obj.M[1,:]) * obj.csd.S[n] ./ obj.densityVec;
+        
+        next!(prog) # update progress bar
+    end
+
+    U,Sigma,V = svd!(S);
+    # return solution and dose
+    return X*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*W*V,W*V,obj.dose,psi;
+
+end
+
+# only K-step computed with CUDA, using characteristics
 function CudaSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {T<:AbstractFloat}
     # Get rank
     r=obj.settings.r;
@@ -1265,13 +1523,13 @@ function CudaSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {T<:A
         for q = 1:nq
             beamOmega = 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-obj.qReduced[q,1])^2)*exp(-sigmaO2Inv*(obj.settings.Omega2-obj.qReduced[q,2])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-obj.qReduced[q,3])^2) * exp(-intSigma);
             for j = 1:ny
-                beamy = normpdf(y[j] - eTrafo[n]*obj.qReduced[q,2],pos_beam[2],.1)
+                beamy = normpdf(y[j] - eTrafo[n]*obj.qReduced[q,2],pos_beam[2],obj.settings.sigmaX)
                 if beamy < 1e-6 continue; end
                 for i = 1:nx
-                    beamx = normpdf(x[i] - eTrafo[n]*obj.qReduced[q,1],pos_beam[1],.1)
+                    beamx = normpdf(x[i] - eTrafo[n]*obj.qReduced[q,1],pos_beam[1],obj.settings.sigmaX)
                     if beamx < 1e-6 continue; end
                     for k = 1:nz
-                        beamz = normpdf(z[k] - eTrafo[n]*obj.qReduced[q,3],pos_beam[3],.1)
+                        beamz = normpdf(z[k] - eTrafo[n]*obj.qReduced[q,3],pos_beam[3],obj.settings.sigmaX)
                         idx = vectorIndex(nx,ny,i,j,k)
                         psi[idx,q] = beamOmega * beamx * beamy * beamz             
                     end
@@ -1407,6 +1665,7 @@ function CudaSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {T<:A
 
 end
 
+# full CUDA
 function CudaFullSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {T<:AbstractFloat}
     # Get rank
     r=obj.settings.r;
@@ -1528,13 +1787,13 @@ function CudaFullSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {
         for q = 1:nq
             beamOmega = 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-obj.qReduced[q,1])^2)*exp(-sigmaO2Inv*(obj.settings.Omega2-obj.qReduced[q,2])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-obj.qReduced[q,3])^2) * exp(-intSigma);
             for j = 1:ny
-                beamy = normpdf(y[j] - eTrafo[n]*obj.qReduced[q,2],pos_beam[2],.1)
+                beamy = normpdf(y[j] - eTrafo[n]*obj.qReduced[q,2],pos_beam[2],obj.settings.sigmaX)
                 if beamy < 1e-6 continue; end
                 for i = 1:nx
-                    beamx = normpdf(x[i] - eTrafo[n]*obj.qReduced[q,1],pos_beam[1],.1)
+                    beamx = normpdf(x[i] - eTrafo[n]*obj.qReduced[q,1],pos_beam[1],obj.settings.sigmaX)
                     if beamx < 1e-6 continue; end
                     for k = 1:nz
-                        beamz = normpdf(z[k] - eTrafo[n]*obj.qReduced[q,3],pos_beam[3],.1)
+                        beamz = normpdf(z[k] - eTrafo[n]*obj.qReduced[q,3],pos_beam[3],obj.settings.sigmaX)
                         idx = vectorIndex(nx,ny,i,j,k)
                         psiCPU[idx,q] = T(beamOmega * beamx * beamy * beamz)             
                     end
