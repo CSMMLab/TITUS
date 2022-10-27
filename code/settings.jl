@@ -75,7 +75,7 @@ mutable struct Settings
     epsAdapt::Float64;  
     adaptIndex::Float64;
 
-    function Settings(Nx::Int=52,Ny::Int=52,Nz::Int=52,r::Int=15,problem::String="LineSource",particle::String="Electrons")
+    function Settings(Nx::Int=52,Ny::Int=52,Nz::Int=52,r::Int=15,problem::String="validation",particle::String="Protons")
         #Proton rest energy
         if particle == "Protons"
             eRest = 938.26 #MeV
@@ -281,7 +281,7 @@ mutable struct Settings
         dE = cfl*min(dx,dy,dz)*minimum(density);#1/312;#cfl*min(dx,dy)*minimum(density);
         
         # number PN moments
-        nPN = 37#37, 21; # use odd number
+        nPN = 11#37, 21; # use odd number
 
         # build class
         new(Nx,Ny,Nz,NCellsX,NCellsY,NCellsZ,a,b,c,d,e,f,dx,dy,dz,eMax,eRest,dE,cfl,nPN,x,xMid,y,yMid,z,zMid,problem,particle,x0,y0,z0,Omega1,Omega2,Omega3,densityMin,sigmaX,sigmaY,sigmaZ,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex);

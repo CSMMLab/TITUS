@@ -13,21 +13,21 @@ s.particle = "Protons"
 
 # plot proton cross sections
 
-csd = CSD(s);
+objCSD = CSD(s);
 param = MaterialParametersProtons();
 
 # plot proton cross sections
-E = csd.eGrid;#[10.0 25.0 50.0] .+ s.eRest
-nE = length(energy)
+E = objCSD.eGrid;#[10.0 25.0 50.0] .+ s.eRest
+nE = length(E)
 xi = zeros(nE, s.nPN + 1)
 for n = 1:nE
-    xi[n,:] = SigmaAtEnergy(csd, E[n])
+    xi[n,:] = SigmaAtEnergy(objCSD, E[n])
 end
 
 # plot stopping power
 fig = figure("stopping power",figsize=(14,12),dpi=100)
 ax = gca()
-ax.plot(csd.eGrid[1:end-1] .- s.eRest,csd.S[1:end-1], linewidth=2, alpha=0.6)
+ax.plot(objCSD.eGrid[1:end-1] .- s.eRest,objCSD.S[1:end-1], linewidth=2, alpha=0.6)
 ax.set_xscale("log")
 ax.legend(loc="upper right",fontsize=15)
 ax.tick_params("both",labelsize=15) 
@@ -53,3 +53,4 @@ ax.set_ylabel(L"\sigma",fontsize=15)
 PyPlot.grid(true, which="both")
 tight_layout();
 show()
+savefig("output/sigma.png")
