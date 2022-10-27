@@ -66,7 +66,6 @@ struct CSD{T<:AbstractFloat}
 
         # determine transformed energy Grid for computation
         nEnergies = Integer(ceil(maxE/settings.dE));
-        print(nEnergies)
         #eTrafo = collect(exp10.(range(log10(eMaxTrafo - eMaxTrafo+0.0001),log10(eMaxTrafo - eMinTrafo -0.0001),length = nEnergies)));
         eTrafo = collect(range(eMaxTrafo - eMaxTrafo,eMaxTrafo - eMinTrafo,length = nEnergies));
         #println("eTrafo", eTrafo)
@@ -104,14 +103,16 @@ function SigmaAtEnergy(obj::CSD{T}, energy::T) where {T<:AbstractFloat}
         for i = 1:(obj.settings.nPN+1)
             # define Sigma mapping for interpolation at moment i
             if energy<7 .+ obj.settings.eRest
+                print(size(obj.E_Tab))
+                print(size(obj.E_sigmaTab))
                 E2Sigma_pp = LinearInterpolation(obj.E_Tab, obj.sigma_pp[:,i]; extrapolation_bc=Throw())
                 E2Sigma_ce = LinearInterpolation(obj.E_Tab, obj.sigma_ce[:,i]; extrapolation_bc=Throw())
-                y[i] = 0.88810600 .* 0 .+ 0.11189400.* E2Sigma_pp(energy) + E2Sigma_ce(energy);
+                y[i] = 2 .* E2Sigma_pp(energy) + E2Sigma_ce(energy);
             else
                 E2Sigma_O = LinearInterpolation(obj.E_sigmaTab, obj.sigma_tab[:,i]; extrapolation_bc=Throw())
                 E2Sigma_pp = LinearInterpolation(obj.E_Tab, obj.sigma_pp[:,i]; extrapolation_bc=Throw())
                 E2Sigma_ce = LinearInterpolation(obj.E_Tab, obj.sigma_ce[:,i]; extrapolation_bc=Throw())
-                y[i] = 0.88810600 .* E2Sigma_O(energy) .+ 0.11189400.* E2Sigma_pp(energy) + E2Sigma_ce(energy);
+                y[i] =  E2Sigma_O(energy) .+ 2 .* E2Sigma_pp(energy) + E2Sigma_ce(energy);
             end
         end
     else

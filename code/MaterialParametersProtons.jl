@@ -2799,10 +2799,10 @@ struct MaterialParametersProtons
                         ];
                         
          E_rest = 938.26 #MeV proton rest energy
-         sigmaEl_tab_pp = Proton_Proton_nuclear(E_tab_PSTAR,Omega_sigmaElTab);
+         sigmaEl_tab_pp = Proton_Proton_nuclear(E_tab_PSTAR,collect(0:1:180));
         #  sigma_ce = Coulomb(E_tab_PSTAR,Omega_sigmaElTab) #multiple coulomb scattering (dependent on unknown spacial stepsize)
-         #sigma_ce = Rutherford(E_tab_PSTAR,Omega_sigmaElTab) #single coulomb scattering
-         sigma_ce = CoulombOlbrant(E_tab_PSTAR,Omega_sigmaElTab) 
+         sigma_ce = ScreenedRutherford(E_tab_PSTAR,collect(0:1:180)) #single coulomb scattering
+         #sigma_ce = CoulombOlbrant(E_tab_PSTAR,Omega_sigmaElTab) 
          E_tab_PSTAR= dropdims(E_tab_PSTAR, dims = tuple(findall(size(E_tab_PSTAR) .== 1)...)).+ E_rest
          E_sigmaTab= E_sigmaTab .+ E_rest
          #sigmaTab = 0.88810600 .* sigmaEl_OInt_ICRU .+ 0.11189400.* sigmaEl_tab_pp + sigma_ce;
@@ -2941,9 +2941,12 @@ struct MaterialParametersProtons
         #This is valid for single Coulomb scattering events
         #screened crosssection transforms xs from center of mass to laboratory frame and accounts for singularity at cos(1)
         #[Uikema, 2012]
+        c = 299792458 #speed of light in m/s
+        E = E .* 1.60217733*10^-13;
         Z_effH2O = 7.42 #effective atomic number of water
         M_H2O = 18.02 #atomic mass number of water g/mol~=amu 
         mH2O_kg = 2.988*10^-26 #H2O molecule mass in kg
+        N_H2O = 6.022*10^23 * 1 / M_H2O *(100)^3 #atomic density of water 
         Z_p = 1 #atomic number of protons
         M_p = 1.007276466621 # proton mass number unit amu/Da
         mp_kg = 1.67262192*10^-27 #proton mass in kg
@@ -2952,15 +2955,17 @@ struct MaterialParametersProtons
         mu = cosd.(Omega)
         sigma=zeros(size(E,1),size(Omega,1));
         m0 =  1/(1/mH2O_kg + 1/mp_kg) #reduced proton mass
-        v02 = 2 .*E./mp_kg #squared initial velocity of protons
+        v02 = 2*E./mp_kg #squared initial velocity of protons 
         alpha = 0.0072973525 #fine-structure constant
         me =  9.1093837015*10^-31 #electron mass in kg
-        c = 299792458 #speed of light in m/s
-        p = mp_kg*sqrt.(v02) #momentum of protons
+        p = mp_kg .* sqrt.(v02) #momentum of protons 
+
         eta = ( Z_effH2O^(1/3) .* alpha .* me .*c ./ p ).^2 #lower bound for scattering angle due to screening of the nucleus
         for i=1:size(E,1)
-             sigma[i,:] = ((1 .+ 2 .* mu ./ M_H2O .+ 1/M_H2O^2).^(3/2)) ./(1 .+ mu ./ M_H2O) .* (4 .*pi .*eps0).^-2 .*(Z_effH2O .*Z_p .*(e^2) ./(m0.*v02[i])).^2 .* 1 ./(1 .- mu .+ 2 .*eta[i]).^2 #in b/sr [Uikema, 2012]
+            sigma[i,:] = ((1 .+ 2 .* mu ./ M_H2O .+ 1/M_H2O^2).^(3/2)) ./(1 .+ mu ./ M_H2O) .*((Z_effH2O .*Z_p .*(e^2)) ./(4 .*pi .*eps0 .* m0.*v02[i] )).^2 ./(1 .- mu .+ 2 .*eta[i]).^2 *10^4 #in [m^-2] [Uikema, 2012]
         end
+        sigma = sigma .* N_H2O #Transfer to macroscopic cross section
+        E = E ./ (1.60217733*10^-13);
         N = 40;
         xi = integrateXS_Poly(N,cosd.(Omega),E,sigma)
         return xi
@@ -2988,37 +2993,16 @@ struct MaterialParametersProtons
         sigma_ciLab=zeros(size(E,1),size(mu,1));
 
         for i=1:size(E,1)
-            eta_O = A_O/(1+A_O) * sqrt.(4.78453* 10^-6 * M_p .* E[i])
-            k_O = Z_p * Z_O * sqrt.(2.48058 * 10^4 * M_p ./(E[i]))
+            k_O = A_O/(1+A_O) * sqrt.(4.78453* 10^-6 * M_p .* E[i])
+            eta_O = Z_p * Z_O * sqrt.(2.48058 * 10^4 * M_p ./(E[i]))
             sigma_cd[i,:] = eta_O.^2 ./(k_O.^2 .* (1 .- mu.^2))  #coulomb scattering for different particles (i.e. proton, O)
-            eta_H = A_H/(1+A_H) * sqrt.(4.78453*10^-6 * M_p .* E[i])
-            k_H = Z_p * Z_p * sqrt.(2.48058 * 10^4 * M_p ./(E[i]))
+            k_H = A_H/(1+A_H) * sqrt.(4.78453*10^-6 * M_p .* E[i])
+            eta_H = Z_p * Z_p * sqrt.(2.48058 * 10^4 * M_p ./(E[i]))
             sigma_ci[i,:] = 2 .* eta_H.^2 ./(k_H.^2 .* (1 .- mu.^2)) .*  ((1 .+ mu.^2)./(1 .- mu.^2) .+ (-1)^(2*s) ./ (2*s+1) .* cos.(eta_H .* log.((1 .+mu)./(1 .-mu))))#coulomb scattering for same particles (i.e. proton-proton (projectile with proton in H core))
         end
          
         N = 40;
-        
-        io = open("sigmacd_int.txt", "w") do io
-            for x in sigma_cd[65,:]
-              println(io, x)
-            end
-        end
-       
-        sigma_cdInt = integrateXS_Poly(N,mu,E,sigma_cd)
-        mu_Lab = sqrt.((1 .+mu)./2)
-        for i=1:size(E,1)
-            sigma_ciLab[i,:] = 4 .* sqrt.((1 .+mu)./2) .* sigma_ci[i,:]
-        end
-        io = open("sigmaci_Lab.txt", "w") do io
-            for x in sigma_ciLab[65,:]
-              println(io, x)
-            end
-        end
-        io = open("mu_Lab.txt", "w") do io
-            for x in mu_Lab
-              println(io, x)
-            end
-        end
+
         sigma_ciInt = integrateXS_Poly(N,mu_Lab,E,sigma_ciLab)
         #need transformation from  center of mass to laboratory system 
         xi = sigma_cdInt .+ 2 .* sigma_ciInt
