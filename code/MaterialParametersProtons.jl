@@ -2797,7 +2797,13 @@ struct MaterialParametersProtons
                          -0.00000000
                           0.00000000
                         ];
-         Omega = [0.5 1	2	3	4	5	6	7	8	9	10	11	12	13	14	15	16	17	18	19	20	21	22	23	24	25	26	27	28	29	30	31	32	33	34	35	36	37	38	39	40	41	42	43	44	45	46	47	48	49	50	51	52	53	54	55	56	57	58	59	60	61	62	63	64	65	66	67	68	69	70	71	72	73	74	75	76	77	78	79	80	81	82	83	84	85	86	87	88	89	90	91	92	93	94	95	96	97	98	99	100	101	102	103	104	105	106	107	108	109	110	111	112	113	114	115	116	117	118	119	120	121	122	123	124	125	126	127	128	129	130	131	132	133	134	135	136	137	138	139	140	141	142	143	144	145	146	147	148	149	150	151	152	153	154	155	156	157	158	159	160	161	162	163	164	165	166	167	168	169	170	171	172	173	174	175	176	177	178	179	179.5]';     
+         #Omega = [0.5 1	2	3	4	5	6	7	8	9	10	11	12	13	14	15	16	17	18	19	20	21	22	23	24	25	26	27	28	29	30	31	32	33	34	35	36	37	38	39	40	41	42	43	44	45	46	47	48	49	50	51	52	53	54	55	56	57	58	59	60	61	62	63	64	65	66	67	68	69	70	71	72	73	74	75	76	77	78	79	80	81	82	83	84	85	86	87	88	89	90	91	92	93	94	95	96	97	98	99	100	101	102	103	104	105	106	107	108	109	110	111	112	113	114	115	116	117	118	119	120	121	122	123	124	125	126	127	128	129	130	131	132	133	134	135	136	137	138	139	140	141	142	143	144	145	146	147	148	149	150	151	152	153	154	155	156	157	158	159	160	161	162	163	164	165	166	167	168	169	170	171	172	173	174	175	176	177	178	179	179.5]';     
+         #Omega = [collect(range(1e-3,1 - 1e-3,100)); collect(range(1,179,179)); collect(range(179 + 1e-3,180 - 1e-3,100))];
+         
+         dOmega = 5.0;
+        OmegaC = 15;
+        OmegaF = 10;
+        Omega = [collect(range(dOmega,OmegaF,20)); collect(range(OmegaC,180 - OmegaC,170)); collect(range(180 - OmegaF,180 - dOmega,20))];
          E_rest = 938.26 #MeV proton rest energy
          sigmaEl_OInt_ICRU = Proton_Oxygen_nuclear(E_sigmaTab,Omega)
          sigmaEl_tab_pp = Proton_Proton_nuclear(E_tab_PSTAR,Omega);
@@ -2811,28 +2817,6 @@ struct MaterialParametersProtons
          S_tab_PSTAR = dropdims(S_tab_PSTAR, dims = tuple(findall(size(S_tab_PSTAR) .== 1)...))
          new(S_tab_PSTAR,E_tab_PSTAR,E_sigmaTab,sigmaEl_OInt_ICRU,sigmaEl_tab_pp, sigma_ce,StarMAPmoments);
      end
-
-    function integrateXS_Poly(N,mu,E,sigma)
-        nMu = length(mu);
-        nE = length(E);
-        P = zeros(N,nMu)
-        for k = 1:nMu
-            for i = 1:N
-                Ptmp = collectPl(mu[k], lmax = N-1);
-                P[i,k] = Ptmp[i-1]
-            end
-        end
-
-        xi = zeros(nE,N)
-        for n = 1:nE
-            for i = 1:N
-                for k = 1:nMu-1
-                     xi[n,i] -= 0.5*(mu[k+1]-mu[k])*(sigma[n,k]*P[i,k] + sigma[n,k+1]*P[i,k+1]);
-                end
-            end
-        end
-        return xi
-    end
 
     function integrateRutherfordXS_Poly3D(N,theta,E,sigma)
         Z_effH2O = 7.42 #effective atomic number of water
@@ -2987,7 +2971,7 @@ struct MaterialParametersProtons
         end
         sigma = sigma .* N_H2O #Transfer to macroscopic cross section
         E = E ./ (1.60217733*10^-13);
-        N = 40;
+        N = 100;
         xi = integrateRutherfordXS_Poly3D(N,Omega,E,sigma)
         #xi = integrateXS_Poly(N,mu,E,sigma)
         return xi
@@ -3033,3 +3017,55 @@ struct MaterialParametersProtons
 
 end
 
+function ScreenedRutherfordAngle(E,Omega)
+    #This is valid for single Coulomb scattering events
+    #screened crosssection transforms xs from center of mass to laboratory frame and accounts for singularity at cos(1)
+    #[Uikema, 2012]
+    c = 299792458 #speed of light in m/s
+    E = E .* 1.60217733*10^-13;
+    Z_effH2O = 7.42 #effective atomic number of water
+    M_H2O = 18.02 #atomic mass number of water g/mol~=amu 
+    mH2O_kg = 2.988*10^-26 #H2O molecule mass in kg
+    N_H2O = 6.022*10^23 * 1 / M_H2O *(100)^3 #atomic density of water 
+    Z_p = 1 #atomic number of protons
+    M_p = 1.007276466621 # proton mass number unit amu/Da
+    mp_kg = 1.67262192*10^-27 #proton mass in kg
+    e = 1.602176634*10^-19 #elementary electric charge
+    eps0 = 8.8541878128*10^-12 #elektrische Feldkonstante
+    mu = cosd.(Omega)
+    sigma=zeros(size(E,1),size(Omega,1));
+    m0 =  1/(1/mH2O_kg + 1/mp_kg) #reduced proton mass
+    v02 = 2*E./mp_kg #squared initial velocity of protons 
+    alpha = 0.0072973525 #fine-structure constant
+    me =  9.1093837015*10^-31 #electron mass in kg
+    p = mp_kg .* sqrt.(v02) #momentum of protons 
+
+    eta = ( Z_effH2O^(1/3) .* alpha .* me .*c ./ p ).^2 #lower bound for scattering angle due to screening of the nucleus
+    for i=1:size(E,1)
+        sigma[i,:] = ((1 .+ 2 .* mu ./ M_H2O .+ 1/M_H2O^2).^(3/2)) ./(1 .+ mu ./ M_H2O) .*((Z_effH2O .*Z_p .*(e^2)) ./(4 .*pi .*eps0 .* m0.*v02[i] )).^2 ./(1 .- mu .+ 2 .*eta[i]).^2 *10^4 #in [m^-2] [Uikema, 2012]
+    end
+    sigma = sigma .* N_H2O #Transfer to macroscopic cross section
+    return sigma, mu
+end
+
+function integrateXS_Poly(N,mu,E,sigma)
+    nMu = length(mu);
+    nE = length(E);
+    P = zeros(N,nMu)
+    for k = 1:nMu
+        for i = 1:N
+            Ptmp = collectPl(mu[k], lmax = N-1);
+            P[i,k] = Ptmp[i-1]
+        end
+    end
+
+    xi = zeros(nE,N)
+    for n = 1:nE
+        for i = 1:N
+            for k = 1:nMu-1
+                 xi[n,i] -= 0.5*(mu[k+1]-mu[k])*(sigma[n,k]*P[i,k] + sigma[n,k+1]*P[i,k+1]);
+            end
+        end
+    end
+    return xi
+end
