@@ -182,7 +182,7 @@ function SetupIC(obj::SolverCSD{T},pointsxyz::Matrix{Float64}) where {T<:Abstrac
             for j = 1:ny
                 for k = 1:nz
                     for q = 1:nq 
-                        psi[i,j,k,q] = PsiBeam(obj,pointsxyz[q,:],0.0,obj.settings.xMid[i],obj.settings.yMid[j],obj.settings.zMid[k],1)
+                        psi[i,j,k,q] = PsiBeam(obj,T.(pointsxyz[q,:]),T(0.0),obj.settings.xMid[i],obj.settings.yMid[j],obj.settings.zMid[k],1)
                     end
                 end
             end
@@ -265,7 +265,8 @@ function PsiBeam(obj::SolverCSD{T},Omega::Array{T,1},E::T,x::Float64,y::Float64,
         sigmaEInv = 1000.0;
         pos_beam = [obj.settings.x0,obj.settings.y0,obj.settings.z0];
         space_beam = normpdf(x,pos_beam[1],obj.settings.sigmaX).*normpdf(y,pos_beam[2],obj.settings.sigmaY).*normpdf(z,pos_beam[3],obj.settings.sigmaZ);
-        return 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO2Inv*(obj.settings.Omega2-Omega[2])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2)*space_beam#*trafo;;
+        omega_beam = exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO2Inv*(obj.settings.Omega2-Omega[2])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2);
+        return 10^5 .* omega_beam .* space_beam .* normpdf(E,obj.settings.eMax,obj.settings.sigmaE) .* obj.csd.S[n+1]
     elseif obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD"
         return 0.0;
     end
@@ -1704,35 +1705,56 @@ function FindIdxBoundary(obj::SolverCSD{T}) where {T<:AbstractFloat}
 
     # set boundary condition
     for n = 1:length(energy)
+        if normpdf(energy[n],obj.settings.eMax,obj.settings.sigmaE) < 1e-7
+            break;
+        end
         for q = 1:nq
             for j = 1:ny
                 for k = 1:nz
                     idx = vectorIndex(nx,ny,1,j,k)
-                    val = PsiBeam(obj,obj.qReduced[q,:],energy[n],obj.settings.xMid[1],obj.settings.yMid[j],obj.settings.zMid[k],n-1);
-                    if val > 1e-7 idxGrid = unique([idxGrid; idx],idx) end
+                    val = PsiBeam(obj,obj.qReduced[q,:],energy[n],obj.settings.xMid[1],obj.settings.yMid[j],obj.settings.zMid[k],n);
+                    if val > 1e-12
+                        println(val)
+                        idxGrid = Base.unique([idxGrid; idx]) 
+                    end
                     idx = vectorIndex(nx,ny,nx,j,k)
-                    val = PsiBeam(obj,obj.qReduced[q,:],energy[n],obj.settings.xMid[end],obj.settings.yMid[j],obj.settings.zMid[k],n-1);
-                    if val > 1e-7 idxGrid = unique([idxGrid; idx],idx) end
+                    val = PsiBeam(obj,obj.qReduced[q,:],energy[n],obj.settings.xMid[end],obj.settings.yMid[j],obj.settings.zMid[k],n);
+                    if val > 1e-12
+                        println(val)
+                        idxGrid = Base.unique([idxGrid; idx]) 
+                    end
                 end
             end
             for i = 1:nx
                 for k = 1:nz
                     idx = vectorIndex(nx,ny,i,1,k)
-                    val = PsiBeam(obj,obj.qReduced[q,:],energy[n],obj.settings.xMid[i],obj.settings.yMid[1],obj.settings.zMid[k],n-1);
-                    if val > 1e-7 idxGrid = unique([idxGrid; idx],idx) end
+                    val = PsiBeam(obj,obj.qReduced[q,:],energy[n],obj.settings.xMid[i],obj.settings.yMid[1],obj.settings.zMid[k],n);
+                    if val > 1e-12
+                        println(val)
+                        idxGrid = Base.unique([idxGrid; idx]) 
+                    end
                     idx = vectorIndex(nx,ny,i,ny,k)
-                    val = PsiBeam(obj,obj.qReduced[q,:],energy[n],obj.settings.xMid[i],obj.settings.yMid[end],obj.settings.zMid[k],n-1);
-                    if val > 1e-7 idxGrid = unique([idxGrid; idx],idx) end
+                    val = PsiBeam(obj,obj.qReduced[q,:],energy[n],obj.settings.xMid[i],obj.settings.yMid[end],obj.settings.zMid[k],n);
+                    if val > 1e-12
+                        println(val)
+                        idxGrid = Base.unique([idxGrid; idx]) 
+                    end
                 end
             end
             for i = 1:nx
                 for j = 1:ny
                     idx = vectorIndex(nx,ny,i,j,1)
-                    val = PsiBeam(obj,obj.qReduced[q,:],energy[n],obj.settings.xMid[i],obj.settings.yMid[j],obj.settings.zMid[1],n-1);
-                    if val > 1e-7 idxGrid = unique([idxGrid; idx],idx) end
+                    val = PsiBeam(obj,obj.qReduced[q,:],energy[n],obj.settings.xMid[i],obj.settings.yMid[j],obj.settings.zMid[1],n);
+                    if val > 1e-12
+                        println(val)
+                        idxGrid = Base.unique([idxGrid; idx]) 
+                    end
                     idx = vectorIndex(nx,ny,i,j,nz)
-                    val = PsiBeam(obj,obj.qReduced[q,:],energy[n],obj.settings.xMid[i],obj.settings.yMid[j],obj.settings.zMid[end],n-1);
-                    if val > 1e-7 idxGrid = unique([idxGrid; idx],idx) end
+                    val = PsiBeam(obj,obj.qReduced[q,:],energy[n],obj.settings.xMid[i],obj.settings.yMid[j],obj.settings.zMid[end],n);
+                    if val > 1e-12
+                        println(val)
+                        idxGrid = Base.unique([idxGrid; idx]) 
+                    end
                 end
             end
         end
@@ -1774,7 +1796,7 @@ function CudaFullSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {
     elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" # determine relevant directions in beam
         psiBeam = zeros(nq)
         for k = 1:nq
-            psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,obj.settings.z0,1)
+            psiBeam[k] = PsiBeam(obj,T.(obj.Q.pointsxyz[k,:]),T(obj.settings.eMax),obj.settings.x0,obj.settings.y0,obj.settings.z0,1)
         end
         idxBeam = findall( psiBeam .> floorPsi*maximum(psiBeam) );
         psi = SetupIC(obj,obj.Q.pointsxyz[idxBeam,:]);
@@ -1862,7 +1884,7 @@ function CudaFullSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {
 
         ############## Dose Computation ##############
         
-        dose .+= dE12 * (X*S*W[1,:] .* ∫Y₀⁰dΩ * 0.0 + psi * weights) * sPow[n-1] ./ densityVec ;
+        dose .+= dE12 * (X*S*W[1,:] .* ∫Y₀⁰dΩ + psi * weights) * sPow[n-1] ./ densityVec ;
 
         intSigma += dE * sigmaS[1];
 
@@ -1887,7 +1909,8 @@ function CudaFullSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {
 
         # forward tracing when BCs given
         #=for k = 1:length(idxBeam)
-            yBeam = y[j] - eTrafo[n]*obj.qReduced[q,2]
+            x_val = x[j] + eTrafo[n]*obj.qReduced[q,1]
+            y_val = y[j] + eTrafo[n]*obj.qReduced[q,2]
         end=#
 
         psi .= CuArray(psiCPU)
@@ -1998,7 +2021,7 @@ function CudaFullSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {
         S .= S .+dE*(X'*psi)*M'*(Diagonal(Dvec)*W);
 
         ############## Dose Computation ##############
-        dose .+= dE12 * (X*S*W[1,:] * ∫Y₀⁰dΩ * 0.0 + psi * weights) * sPow[n] ./ densityVec ;
+        dose .+= dE12 * (X*S*W[1,:] * ∫Y₀⁰dΩ + psi * weights) * sPow[n] ./ densityVec ;
         
         next!(prog) # update progress bar
     end

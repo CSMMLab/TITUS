@@ -60,6 +60,7 @@ mutable struct Settings
     sigmaX::Float64; # spatial std of initial beam
     sigmaY::Float64; # spatial std of initial beam
     sigmaZ::Float64; # spatial std of initial beam
+    sigmaE::Float64; # energy std of boundary beam
 
     # physical parameters
     sigmaT::Float64;
@@ -180,6 +181,7 @@ mutable struct Settings
             x0 = 0.5 * b;
             y0 = 0.5;
             z0 = 0.5 * f;
+            sigmaE = 1e-2;
             #epsAdapt = 1e-1;
             #density[Int(floor(NCellsX*0.5)):end,:] .= 5.0; #beam hits interface
             #density[:,Int(floor(NCellsX*0.56)):end] .= 5.0; #beam perpendicular to interface
@@ -284,7 +286,7 @@ mutable struct Settings
         nPN = 21#37, 21; # use odd number
 
         # build class
-        new(Nx,Ny,Nz,NCellsX,NCellsY,NCellsZ,a,b,c,d,e,f,dx,dy,dz,eMax,eRest,dE,cfl,nPN,x,xMid,y,yMid,z,zMid,problem,particle,x0,y0,z0,Omega1,Omega2,Omega3,densityMin,sigmaX,sigmaY,sigmaZ,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex);
+        new(Nx,Ny,Nz,NCellsX,NCellsY,NCellsZ,a,b,c,d,e,f,dx,dy,dz,eMax,eRest,dE,cfl,nPN,x,xMid,y,yMid,z,zMid,problem,particle,x0,y0,z0,Omega1,Omega2,Omega3,densityMin,sigmaX,sigmaY,sigmaZ,sigmaE,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex);
     end
 end
 
