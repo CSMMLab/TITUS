@@ -1780,6 +1780,19 @@ function CudaFullSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {
     y = obj.settings.yMid;
     z = obj.settings.zMid;
 
+    # setup spatial grid
+    grid = zeros(nx*ny*nz,3)
+    for i = 1:nx
+        for j = 1:ny
+            for k = 1:nz
+                idx = vectorIndex(nx,ny,i,j,k)
+                grid[idx,1] = x[i];
+                grid[idx,2] = y[j];
+                grid[idx,3] = z[k];
+            end
+        end
+    end
+
     sigmaO1Inv = 10000.0;
     sigmaO2Inv = 10000.0;
     sigmaO3Inv = 10000.0;
@@ -1909,8 +1922,7 @@ function CudaFullSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {
 
         # forward tracing when BCs given
         #=for k = 1:length(idxBeam)
-            x_val = x[j] + eTrafo[n]*obj.qReduced[q,1]
-            y_val = y[j] + eTrafo[n]*obj.qReduced[q,2]
+            x_val = grid[k,:] .+ eTrafo[n]*obj.qReduced[q,:]
         end=#
 
         psi .= CuArray(psiCPU)
