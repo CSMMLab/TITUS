@@ -11,7 +11,7 @@ We solve the continuous slowing down approximation (CSD) to transport equations 
 ```
 and 
 ```bash
-pkg> add  ProgressMeter LinearAlgebra LegendrePolynomials QuadGK FastGaussQuadrature SparseArrays SphericalHarmonicExpansions SphericalHarmonics TypedPolynomials GSL MultivariatePolynomials Einsum CUDA Base Distributions PyCall PyPlot DelimitedFiles WriteVTK Interpolations Images FileIO
+pkg> add  ProgressMeter LinearAlgebra LegendrePolynomials QuadGK FastGaussQuadrature SparseArrays SphericalHarmonicExpansions SphericalHarmonics TypedPolynomials GSL MultivariatePolynomials Einsum CUDA Distributions PyCall PyPlot DelimitedFiles WriteVTK Interpolations Images FileIO
 ``` 
 3. Set dimensions, rank, solver and particle type of your problem in main.jl and choose test case (defined in settings.jl)
 4. run main.jl, in REPL:
