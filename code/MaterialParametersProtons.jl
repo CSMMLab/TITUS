@@ -56,7 +56,8 @@ struct MaterialParametersProtons
         0.810000000000000	0.330000000000000	0.0833000000000000	0.0125000000000000	0.00227000000000000	0.000881000000000000	0.000365000000000000	0.000198000000000000	0.000126000000000000	6.60000000000000e-05	3.00000000000000e-05	1.70000000000000e-05	1.30000000000000e-05	1.00000000000000e-05	8.00000000000000e-06	6.00000000000000e-06	5.00000000000000e-06	4.00000000000000e-06	3.00000000000000e-06	3.00000000000000e-06	2.00000000000000e-06	2.00000000000000e-06	2.00000000000000e-06	2.00000000000000e-06	2.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06;
         0.919000000000000	0.320000000000000	0.0625000000000000	0.00715000000000000	0.00150000000000000	0.000589000000000000	0.000238000000000000	0.000149000000000000	9.10000000000000e-05	4.30000000000000e-05	2.10000000000000e-05	1.30000000000000e-05	1.00000000000000e-05	8.00000000000000e-06	6.00000000000000e-06	5.00000000000000e-06	4.00000000000000e-06	3.00000000000000e-06	3.00000000000000e-06	2.00000000000000e-06	2.00000000000000e-06	2.00000000000000e-06	2.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06;
         1.24000000000000	0.328000000000000	0.0407000000000000	0.00299000000000000	0.000902000000000000	0.000314000000000000	0.000149000000000000	0.000100000000000000	5.30000000000000e-05	2.40000000000000e-05	1.40000000000000e-05	1.10000000000000e-05	8.00000000000000e-06	6.00000000000000e-06	5.00000000000000e-06	4.00000000000000e-06	3.00000000000000e-06	3.00000000000000e-06	2.00000000000000e-06	2.00000000000000e-06	2.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06	1.00000000000000e-06]; 
-        #sigmaEl_OInt_ICRU = integrateXS_Poly(40,cosd.(Omega_sigmaElTab),E_sigmaTab,sigmaEl_O_ICRU )
+        # sigmaEl_OInt_ICRU = integrateXS_Poly(40,cosd.(Omega_sigmaElTab),E_sigmaTab,sigmaEl_O_ICRU )
+        sigmaEl_OInt_ICRU = integrateRutherfordXS_Poly3D(40,Omega_sigmaElTab,E_sigmaTab,sigmaEl_O_ICRU )
         #  sigmaEl_OInt_ICRU = [3.7757568815575917	3.6370259805783616	3.5679977379960137	3.470036708310476	3.3460099681026296	3.211932561447709	3.07350054519681	2.9269715682734208	2.7741642995200597	2.6158842144867034	2.4540269063758466	2.2893313691870145	2.123418600704466	1.9567900610521398	1.7908192370347762	1.6257926669111977	1.462899904866637	1.3022446055236732	1.1448654348690641	0.9907348721059095	0.8407563996766644	0.6947987923133208	0.5536686315428259	0.417157075019103	0.2859861955388592	0.15989502980597498	0.0395212873071078	-0.07544586169278639	-0.18440409877482544	-0.28770685133911467	-0.3847996335569293	-0.4760495053127645	-0.5609305005269151	-0.6398287577027656	-0.7122505574709568	-0.7785817146165104	-0.8383580276171869	-0.8919660578108313	-0.9389616715364678	-0.9797207565917069
         #  2.8979537147312717	2.7816271201532627	2.724570667178837	2.649812403341427	2.551650153049059	2.444826539673777	2.338736927514207	2.226884040345095	2.1107053758542693	1.9904522330422654	1.8675225700403142	1.7423985516183158	1.616347069905599	1.4896974031144385	1.3635439445304605	1.2380421544857334	1.1141642228587767	0.9919417323287087	0.8722044284897436	0.7548924497403867	0.6407323936503609	0.5295875031529867	0.4221218089877011	0.31812787062090164	0.21821113734886607	0.12212046509884197	0.030407825168906378	-0.05721302286883758	-0.14024433361431604	-0.2189907714214223	-0.2929853925231221	-0.3625547207396295	-0.42724349763831665	-0.4873942540059837	-0.5425871150963552	-0.5931574902318042	-0.6387075261709565	-0.6795729245731096	-0.7153733440967184	-0.7464360479655877
         #  2.293099714009339	2.191050028450796	2.1424247043665514	2.0827724889440957	2.003055108683938	1.915136777721319	1.831106954555472	1.7430116891529204	1.652196859744784	1.5582426497912485	1.4622336322869538	1.3644446127929888	1.265945549245608	1.1669063362317058	1.0682650406379774	0.9700696742416223	0.87315312414921	0.7774606202467125	0.6837205586574345	0.591819100354789	0.5024140747497645	0.4153149774594366	0.3311224142960044	0.24960751256159044	0.17131050043465437	0.09596786124993886	0.02408068574441636	-0.04464842833234921	-0.10974575072248051	-0.1715279481188255	-0.22954692827766376	-0.28412532675538626	-0.3348478697969966	-0.382039162860214	-0.4253065703152785	-0.4649857628697505	-0.5006918158143315	-0.5327518302814962	-0.5608037007489104	-0.5851754158197074
@@ -2797,15 +2798,14 @@ struct MaterialParametersProtons
                          -0.00000000
                           0.00000000
                         ];
-         #Omega = [0.5 1	2	3	4	5	6	7	8	9	10	11	12	13	14	15	16	17	18	19	20	21	22	23	24	25	26	27	28	29	30	31	32	33	34	35	36	37	38	39	40	41	42	43	44	45	46	47	48	49	50	51	52	53	54	55	56	57	58	59	60	61	62	63	64	65	66	67	68	69	70	71	72	73	74	75	76	77	78	79	80	81	82	83	84	85	86	87	88	89	90	91	92	93	94	95	96	97	98	99	100	101	102	103	104	105	106	107	108	109	110	111	112	113	114	115	116	117	118	119	120	121	122	123	124	125	126	127	128	129	130	131	132	133	134	135	136	137	138	139	140	141	142	143	144	145	146	147	148	149	150	151	152	153	154	155	156	157	158	159	160	161	162	163	164	165	166	167	168	169	170	171	172	173	174	175	176	177	178	179	179.5]';     
-         #Omega = [collect(range(1e-3,1 - 1e-3,100)); collect(range(1,179,179)); collect(range(179 + 1e-3,180 - 1e-3,100))];
+         #Omega = collect(11.48:0.1:179.5);     
          
          dOmega = 5.0;
-        OmegaC = 15;
-        OmegaF = 10;
-        Omega = [collect(range(dOmega,OmegaF,20)); collect(range(OmegaC,180 - OmegaC,170)); collect(range(180 - OmegaF,180 - dOmega,20))];
+         OmegaC = 15;
+         OmegaF = 10;
+         Omega = [collect(range(dOmega,OmegaF,20)); collect(range(OmegaC,180 - OmegaC,170)); collect(range(180 - OmegaF,180 - dOmega,20))];
          E_rest = 938.26 #MeV proton rest energy
-         sigmaEl_OInt_ICRU = Proton_Oxygen_nuclear(E_sigmaTab,Omega)
+         #sigmaEl_OInt_ICRU = Proton_Oxygen_nuclear(E_tab_PSTAR,Omega)
          sigmaEl_tab_pp = Proton_Proton_nuclear(E_tab_PSTAR,Omega);
          #sigma_ce = Coulomb(E_tab_PSTAR,Omega_sigmaElTab) #multiple coulomb scattering (dependent on unknown spacial stepsize)
          sigma_ce = ScreenedRutherford(E_tab_PSTAR,Omega) #single coulomb scattering
@@ -2847,14 +2847,16 @@ struct MaterialParametersProtons
         N_A = 6.02214076*10^23 #Avogadro constant
         w_H = 0.1111 #weight fraction hydrogen in water
         A_H = 1.0078250322 #atomic weight of hydrogen
+        rho_H = 0.07 #g/cm^3
 
-        idx = findall(x->x>=10, E)
+        #idx = findall(x->x>=10, E)
         sigma_pp_macro = zeros(size(E,1),1)
-        sigma_pp_macro[idx] = 0.315.*E[idx].^(-1.126).+3.78e-6.*E[idx]; #formula fit from SAID databasem see Fippel 2004
+        #sigma_pp_macro[idx] = rho_H .*(0.315.*E[idx].^(-1.126).+3.78e-6.*E[idx]); #formula fit from SAID databasem see Fippel 2004
+        sigma_pp_macro = rho_H .*(0.315.*E.^(-1.126).+3.78e-6.*E);
         sigma_pp_micro = sigma_pp_macro*A_H/w_H/N_A
         sigma =zeros(size(E,1),size(Omega_sigmaElTab,1));
         for i=1:size(E,1)
-            sigma[i,:].=sigma_pp_macro[i]
+            sigma[i,:].= 0.1111 .* sigma_pp_macro[i] 
         end
 
         mu = cosd.(Omega_sigmaElTab)
@@ -2871,14 +2873,16 @@ struct MaterialParametersProtons
         N_A = 6.02214076*10^23 #Avogadro constant
         w_O = 0.8889#weight fraction oxygen in water
         A_O = 15.99 #atomic weight of oxygen
+        rho_O = 1.141 #g/cm^3
 
-        idx = findall(x->x>=7, E)
+        #idx = findall(x->x>=10, E)
         sigma_pp_macro = zeros(size(E,1),1)
-        sigma_pp_macro[idx] = 0.001.*(1.64 .* (E[idx] .- 7.9) .* exp.(-0.064 .*E[idx] .+ 7.85 ./E[idx]) .+ 9.86); #formula fit from ICRU databasem see Fippel 2004
+        #sigma_pp_macro[idx] = rho_O .*( 1.88 ./E[idx] + 4.0 .*10^-5 .* E[idx] .- 0.01475); #formula fit from ICRU databasem see Fippel 2004
+        sigma_pp_macro = rho_O .*( 1.88 ./E + 4.0 .*10^-5 .* E .- 0.01475); 
         sigma_pp_micro = sigma_pp_macro .*A_O ./w_O ./N_A
         sigma =zeros(size(E,1),size(Omega_sigmaElTab,1));
         for i=1:size(E,1)
-            sigma[i,:].=sigma_pp_macro[i]
+            sigma[i,:].= 0.8889 .* sigma_pp_macro[i] 
         end
 
         mu = cosd.(Omega_sigmaElTab)
@@ -2972,6 +2976,41 @@ struct MaterialParametersProtons
         sigma = sigma .* N_H2O #Transfer to macroscopic cross section
         E = E ./ (1.60217733*10^-13);
         N = 100;
+        xi = integrateRutherfordXS_Poly3D(N,Omega,E,sigma)
+        #xi = integrateXS_Poly(N,mu,E,sigma)
+        return xi
+    end
+
+    function ScreenedRutherfordSep(E,Omega)
+        #This is valid for single Coulomb scattering events
+        #screened crosssection transforms xs from center of mass to laboratory frame and accounts for singularity at cos(1)
+        #[Uikema, 2012]
+        c = 299792458 #speed of light in m/s
+        E = E .* 1.60217733*10^-13;
+        Z_effH2O = 7.42 #effective atomic number of water
+        M_H2O = 18.02 #atomic mass number of water g/mol~=amu 
+        mH2O_kg = 2.988*10^-26 #H2O molecule mass in kg
+        N_H2O = 6.022*10^23 * 1 / M_H2O *(100)^3 #atomic density of water 
+        Z_p = 1 #atomic number of protons
+        M_p = 1.007276466621 # proton mass number unit amu/Da
+        mp_kg = 1.67262192*10^-27 #proton mass in kg
+        e = 1.602176634*10^-19 #elementary electric charge
+        eps0 = 8.8541878128*10^-12 #elektrische Feldkonstante
+        mu = cosd.(Omega)
+        sigma=zeros(size(E,1),size(Omega,1));
+        m0 =  1/(1/mH2O_kg + 1/mp_kg) #reduced proton mass
+        v02 = 2*E./mp_kg #squared initial velocity of protons 
+        alpha = 0.0072973525 #fine-structure constant
+        me =  9.1093837015*10^-31 #electron mass in kg
+        p = mp_kg .* sqrt.(v02) #momentum of protons 
+
+        eta = ( Z_effH2O^(1/3) .* alpha .* me .*c ./ p ).^2 #lower bound for scattering angle due to screening of the nucleus
+        for i=1:size(E,1)
+            sigma[i,:] = ((1 .+ 2 .* mu ./ M_H2O .+ 1/M_H2O^2).^(3/2)) ./(1 .+ mu ./ M_H2O) .*((Z_effH2O .*Z_p .*(e^2)) ./(4 .*pi .*eps0 .* m0.*v02[i] )).^2 ./(1 .- mu .+ 2 .*eta[i]).^2 *10^4 #in [m^-2] [Uikema, 2012]
+        end
+        sigma = sigma .* N_H2O #Transfer to macroscopic cross section
+        E = E ./ (1.60217733*10^-13);
+        N = 40;
         xi = integrateRutherfordXS_Poly3D(N,Omega,E,sigma)
         #xi = integrateXS_Poly(N,mu,E,sigma)
         return xi

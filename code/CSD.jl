@@ -102,15 +102,23 @@ function SigmaAtEnergy(obj::CSD{T}, energy::T) where {T<:AbstractFloat}
         y = zeros(obj.settings.nPN+1)
         for i = 1:(obj.settings.nPN+1)
             # define Sigma mapping for interpolation at moment i
-            if energy<7 .+ obj.settings.eRest
+            if energy<0 .+ obj.settings.eRest
+                E2Sigma_O = LinearInterpolation(obj.E_sigmaTab, obj.sigma_tab[:,i]; extrapolation_bc=Throw())
                 E2Sigma_pp = LinearInterpolation(obj.E_Tab, obj.sigma_pp[:,i]; extrapolation_bc=Throw())
                 E2Sigma_ce = LinearInterpolation(obj.E_Tab, obj.sigma_ce[:,i]; extrapolation_bc=Throw())
-                y[i] =  E2Sigma_ce(energy);
+                y[i] = E2Sigma_ce(energy)
+            elseif energy<7 .+ obj.settings.eRest
+                E2Sigma_O = LinearInterpolation(obj.E_sigmaTab, obj.sigma_tab[:,i]; extrapolation_bc=Throw())
+                E2Sigma_pp = LinearInterpolation(obj.E_Tab, obj.sigma_pp[:,i]; extrapolation_bc=Throw())
+                E2Sigma_ce = LinearInterpolation(obj.E_Tab, obj.sigma_ce[:,i]; extrapolation_bc=Throw())
+                # y[i] = E2Sigma_pp(energy) .+ E2Sigma_ce(energy)
+                y[i] = E2Sigma_ce(energy);
             else
                 E2Sigma_O = LinearInterpolation(obj.E_sigmaTab, obj.sigma_tab[:,i]; extrapolation_bc=Throw())
                 E2Sigma_pp = LinearInterpolation(obj.E_Tab, obj.sigma_pp[:,i]; extrapolation_bc=Throw())
                 E2Sigma_ce = LinearInterpolation(obj.E_Tab, obj.sigma_ce[:,i]; extrapolation_bc=Throw())
-                y[i] =  1*E2Sigma_O(energy) .+ 2 .* E2Sigma_pp(energy)+ E2Sigma_ce(energy);
+                y[i] = E2Sigma_ce(energy);
+                #y[i] =  E2Sigma_O(energy) .+ E2Sigma_ce(energy);
             end
         end
     else

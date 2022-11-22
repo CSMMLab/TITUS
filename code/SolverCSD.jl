@@ -153,7 +153,7 @@ mutable struct SolverCSD{T<:AbstractFloat}
         end
 
         # setup quadrature
-        qorder = settings.nPN+22; 
+        qorder = settings.nPN+42; 
         if iseven(qorder) qorder += 1; end # make quadrature odd to ensure direction (0,1,0) is contained
         qtype = 1; # Type must be 1 for "standard" or 2 for "octa" and 3 for "ico".
         Q = Quadrature(qorder,qtype);
@@ -262,7 +262,7 @@ function PsiBeam(obj::SolverCSD{T},Omega::Array{T,1},E::T,x::Float64,y::Float64,
         sigmaO1Inv = 10000.0;
         sigmaO2Inv = 10000.0;
         sigmaO3Inv = 10000.0;
-        sigmaEInv = 1000.0;
+        sigmaEInv = 10;
         pos_beam = [obj.settings.x0,obj.settings.y0,obj.settings.z0];
         space_beam = normpdf(x,pos_beam[1],obj.settings.sigmaX).*normpdf(y,pos_beam[2],obj.settings.sigmaY).*normpdf(z,pos_beam[3],obj.settings.sigmaZ);
         omega_beam = exp(-sigmaO1Inv*(obj.settings.Omega1-Omega[1])^2)*exp(-sigmaO2Inv*(obj.settings.Omega2-Omega[2])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-Omega[3])^2);
@@ -1425,6 +1425,7 @@ function CudaSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {T<:A
     sigmaO1Inv = 10000.0;
     sigmaO2Inv = 10000.0;
     sigmaO3Inv = 10000.0;
+    sigmaE = 0.1;
     pos_beam = [obj.settings.x0,obj.settings.y0,obj.settings.z0];
 
     # Set up initiandition and store as matrix
@@ -1516,6 +1517,7 @@ function CudaSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {T<:A
         obj.dose .+= 0.5*dE * (X*S*W[1,:]+ psi * obj.M[1,:]) * obj.csd.S[n-1] ./ obj.densityVec ;
 
         intSigma += dE * sigmaS[1];
+        beamE = normpdf(energy[n],obj.settings.eMax,sigmaE)
         for q = 1:nq
             beamOmega = 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-obj.qReduced[q,1])^2)*exp(-sigmaO2Inv*(obj.settings.Omega2-obj.qReduced[q,2])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-obj.qReduced[q,3])^2) * exp(-intSigma);
             for j = 1:ny
@@ -1527,7 +1529,7 @@ function CudaSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {T<:A
                     for k = 1:nz
                         beamz = normpdf(z[k] - eTrafo[n]*obj.qReduced[q,3],pos_beam[3],obj.settings.sigmaZ)
                         idx = vectorIndex(nx,ny,i,j,k)
-                        psi[idx,q] = beamOmega * beamx * beamy * beamz             
+                        psi[idx,q] = beamOmega * beamx * beamy * beamz * beamE       
                     end
                 end
             end
@@ -1798,7 +1800,7 @@ function CudaFullSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {
     sigmaO3Inv = 10000.0;
     pos_beam = [obj.settings.x0,obj.settings.y0,obj.settings.z0];
 
-    # Set up initiandition and store as matrix
+    # Set up initiation and store as matrix
     floorPsiAll = 1e-1;
     floorPsi = 1e-17;
     if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" # determine relevant directions in IC
@@ -2066,7 +2068,6 @@ function SolveFirstCollisionSourceDLR4thOrderFP(obj::SolverCSD{T}) where {T<:Abs
     sigmaO1Inv = 10000.0;
     sigmaO2Inv = 10000.0;
     sigmaO3Inv = 10000.0;
-    sigmaEInv = 1000.0;
     densityMin = 1.0;
     pos_beam = [obj.settings.x0,obj.settings.y0,obj.settings.z0];
 

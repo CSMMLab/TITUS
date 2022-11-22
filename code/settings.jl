@@ -170,7 +170,7 @@ mutable struct Settings
             f = 2;
             sigmaS = 1.0;
             sigmaA = 0.0;  
-            cfl = 0.99/sqrt(2)*20.5* 1.3;  
+            cfl = 0.99/sqrt(2)*120.5* 1.3;  
             eKin = 90;
             eMax = eKin + eRest
             adaptIndex = 0;
@@ -283,7 +283,7 @@ mutable struct Settings
         dE = cfl*min(dx,dy,dz)*minimum(density);#1/312;#cfl*min(dx,dy)*minimum(density);
         
         # number PN moments
-        nPN = 21#37, 21; # use odd number
+        nPN = 15#37, 21; # use odd number
 
         # build class
         new(Nx,Ny,Nz,NCellsX,NCellsY,NCellsZ,a,b,c,d,e,f,dx,dy,dz,eMax,eRest,dE,cfl,nPN,x,xMid,y,yMid,z,zMid,problem,particle,x0,y0,z0,Omega1,Omega2,Omega3,densityMin,sigmaX,sigmaY,sigmaZ,sigmaE,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex);
