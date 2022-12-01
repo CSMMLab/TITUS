@@ -1878,6 +1878,8 @@ function CudaFullSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {
     sPow = T.(obj.csd.S)
     densityVec = CuArray(obj.densityVec);
     dose = CuArray(obj.dose);
+    DvecCPU = zeros(T,obj.pn.nTotalEntries)
+
 
     prog = Progress(nEnergies-1,1)
 
@@ -1930,13 +1932,13 @@ function CudaFullSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {
 
         psi .= CuArray(psiCPU)
        
-        Dvec = CUDA.zeros(T,obj.pn.nTotalEntries)
         for l = 0:obj.pn.N
             for k=-l:l
                 i = GlobalIndex( l, k );
-                Dvec[i+1] = sigmaS[l+1]
+                DvecCPU[i+1] = sigmaS[l+1]
             end
         end
+        Dvec = CuArray(DvecCPU)
         
         if n > 2 # perform streaming update after first collision (before solution is zero)
             ################## K-step ##################
