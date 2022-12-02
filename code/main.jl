@@ -10,10 +10,10 @@ include("SolverCSD.jl")
 
 #close("all")
 
-nx = 101;
-ny = 401;
-problem ="waterBeam" #"2DHighD"
-particle = "Protons"
+nx = 51;
+ny = 51;
+problem = "lung";#"waterBeam" #"2DHighD"
+particle = "Electrons";#"Protons"
 s = Settings(nx,ny,5,problem, particle);
 rhoMin = minimum(s.density);
 
@@ -25,7 +25,7 @@ elseif s.problem == "WaterPhantomKerstin"
     smapIn = readdlm("doseStarmapWaterPhantom.txt", ',', Float64)
     xRef = smapIn[:,1]
     doseRef = smapIn[:,2]
-elseif s.problem == "validation" || s.problem == "waterBeam"
+elseif s.problem == "validation" || s.problem == "waterBeam" || s.problem == "waterBeamElectrons"
     doseRef = readdlm("validationData/dose_starmap_full150.txt", Float64)
     xRef = readdlm("validationData/x_starmap_nx150.txt", Float64)
     yRef = readdlm("validationData/y_starmap_ny150.txt", Float64)
@@ -63,9 +63,10 @@ end
 
 ############################
 
-solver1 = SolverCSD(s);
-X_dlr,S_dlr,W_dlr,W_mod_dlr, dose_DLR, psi_DLR = CudaSolveFirstCollisionSourceDLR4thOrder(solver1);
-#u, dose_DLR,psi = SolveFirstCollisionSource(solver1);
+solver = SolverCSD(s);
+#X_dlr,S_dlr,W_dlr,W_mod_dlr, dose_DLR, psi_DLR = CudaSolveFirstCollisionSourceDLR4thOrder(solver);
+X_dlr,S_dlr,W_dlr,W_mod_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR(solver);
+#u, dose_DLR,psi = SolveFirstCollisionSource(solver);
 u = Vec2Mat(s.NCellsX,s.NCellsY,X_dlr*Diagonal(S_dlr)*W_mod_dlr[1,:]);
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
 
@@ -127,7 +128,7 @@ end
 levels = 20;
 fig = figure("Dose countours, DLRA",figsize=(10*(s.d/s.b),10),dpi=100)
 ax = gca()
-pcolormesh(Y,X,solver1.density[2:end-1,2:end-1]',cmap="gray")
+pcolormesh(Y,X,solver.density[2:end-1,2:end-1]',cmap="gray")
 contour(Y,X,dose_DLR[2:end-1,2:end-1]', levels,cmap="plasma")
 ax.tick_params("both",labelsize=20) 
 plt.xlabel("x", fontsize=20)
@@ -185,7 +186,7 @@ savefig("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY
 vtkfile = vtk_grid("output/dose_csd_nx$(s.NCellsX)ny$(s.NCellsY)", s.xMid, s.yMid)
 vtkfile["dose"] = dose_DLR
 vtkfile["dose_normalized"] = dose_DLR./maximum(dose_DLR)
-vtkfile["u"] = u/0.5/sqrt(solver1.gamma[1])
+vtkfile["u"] = u/0.5/sqrt(solver.gamma[1])
 outfiles = vtk_save(vtkfile)
 
 println("main finished")

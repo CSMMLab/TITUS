@@ -171,6 +171,40 @@ mutable struct Settings
             #Omega3 = 1.0;
             #x0 = 0.5*b;
             #y0 = 0.5*d;
+        elseif problem =="waterBeamElectrons"
+            a = 0.0; # left boundary
+            b = 2.0; # right boundary
+            c = 0.0; # lower boundary
+            d = 3.0; # upper boundary
+            sigmaS = 1.0;
+            sigmaA = 0.0;  
+            cfl = 0.99/sqrt(2)*2.0;  
+            eKin = 21;
+            eMax = eKin + eRest
+            adaptIndex = 0;
+            epsAdapt = 0.3;#0.5;
+
+            Omega1 = -1.0;
+            Omega3 = 0.0;
+            x0 = 0.5*b;
+            y0 = 0.05*d; 
+            Omega1 = -0.0;
+            Omega3 = 1.0;
+
+            # generate grid
+            x = collect(range(a,stop = b,length = NCellsX));
+            dx = x[2]-x[1];
+            x = [x[1]-dx;x]; # add ghost cells so that boundary cell centers lie on a and b
+            x = x.+dx/2;
+            xMid = x[1:(end-1)].+0.5*dx
+            y = collect(range(c,stop = d,length = NCellsY));
+            dy = y[2]-y[1];
+            y = [y[1]-dy;y]; # add ghost cells so that boundary cell centers lie on a and b
+            y = y.+dy/2;
+            yMid = y[1:(end-1)].+0.5*dy
+            idxX = findall( xMid .> 1.0 )
+            idxY = findall( (yMid .> 5.0) .& (yMid .< 7.0) )
+            density[idxX, idxY] .= 5.0
         elseif problem =="waterBeam"
             a = 0.0; # left boundary
             b = 2.0; # right boundary
