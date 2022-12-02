@@ -413,7 +413,7 @@ function solveFluxUpwind!(obj::SolverMLCSD, phi::Array{Float64,3}, flux::Array{F
         westflux = s2
 
         flux[i,j,q] = obj.qReduced[q,1] ./obj.settings.dx .* (eastflux-westflux) +
-        obj.qReduced[q,2]./obj.settings.dy .* (northflux-southflux)
+        obj.qReduced[q,3]./obj.settings.dy .* (northflux-southflux)
     end
     #PosNeg
     for j=ny,i=nx,q = idxPosNeg
@@ -428,7 +428,7 @@ function solveFluxUpwind!(obj::SolverMLCSD, phi::Array{Float64,3}, flux::Array{F
         westflux = s2
 
         flux[i,j,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
-        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux)
+        obj.qReduced[q,3] ./obj.settings.dy .*(northflux-southflux)
     end
 
     # NegPos
@@ -444,7 +444,7 @@ function solveFluxUpwind!(obj::SolverMLCSD, phi::Array{Float64,3}, flux::Array{F
         westflux = s2
 
         flux[i,j,q] = obj.qReduced[q,1]./obj.settings.dx .*(eastflux-westflux) +
-        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux)
+        obj.qReduced[q,3] ./obj.settings.dy .*(northflux-southflux)
     end
 
     # NegNeg
@@ -460,7 +460,7 @@ function solveFluxUpwind!(obj::SolverMLCSD, phi::Array{Float64,3}, flux::Array{F
         westflux = s2
 
         flux[i,j,q] = obj.qReduced[q,1] ./obj.settings.dx .*(eastflux-westflux) +
-        obj.qReduced[q,2] ./obj.settings.dy .*(northflux-southflux)
+        obj.qReduced[q,3] ./obj.settings.dy .*(northflux-southflux)
     end
 end
 
