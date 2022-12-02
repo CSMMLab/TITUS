@@ -916,6 +916,7 @@ function SolveFirstCollisionSourceDLR(obj::SolverCSD{T}) where {T<:AbstractFloat
         idxBeam = findall( psiBeam .> floorPsi*maximum(psiBeam) );
         psi = SetupIC(obj,obj.Q.pointsxyz[idxBeam,:]);
     end
+    println("reduction of ordinates is ",(nq-length(idxBeam))/nq*100.0," percent")
     
     obj.qReduced = obj.Q.pointsxyz[idxBeam,:]
     obj.MReduced = obj.M[:,idxBeam]

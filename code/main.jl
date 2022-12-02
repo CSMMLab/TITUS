@@ -10,11 +10,11 @@ include("SolverCSD.jl")
 
 #close("all")
 
-nx = 51;
-ny = 51;
+nx = 201;
+ny = 201;
 problem = "lung";#"waterBeam" #"2DHighD"
 particle = "Electrons";#"Protons"
-s = Settings(nx,ny,5,problem, particle);
+s = Settings(nx,ny,20,problem, particle);
 rhoMin = minimum(s.density);
 
 if s.problem == "AirCavity"
@@ -47,19 +47,20 @@ elseif s.problem == "2DHighD"
     doseKiTRT = readdlm("validationData/horizontale_kitRT_Az.csv",',', Float64)
     doseKiTRT = doseKiTRT[:,2];
     xKiTRT = collect(range( s.a,stop=s.b,length = length(doseKiTRT)));
-elseif s.problem == "2DHighLowD"
+else#if s.problem == "2DHighLowD"
     doseRef = readdlm("validationData/dose_starmap_moreDensities301.txt", Float64)
     xRef = readdlm("validationData/x_starmap_nx301_moreDensities.txt", Float64)
     yRef = readdlm("validationData/y_starmap_ny301_moreDensities.txt", Float64)
+
 
     doseMC = readdlm("validationData/Dose_MC_inhomogenity.txt",',', Float64)
     nxMC = size(doseMC,1);
     nyMC = size(doseMC,1);
     xMC = collect(range( s.a,stop=s.b,length = nxMC));
     yMC = collect(range( s.c,stop=s.d,length = nxMC));
-else
-    xRef = 0; doseRef = 1;
-end
+#else
+#    xRef = 0; doseRef = 1;
+#end
 
 ############################
 
@@ -125,7 +126,7 @@ if s.problem == "2DHighD"
     tight_layout()
     savefig("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).png")
 end
-levels = 20;
+levels = 50;
 fig = figure("Dose countours, DLRA",figsize=(10*(s.d/s.b),10),dpi=100)
 ax = gca()
 pcolormesh(Y,X,solver.density[2:end-1,2:end-1]',cmap="gray")
