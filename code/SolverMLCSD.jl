@@ -57,6 +57,8 @@ mutable struct SolverMLCSD
     O::Array{Float64,2};
     M::Array{Float64,2};
 
+    T::DataType;
+
     rMax::Int;
     L::Int;
     X::Array{Float64,3};
@@ -68,7 +70,8 @@ mutable struct SolverMLCSD
     qReduced::Array{Float64,2};
 
     # constructor
-    function SolverMLCSD(settings,L=2)
+    function SolverMLCSD(settings,L=1)
+        T = Float64; # define accuracy 
         x = settings.x;
         y = settings.y;
 
@@ -94,19 +97,25 @@ mutable struct SolverMLCSD
         csd = CSD(settings);
 
         # construct PN system matrices
-        pn = PNSystem(settings)
-        SetupSystemMatrices(pn);
-
-        outRhs = zeros(settings.NCellsX,settings.NCellsY,pn.nTotalEntries);
+        pn = PNSystem(settings,T)
+        Ax,_,Az = SetupSystemMatrices(pn);
+        SetupSystemMatricesSparse(pn);
 
         # setup Roe matrix
-        S = eigvals(pn.Ax)
-        V = eigvecs(pn.Ax)
-        AbsAx = V*abs.(diagm(S))*inv(V)
+        S = eigvals(Ax)
+        V = eigvecs(Ax)
+        AbsAx = V*abs.(Diagonal(S))*inv(V)
 
-        S = eigvals(pn.Az)
-        V = eigvecs(pn.Az)
+        idx = findall(abs.(AbsAx) .> 1e-10)
+        Ix = first.(Tuple.(idx)); Jx = last.(Tuple.(idx)); vals = AbsAx[idx];
+        AbsAx = sparse(Ix,Jx,T.(vals),pn.nTotalEntries,pn.nTotalEntries);
+        
+        S = eigvals(Az)
+        V = eigvecs(Az)
         AbsAz = V*abs.(diagm(S))*inv(V)
+        idx = findall(abs.(AbsAz) .> 1e-10)
+        Iz = first.(Tuple.(idx)); Jz = last.(Tuple.(idx)); valsz = AbsAz[idx];
+        AbsAz = sparse(Iz,Jz,T.(valsz),pn.nTotalEntries,pn.nTotalEntries);
 
         # set density vector
         density = settings.density;
@@ -354,7 +363,7 @@ mutable struct SolverMLCSD
         W = zeros(L,N,rMax);
         S = zeros(L,rMax,rMax);
 
-        new(x,y,xGrid,settings,gamma,AbsAx,AbsAz,P,mu,w,csd,pn,density,vec(density'),dose,L1x,L1y,L2x,L2y,boundaryIdx,boundaryBeam,Q,O,M,rMax,L,X,S,W);
+        new(x,y,xGrid,settings,gamma,AbsAx,AbsAz,P,mu,w,csd,pn,density,vec(density'),dose,L1x,L1y,L2x,L2y,boundaryIdx,boundaryBeam,Q,O,M,T,rMax,L,X,S,W);
     end
 end
 

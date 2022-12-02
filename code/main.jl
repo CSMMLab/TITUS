@@ -14,7 +14,7 @@ nx = 201;
 ny = 201;
 problem = "lung";#"waterBeam" #"2DHighD"
 particle = "Electrons";#"Protons"
-s = Settings(nx,ny,20,problem, particle);
+s = Settings(nx,ny,100,problem, particle);
 rhoMin = minimum(s.density);
 
 if s.problem == "AirCavity"
