@@ -12,7 +12,9 @@ close("all")
 
 problem = "lungOrig"
 nx = 201;
-s = Settings(nx,nx,100,problem);
+problem = "lung";#"waterBeam" #"2DHighD"
+particle = "Electrons";#"Protons"
+s = Settings(nx,nx,100,problem,particle);
 
 ############################
 solver = SolverCSD(s);

@@ -482,7 +482,7 @@ function SolveFirstCollisionSource(obj::SolverCSD{T}) where {T<:AbstractFloat}
     elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" || obj.settings.problem == "waterBeam" # determine relevant directions in beam
         psiBeam = zeros(nq)
         for k = 1:nq
-            psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)
+            psiBeam[k] = PsiBeam(obj,T.(obj.Q.pointsxyz[k,:]),T(obj.settings.eMax),obj.settings.x0,obj.settings.y0,1)
         end
         idxBeam = findall( psiBeam .> floorPsi*maximum(psiBeam) );
         psi = SetupIC(obj,obj.Q.pointsxyz[idxBeam,:]);
