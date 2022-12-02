@@ -6,7 +6,7 @@ using WriteVTK
 
 include("settings.jl")
 include("SolverCSD.jl")
-
+include("SolverMLCSD.jl")
 
 #close("all")
 
@@ -60,13 +60,15 @@ else#if s.problem == "2DHighLowD"
     yMC = collect(range( s.c,stop=s.d,length = nxMC));
 #else
 #    xRef = 0; doseRef = 1;
-#end
+end
 
 ############################
 
-solver = SolverCSD(s);
+#solver = SolverCSD(s);
 #X_dlr,S_dlr,W_dlr,W_mod_dlr, dose_DLR, psi_DLR = CudaSolveFirstCollisionSourceDLR4thOrder(solver);
-X_dlr,S_dlr,W_dlr,W_mod_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR(solver);
+#X_dlr,S_dlr,W_dlr,W_mod_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR(solver);
+solver = SolverMLCSD(s);
+X_mldlr,S_mldlr,W_mldlr,W_mod_mldlr, dose_mlDLR,rankInTime, psi_mlDLR = SolveMCollisionSourceDLR(solver);
 #u, dose_DLR,psi = SolveFirstCollisionSource(solver);
 u = Vec2Mat(s.NCellsX,s.NCellsY,X_dlr*Diagonal(S_dlr)*W_mod_dlr[1,:]);
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
