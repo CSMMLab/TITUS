@@ -24,21 +24,21 @@ dose_full = Vec2Mat(s.NCellsX,s.NCellsY,dose_full);
 s = Settings(nx,nx,50,problem);
 #s = Settings(nx,nx,int(maximum(rankInTime[2,:])));
 solver2 = SolverCSD(s);
-X_dlr,S_dlr,W_dlr, dose_dlra, psi_DLR = SolveFirstCollisionSourceDLR(solver2);
+X_dlr,S_dlr,W_dlr,_,dose_dlra, psi_DLR = SolveFirstCollisionSourceDLR(solver2);
 dose_dlra = Vec2Mat(s.NCellsX,s.NCellsY,dose_dlra);
 
 L1 = 2;
 s2 = Settings(nx,nx,400,problem);
 s2.epsAdapt = 0.01
 solver1 = SolverMLCSD(s2,L1);
-X,S,W, dose_Llow, rankInTime, psi = SolveMCollisionSourceDLR(solver1);
+X,S,W,_, dose_Llow, rankInTime, psi = SolveMCollisionSourceDLR(solver1);
 dose_Llow = Vec2Mat(s2.NCellsX,s2.NCellsY,dose_Llow);
 
 L = 2;
 s3 = Settings(nx,nx,400,problem);
 s3.epsAdapt = 0.001
 solver3 = SolverMLCSD(s3,L);
-X_dlrM,S_dlrM,W_dlrM, dose_Lhigh, rankInTimeML, psiML = SolveMCollisionSourceDLR(solver3);
+X_dlrM,S_dlrM,W_dlrM,_, dose_Lhigh, rankInTimeML, psiML = SolveMCollisionSourceDLR(solver3);
 dose_Lhigh = Vec2Mat(s3.NCellsX,s3.NCellsY,dose_Lhigh);
 
 ##################### plot dose #####################

@@ -1257,7 +1257,7 @@ function SolveMCollisionSourceDLR(obj::SolverMLCSD)
     end
     U,Sigma,V = svd(obj.S[L,1:ranks[L],1:ranks[L]]);
     # return solution and dose
-    return obj.X[L,:,1:ranks[L]]*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*obj.W[L,:,1:ranks[L]]*V,obj.dose,rankInTime,psi;
+    return obj.X[L,:,1:ranks[L]]*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*obj.W[L,:,1:ranks[L]]*V,obj.W[L,:,1:ranks[L]]*V,obj.dose,rankInTime,psi;
 
 end
 
