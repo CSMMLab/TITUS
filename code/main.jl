@@ -14,7 +14,7 @@ nx = 201;
 ny = 201;
 problem = "lung";#"waterBeam" #"2DHighD"
 particle = "Electrons";#"Protons"
-s = Settings(nx,ny,100,problem, particle);
+s = Settings(nx,ny,20,problem, particle);
 rhoMin = minimum(s.density);
 
 if s.problem == "AirCavity"
@@ -64,11 +64,11 @@ end
 
 ############################
 
-#solver = SolverCSD(s);
-#X_dlr,S_dlr,W_dlr,W_mod_dlr, dose_DLR, psi_DLR = CudaSolveFirstCollisionSourceDLR4thOrder(solver);
+solver = SolverCSD(s);
+X_dlr,S_dlr,W_dlr,W_mod_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLRHighOrder(solver);#CudaSolveFirstCollisionSourceDLR4thOrder(solver);
 #X_dlr,S_dlr,W_dlr,W_mod_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR(solver);
-solver = SolverMLCSD(s);
-X_mldlr,S_mldlr,W_mldlr,W_mod_mldlr, dose_mlDLR,rankInTime, psi_mlDLR = SolveMCollisionSourceDLR(solver);
+#solver = SolverMLCSD(s);
+#X_mldlr,S_mldlr,W_mldlr,W_mod_mldlr, dose_mlDLR,rankInTime, psi_mlDLR = SolveMCollisionSourceDLR(solver);
 #u, dose_DLR,psi = SolveFirstCollisionSource(solver);
 u = Vec2Mat(s.NCellsX,s.NCellsY,X_dlr*Diagonal(S_dlr)*W_mod_dlr[1,:]);
 dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);

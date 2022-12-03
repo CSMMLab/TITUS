@@ -1,12 +1,12 @@
 using Base: Float64
-include("settings.jl")
-include("SolverCSD.jl")
-include("SolverMLCSD.jl")
-
 using PyCall
 using PyPlot
 using DelimitedFiles
 using WriteVTK
+
+include("settings.jl")
+include("SolverCSD.jl")
+include("SolverMLCSD.jl")
 
 close("all")
 
