@@ -44,7 +44,7 @@ dose_Lhigh = Vec2Mat(s3.NCellsX,s3.NCellsY,dose_Lhigh);
 ##################### plot dose #####################
 
 ## read density
-density = Float64.(Gray.(load("LungOrig.png")))
+density = Float64.(Gray.(load("Lung.png")))
 nxD = size(density,1)
 nyD = size(density,2)
 y = collect(range(s.a,stop = s.b,length = nxD-2));
@@ -224,6 +224,7 @@ writedlm("output/W_plot_lung.txt", O*W_modal)
 
 run(`python plotWLung.py`)
 
+rhoMin = minimum(s.density);
 writedlm("output/dose1_csd_1stcollision_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)epsAdapt$(s.epsAdapt).txt", dose_full)
 writedlm("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", dose_dlra)
 writedlm("output/dose_csd_1stcollision_DLRAMlow_Rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", dose_Llow)
