@@ -548,7 +548,7 @@ function SolveFirstCollisionSource(obj::SolverCSD{T}) where {T<:AbstractFloat}
         D = Diagonal(sigmaS[1] .- Dvec);
 
         # stream uncollided particles
-        solveFlux!(obj,psi,flux);
+        solveFluxUpwind!(obj,psi,flux);
 
         psi .= psi .- dE*flux;
         
