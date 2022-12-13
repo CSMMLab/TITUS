@@ -1864,7 +1864,7 @@ function SolveFirstCollisionSourceDLRParallel(obj::SolverCSD{T}) where {T<:Abstr
 
             ################## K-step ##################
             X[obj.boundaryIdx,:] .= 0.0;
-            K .= X*S;
+            K = X*S;
 
             K .= K .- dE*(obj.stencil.L2x*K*WAxW + obj.stencil.L2y*K*WAzW + obj.stencil.L1x*K*WAbsAxW + obj.stencil.L1y*K*WAbsAzW);
 
@@ -1891,8 +1891,6 @@ function SolveFirstCollisionSourceDLRParallel(obj::SolverCSD{T}) where {T<:Abstr
             # truncate
             X, S, W = truncate!(obj,T.([X X1Tilde]),SNew,T.([W W1Tilde]));
             r = size(S,1)
-            rVec[1,n] = t;
-            rVec[2,n] = r;
         end
 
         ############## Out Scattering ##############
@@ -1906,32 +1904,265 @@ function SolveFirstCollisionSourceDLRParallel(obj::SolverCSD{T}) where {T<:Abstr
         S .= S2 * Diagonal(S1)
 
         ############## In Scattering ##############
+        MᵀDW = obj.MReduced'*(Diagonal(Dvec)*W)
+        Xᵀψ = (X'*Mat2Vec(psi))
 
         ################## K-step ##################
         X[obj.boundaryIdx,:] .= 0.0;
         K = X*S;
         #u = u .+dE*Mat2Vec(psiNew)*M'*Diagonal(Dvec);
-        K .= K .+ dE * Mat2Vec(psi) * (obj.MReduced' * (Diagonal(Dvec) * W) );
+        K .= K .+ dE * Mat2Vec(psi) * MᵀDW;
         K[obj.boundaryIdx,:] .= 0.0; # update includes the boundary cell, which should not generate a source, since boundary is ghost cell. Therefore, set solution at boundary to zero
 
-        XNew,_,_ = svd!(K);
-
-        MUp = XNew' * X;
+        Xtmp,_ = py"qr"([X K]); X1Tilde = Xtmp[:,(r+1):end];
 
         ################## L-step ##################
         L = W*S';
-        L = L .+dE*Diagonal(Dvec)*obj.MReduced*(Mat2Vec(psi)'*X);
+        L = L .+dE*Diagonal(Dvec)*obj.MReduced*Xᵀψ';
 
-        WNew,_,_ = svd!(L);
-
-        NUp = WNew' * W;
-
-        W = WNew;
-        X = XNew;
+        Wtmp,_ = py"qr"([W L]); W1Tilde = Wtmp[:,(r+1):end];
 
         ################## S-step ##################
-        S = MUp*S*(NUp')
-        S .= S .+dE*(X'*Mat2Vec(psi))*obj.MReduced'*(Diagonal(Dvec)*W);
+        S .= S .+dE*Xᵀψ*MᵀDW;
+
+        SNew = zeros(T, 2 * r, 2 * r);
+
+        SNew[1:r,1:r] .= S;
+        SNew[(r+1):end,1:r] .= X1Tilde'*K;
+        SNew[1:r,(r+1):end] .= L' * W1Tilde;
+
+        ############## Dose Computation ##############
+        for i = 1:nx
+            for j = 1:ny
+                idx = (i-1)*ny + j
+                uOUnc[idx] = psi[i,j,:]'*obj.MReduced[1,:];
+            end
+        end
+        obj.dose .+= 0.5*dE * (X*S*W[1,:]+uOUnc) * obj.csd.S[n] ./ obj.densityVec;
+
+        # truncate
+        X, S, W = truncate!(obj,T.([X X1Tilde]),SNew,T.([W W1Tilde]));
+        r = size(S,1)
+        rVec[1,n] = t;
+        rVec[2,n] = r;
+
+        t += dE;
+        
+        next!(prog) # update progress bar
+    end
+
+    U,Sigma,V = svd!(S);
+    # return solution and dose
+    return X*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*W*V, W*V,obj.dose,rVec,psi;
+
+end
+
+function SolveFirstCollisionSourceDLRParallelCombined(obj::SolverCSD{T}) where {T<:AbstractFloat}
+    # Get rank
+    r=Int(floor(obj.settings.r / 2));
+
+    eTrafo = obj.csd.eTrafo;
+    energy = obj.csd.eGrid;
+    S = obj.csd.S;
+
+    nEnergies = length(eTrafo);
+    dE = eTrafo[2]-eTrafo[1];
+    obj.settings.dE = dE
+
+    nx = obj.settings.NCellsX;
+    ny = obj.settings.NCellsY;
+    nq = obj.Q.nquadpoints;
+    N = obj.pn.nTotalEntries;
+
+    # Set up initial condition and store as matrix
+    floorPsiAll = 1e-1;
+    floorPsi = 1e-17;
+    if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" # determine relevant directions in IC
+        psi = SetupIC(obj,obj.Q.pointsxyz);
+        idxFullBeam = findall(psi .> floorPsiAll)
+        idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
+        psi = psi[:,:,idxBeam]
+    else#if obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" # determine relevant directions in beam
+        psiBeam = zeros(nq)
+        for k = 1:nq
+            psiBeam[k] = PsiBeam(obj,T.(obj.Q.pointsxyz[k,:]),T(obj.settings.eMax),obj.settings.x0,obj.settings.y0,1)
+        end
+        idxBeam = findall( psiBeam .> floorPsi*maximum(psiBeam) );
+        psi = SetupIC(obj,obj.Q.pointsxyz[idxBeam,:]);
+    end
+    println("reduction of ordinates is ",(nq-length(idxBeam))/nq*100.0," percent")
+    
+    obj.qReduced = obj.Q.pointsxyz[idxBeam,:]
+    obj.MReduced = obj.M[:,idxBeam]
+    obj.OReduced = obj.O[idxBeam,:]
+    nq = length(idxBeam);
+
+    # define density matrix
+    densityInv = Diagonal(1.0 ./obj.density);
+    flux = zeros(T,size(psi))
+
+    if obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver"
+        n = 2;
+        psiInit = psi;
+        for k = 1:nq
+            for j = 1:nx
+                psiInit[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
+                psiInit[j,end,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
+            end
+            for j = 1:ny
+                psiInit[1,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
+                psiInit[end,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
+            end
+        end
+        # stream uncollided particles
+        solveFluxUpwind!(obj,psiInit./obj.density,flux);
+
+        #psiBC = psiInit[obj.boundaryIdx];
+
+        psiInit .= (psiInit .- dE*flux) ./ (1+dE*sigmaS[1]);
+        psiInit[obj.boundaryIdx] .= 0; # no scattering in boundary cells
+        X,S,W = svd!(Mat2Vec(psiInit) * (obj.MReduced' * Diagonal(Dvec)));
+    else
+        # Low-rank approx of init data:
+        X,_,_ = svd!(zeros(T,nx*ny,r));
+        W,_,_ = svd!(zeros(T,N,r));
+    end
+    
+    # rank-r truncation:
+    X = Matrix(X[:,1:r]);
+    W = Matrix(W[:,1:r]);
+    S = zeros(T,r,r);
+
+    # impose boundary condition
+    X[obj.boundaryIdx,:] .= 0.0;
+
+    println("CFL = ",dE/min(obj.settings.dx,obj.settings.dy)*maximum(densityInv))
+
+    prog = Progress(nEnergies-1,1)
+    rVec = r .* ones(2,nEnergies)
+    t = 0;
+
+    uOUnc = zeros(T,nx*ny);
+    
+    #loop over energy
+    for n=2:nEnergies
+        # compute scattering coefficients at current energy
+        sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
+
+        # set boundary condition
+        if obj.settings.problem != "validation" # validation testcase sets beam in initial condition
+            for k = 1:nq
+                for j = 1:nx
+                    psi[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
+                    psi[j,end,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
+                end
+                for j = 1:ny
+                    psi[1,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
+                    psi[end,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
+                end
+            end
+        end
+
+        ############## Dose Computation ##############
+        for i = 1:nx
+            for j = 1:ny
+                idx = (i-1)*ny + j
+                uOUnc[idx] = psi[i,j,:]'*obj.MReduced[1,:];
+            end
+        end
+        obj.dose .+= 0.5*dE * (X*S*W[1,:]+uOUnc) * obj.csd.S[n-1] ./ obj.densityVec ;
+
+        # stream uncollided particles
+        solveFluxUpwind!(obj,psi./obj.density,flux);
+
+        psiBC = psi[obj.boundaryIdx];
+
+        psi .= (psi .- dE*flux) ./ (1+dE*sigmaS[1]);
+        psi[obj.boundaryIdx] .= psiBC; # no scattering in boundary cells
+       
+        Dvec = zeros(obj.pn.nTotalEntries)
+        for l = 0:obj.pn.N
+            for k=-l:l
+                i = GlobalIndex( l, k );
+                Dvec[i+1] = sigmaS[l+1]
+            end
+        end
+
+        D = Diagonal(sigmaS[1] .- Dvec);
+
+        XL2xX = X'*obj.stencil.L2x*X
+        XL2yX = X'*obj.stencil.L2y*X
+        XL1xX = X'*obj.stencil.L1x*X
+        XL1yX = X'*obj.stencil.L1y*X
+
+        WAzW = W'*obj.pn.Az*W
+        WAbsAzW = W'*obj.AbsAz*W
+        WAbsAxW = W'*obj.AbsAx*W
+        WAxW = W'*obj.pn.Ax*W
+        WᵀDW = W'*D*W
+
+        Iᵣ = Diagonal(ones(T,r));
+        #Q,R = qr(Iᵣ .+ dE * WᵀDW)
+
+        X[obj.boundaryIdx,:] .= 0.0;
+
+        ################## K-step ##################
+        K = X*S;
+
+        if n > 2
+            K .= K .- dE*(obj.stencil.L2x*K*WAxW + obj.stencil.L2y*K*WAzW + obj.stencil.L1x*K*WAbsAxW + obj.stencil.L1y*K*WAbsAzW);
+        end
+
+        # solve scattering
+        for j = 1:nx*ny
+            #K[j,:] .= R \ (Q' * K[j,:])
+            K[j,:] .= (Iᵣ .+ dE * WᵀDW) \ K[j,:]
+        end
+
+        K .= K .+ dE*Mat2Vec(psi) * (obj.MReduced' * (Diagonal(Dvec) * W));
+
+        K[obj.boundaryIdx,:] .= 0.0;
+
+        Xtmp,_ = py"qr"([X K]); X1Tilde = Xtmp[:,(r+1):end];
+
+        ################## L-step ##################
+        L = W*S';
+
+        if n > 2
+            L .= L .- dE*(obj.pn.Ax*L*XL2xX' + obj.pn.Az*L*XL2yX' + obj.AbsAx*L*XL1xX' + obj.AbsAz*L*XL1yX');
+        end
+
+        # solve scattering
+        for i = 1:r
+            L[:,i] ./= (1 + dE * D[i,i]);
+        end
+
+        L .= L .+ dE*Diagonal(Dvec)*obj.MReduced*(Mat2Vec(psi)'*X);
+                
+        Wtmp,_ = py"qr"([W L]); W1Tilde = Wtmp[:,(r+1):end];
+
+        ################## S-step ##################
+        if n > 2
+            S .= S .- dE.*(XL2xX*S*WAxW + XL2yX*S*WAzW + XL1xX*S*WAbsAxW + XL1yX*S*WAbsAzW);
+        end
+
+        # solve scattering
+        #S .= R \ (Q' * S)
+        S .= ((Iᵣ .+ dE * WᵀDW) \ S')'
+
+        S .= S .+ dE.*(X'*Mat2Vec(psi))*obj.MReduced'*(Diagonal(Dvec)*W);
+
+        SNew = zeros(T, 2 * r, 2 * r);
+
+        SNew[1:r,1:r] .= S;
+        SNew[(r+1):end,1:r] .= X1Tilde'*K;
+        SNew[1:r,(r+1):end] .= L' * W1Tilde;
+
+        # truncate
+        X, S, W = truncate!(obj,T.([X X1Tilde]),SNew,T.([W W1Tilde]));
+        r = size(S,1)
+        rVec[1,n] = t;
+        rVec[2,n] = r;
 
         ############## Dose Computation ##############
         for i = 1:nx

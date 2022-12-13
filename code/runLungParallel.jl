@@ -15,7 +15,7 @@ nx = 201;
 problem = "lung";#"waterBeam" #"2DHighD"
 particle = "Electrons";#"Protons"
 s = Settings(nx,nx,100,problem,particle);
-
+#=
 ############################
 solver = SolverCSD(s);
 u, dose_full, psi_full = SolveFirstCollisionSource(solver);
@@ -26,7 +26,7 @@ s = Settings(nx,nx,50,problem);
 solver2 = SolverCSD(s);
 X_dlr,S_dlr,W_dlr,_,dose_dlra, psi_DLR = SolveFirstCollisionSourceDLR(solver2);
 dose_dlra = Vec2Mat(s.NCellsX,s.NCellsY,dose_dlra);
-
+=#
 L1 = 1;
 s2 = Settings(nx,nx,400,problem);
 s2.epsAdapt = 0.01
@@ -35,10 +35,22 @@ X,S,W,_, dose_Llow, rankInTime, psi = SolveMCollisionSourceDLR(solver1);
 dose_Llow = Vec2Mat(s2.NCellsX,s2.NCellsY,dose_Llow);
 
 sp = Settings(nx,nx,400,problem);
-sp.epsAdapt = 0.01
+sp.epsAdapt = 0.006
 solverp = SolverCSD(sp);
 X_p,S_dlrM,W_p,_, dose_p, rankInTime_p, psiML = SolveFirstCollisionSourceDLRParallel(solverp);
 dose_P = Vec2Mat(sp.NCellsX,sp.NCellsY,dose_p);
+
+sp = Settings(nx,nx,400,problem);
+sp.epsAdapt = 0.0055
+solverp = SolverCSD(sp);
+X_p₁,S_dlrM₁,W_p₁,_, dose_p₁, rankInTime_p₁, psiML₁ = SolveFirstCollisionSourceDLRParallel(solverp);
+dose_P₁ = Vec2Mat(sp.NCellsX,sp.NCellsY,dose_p₁);
+
+sp = Settings(nx,nx,400,problem);
+sp.epsAdapt = 0.0065
+solverp = SolverCSD(sp);
+X_p₂,S_dlrM₂,W_p₂,_, dose_p₂, rankInTime_p₂, psiML₂ = SolveFirstCollisionSourceDLRParallel(solverp);
+dose_P₂ = Vec2Mat(sp.NCellsX,sp.NCellsY,dose_p₂);
 
 ##################### plot dose #####################
 
@@ -52,23 +64,23 @@ XX = (x'.*ones(size(y)))'
 YY = (y'.*ones(size(x)))
 
 # all contours magma
-doseMax1 = maximum(dose_dlra[2:(end-1),2:(end-1)])
+#doseMax1 = maximum(dose_dlra[2:(end-1),2:(end-1)])
 doseMax2 = maximum(dose_Llow[2:(end-1),2:(end-1)])
 doseMax3 = maximum(dose_P[2:(end-1),2:(end-1)])
-doseMax4 = maximum(dose_full[2:(end-1),2:(end-1)])
+#doseMax4 = maximum(dose_full[2:(end-1),2:(end-1)])
 levels = 40;
-X = (s.xMid[2:end-1]'.*ones(size(s.yMid[2:end-1])))
-Y = (s.yMid[2:end-1]'.*ones(size(s.xMid[2:end-1])))'
+X = (sp.xMid[2:end-1]'.*ones(size(sp.yMid[2:end-1])))
+Y = (sp.yMid[2:end-1]'.*ones(size(sp.xMid[2:end-1])))'
 
 fig, (ax2, ax1, ax3, ax4) = plt.subplots(2, 2,figsize=(15,15),dpi=100)
 ax1.pcolormesh(XX,YY,density[2:(end-1),2:(end-1)]',cmap="gray")
-CS = ax1.contour(Y,X,dose_dlra[2:(end-1),2:(end-1)]'./doseMax1,levels,cmap="plasma",vmin=0,vmax=1)
+#CS = ax1.contour(Y,X,dose_dlra[2:(end-1),2:(end-1)]'./doseMax1,levels,cmap="plasma",vmin=0,vmax=1)
 ax2.pcolormesh(XX,YY,density[2:(end-1),2:(end-1)]',cmap="gray")
 ax2.contour(Y,X,dose_Llow[2:(end-1),2:(end-1)]'./doseMax2,levels,cmap="plasma",vmin=0,vmax=1)
 ax3.pcolormesh(XX,YY,density[2:(end-1),2:(end-1)]',cmap="gray")
 CS = ax3.contour(Y,X,dose_P[2:(end-1),2:(end-1)]'./doseMax3,levels,cmap="plasma",vmin=0,vmax=1)
 ax4.pcolormesh(XX,YY,density[2:(end-1),2:(end-1)]',cmap="gray")
-CS = ax4.contour(Y,X,dose_full[2:(end-1),2:(end-1)]'./doseMax4,levels,cmap="plasma",vmin=0,vmax=1)
+#CS = ax4.contour(Y,X,dose_full[2:(end-1),2:(end-1)]'./doseMax4,levels,cmap="plasma",vmin=0,vmax=1)
 ax1.set_title("fixed rank r = $(s.r)", fontsize=20)
 ax2.set_title(L"Bug, $\bar{\vartheta}$=0.01", fontsize=20)
 ax3.set_title(L"parallel, $\bar{\vartheta}$=0.01", fontsize=20)
@@ -110,13 +122,13 @@ ax.legend(loc="upper right", fontsize=20)
 tight_layout()
 fig.canvas.draw() # Update the figure
 
+L=1
 fig = figure("rank in energy, ML",figsize=(10, 10), dpi=100)
 ax = gca()
 ltype = ["b-","r--","m-","g-","y-","k-","b--","r--","m--","g--","y--","k--","b-","r-","m-","g-","y-","k-","b--","r--","m--","g--","y--","k--","b-","r-","m-","g-","y-","k-","b--","r--","m--","g--","y--","k--"]
-labelvec = [L"rank $\mathbf{u}_{1}$",L"rank $\mathbf{u}_{c}$"]
-for l = 1:L
-    ax.plot(rankInTime_p[1,1:(end-1)],rankInTime_p[l+1,1:(end-1)], ltype[l], linewidth=2, label=labelvec[l], alpha=1.0)
-end
+labelvec = [L"rank $\mathbf{u}_{p}$",L"rank $\mathbf{u}_{BUG}$"]
+ax.plot(rankInTime[1,1:(end-1)],rankInTime_p[2,1:(end-1)], ltype[1], linewidth=2, label=labelvec[1], alpha=1.0)
+ax.plot(rankInTime[1,1:(end-1)],rankInTime[2,1:(end-1)], ltype[2], linewidth=2, label=labelvec[2], alpha=1.0)
 ax.set_xlim([0.0,s.eMax])
 #ax.set_ylim([0.0,440])
 ax.set_xlabel("energy [MeV]", fontsize=20);
