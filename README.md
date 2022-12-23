@@ -1,6 +1,6 @@
-# CSD-DLRA
-The CSD-DLRA framework offers open source solvers for time and memory efficient deterministic proton and electron dose calculations in 2D/3D. 
-We solve the continuous slowing down approximation (CSD) to transport equations using the dynamical low rank approximation. See [1] for a detailed description of the methodology and some initial results for 2D electron transport.
+# TITUS
+The TITUS framework offers open source solvers for time and memory efficient deterministic proton and electron dose calculations in 2D/3D. 
+We solve the continuous slowing down approximation (CSD) to transport equations using the dynamical low rank approximation. See [1] for a detailed description of the methodology and some initial results for 2D electron transport. Functionalities of TITUS include collided-uncollided splitting methods, high-order time integration, high-order spatial discretizations and GPU accelerations.
 
 
 ## How to use the code
