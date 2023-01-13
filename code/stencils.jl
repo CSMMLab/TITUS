@@ -11,6 +11,13 @@ struct Stencils{T<:AbstractFloat}
     L2x::SparseMatrixCSC{T, Int64};
     L2y::SparseMatrixCSC{T, Int64};
     L2z::SparseMatrixCSC{T, Int64};
+    L₁⁻::SparseMatrixCSC{T, Int64};
+    L₂⁻::SparseMatrixCSC{T, Int64};
+    L₃⁻::SparseMatrixCSC{T, Int64};
+    L₁⁺::SparseMatrixCSC{T, Int64};
+    L₂⁺::SparseMatrixCSC{T, Int64};
+    L₃⁺::SparseMatrixCSC{T, Int64};
+
     function Stencils(settings::Settings,T::DataType=Float64,order::Int=2)
         density = settings.density;
         # setup stencil matrix
@@ -345,6 +352,194 @@ struct Stencils{T<:AbstractFloat}
                 boundaryIdx[counter] = vectorIndex(nx,ny,i,j,k)
             end
         end
-        new{T}(L1x,L1y,L1z,L2x,L2y,L2z)
+
+        # setup 2nd order upwind stencil matrices
+        # setup index arrays and values for allocation of stencil matrices
+        II = zeros(3*(nx-4)*(ny-4)*(nz-4)); J = zeros(3*(nx-4)*(ny-4)*(nz-4)); vals = zeros(T,3*(nx-4)*(ny-4)*(nz-4));
+        counter = -2;
+
+        for i = 3:nx-2
+            for j = 3:ny-2
+                for k = 3:nz-2
+                    counter = counter + 3;
+                    # x part
+                    index = vectorIndex(nx,ny,i,j,k);
+                    indexPlus = vectorIndex(nx,ny,i+1,j,k);
+                    indexPP = vectorIndex(nx,ny,i+2,j,k);
+
+                    II[counter] = index;
+                    J[counter] = index;
+                    vals[counter] = 3/settings.dx/density[i,j,k]; 
+                    if i < nx
+                        II[counter+1] = index;
+                        J[counter+1] = indexPlus;
+                        vals[counter+1] = -4/settings.dx/density[i+1,j,k]; 
+                    end
+                    if i < nx-1
+                        II[counter+2] = index;
+                        J[counter+2] = indexPP;
+                        vals[counter+2] = 1/settings.dx/density[i+2,j,k]; 
+                    end
+                end
+            end
+        end
+        L₁⁻ = sparse(II,J,vals ./ 2,nx*ny*nz,nx*ny*nz);
+
+        # setup index arrays and values for allocation of stencil matrices
+        II = zeros(3*(nx-4)*(ny-4)*(nz-4)); J = zeros(3*(nx-4)*(ny-4)*(nz-4)); vals = zeros(T,3*(nx-4)*(ny-4)*(nz-4));
+        counter = -2;
+
+        for i = 3:nx-2
+            for j = 3:ny-2
+                for k = 3:nz-2
+                    counter = counter + 3;
+                    # x part
+                    index = vectorIndex(nx,ny,i,j,k);
+                    indexPlus = vectorIndex(nx,ny,i,j+1,k);
+                    indexPP = vectorIndex(nx,ny,i,j+2,k);
+
+                    II[counter] = index;
+                    J[counter] = index;
+                    vals[counter] = 3/settings.dx/density[i,j,k]; 
+                    if i < nx
+                        II[counter+1] = index;
+                        J[counter+1] = indexPlus;
+                        vals[counter+1] = -4/settings.dx/density[i,j+1,k]; 
+                    end
+                    if i < nx-1
+                        II[counter+2] = index;
+                        J[counter+2] = indexPP;
+                        vals[counter+2] = 1/settings.dx/density[i,j+2,k]; 
+                    end
+                end
+            end
+        end
+        L₂⁻ = sparse(II,J,vals ./ 2,nx*ny*nz,nx*ny*nz);
+
+        # setup index arrays and values for allocation of stencil matrices
+        II = zeros(3*(nx-4)*(ny-4)*(nz-4)); J = zeros(3*(nx-4)*(ny-4)*(nz-4)); vals = zeros(T,3*(nx-4)*(ny-4)*(nz-4));
+        counter = -2;
+
+        for i = 3:nx-2
+            for j = 3:ny-2
+                for k = 3:nz-2
+                    counter = counter + 3;
+                    # x part
+                    index = vectorIndex(nx,ny,i,j,k);
+                    indexPlus = vectorIndex(nx,ny,i,j,k+1);
+                    indexPP = vectorIndex(nx,ny,i,j,k+2);
+
+                    II[counter] = index;
+                    J[counter] = index;
+                    vals[counter] = 3/settings.dx/density[i,j,k]; 
+                    if i < nx
+                        II[counter+1] = index;
+                        J[counter+1] = indexPlus;
+                        vals[counter+1] = -4/settings.dx/density[i,j,k+1]; 
+                    end
+                    if i < nx-1
+                        II[counter+2] = index;
+                        J[counter+2] = indexPP;
+                        vals[counter+2] = 1/settings.dx/density[i,j,k+2]; 
+                    end
+                end
+            end
+        end
+        L₃⁻ = sparse(II,J,vals ./ 2,nx*ny*nz,nx*ny*nz);
+
+        II = zeros(3*(nx-4)*(ny-4)*(nz-4)); J = zeros(3*(nx-4)*(ny-4)*(nz-4)); vals = zeros(T,3*(nx-4)*(ny-4)*(nz-4));
+        counter = -2;
+
+        for i = 3:nx-2
+            for j = 3:ny-2
+                for k = 3:nz-2
+                    counter = counter + 3;
+                    # x part
+                    index = vectorIndex(nx,ny,i,j,k);
+                    indexPlus = vectorIndex(nx,ny,i-1,j,k);
+                    indexPP = vectorIndex(nx,ny,i-2,j,k);
+
+                    II[counter] = index;
+                    J[counter] = index;
+                    vals[counter] = -3/settings.dx/density[i,j,k]; 
+                    if i < nx
+                        II[counter+1] = index;
+                        J[counter+1] = indexPlus;
+                        vals[counter+1] = 4/settings.dx/density[i-1,j,k]; 
+                    end
+                    if i < nx-1
+                        II[counter+2] = index;
+                        J[counter+2] = indexPP;
+                        vals[counter+2] = -1/settings.dx/density[i-2,j,k]; 
+                    end
+                end
+            end
+        end
+        L₁⁺ = sparse(II,J,vals ./ 2,nx*ny*nz,nx*ny*nz);
+
+        # setup index arrays and values for allocation of stencil matrices
+        II = zeros(3*(nx-4)*(ny-4)*(nz-4)); J = zeros(3*(nx-4)*(ny-4)*(nz-4)); vals = zeros(T,3*(nx-4)*(ny-4)*(nz-4));
+        counter = -2;
+
+        for i = 3:nx-2
+            for j = 3:ny-2
+                for k = 3:nz-2
+                    counter = counter + 3;
+                    # x part
+                    index = vectorIndex(nx,ny,i,j,k);
+                    indexPlus = vectorIndex(nx,ny,i,j-1,k);
+                    indexPP = vectorIndex(nx,ny,i,j-2,k);
+
+                    II[counter] = index;
+                    J[counter] = index;
+                    vals[counter] = -3/settings.dx/density[i,j,k]; 
+                    if i < nx
+                        II[counter+1] = index;
+                        J[counter+1] = indexPlus;
+                        vals[counter+1] = 4/settings.dx/density[i,j-1,k]; 
+                    end
+                    if i < nx-1
+                        II[counter+2] = index;
+                        J[counter+2] = indexPP;
+                        vals[counter+2] = -1/settings.dx/density[i,j-2,k]; 
+                    end
+                end
+            end
+        end
+        L₂⁺ = sparse(II,J,vals ./ 2,nx*ny*nz,nx*ny*nz);
+
+        # setup index arrays and values for allocation of stencil matrices
+        II = zeros(3*(nx-4)*(ny-4)*(nz-4)); J = zeros(3*(nx-4)*(ny-4)*(nz-4)); vals = zeros(T,3*(nx-4)*(ny-4)*(nz-4));
+        counter = -2;
+
+        for i = 3:nx-2
+            for j = 3:ny-2
+                for k = 3:nz-2
+                    counter = counter + 3;
+                    # x part
+                    index = vectorIndex(nx,ny,i,j,k);
+                    indexPlus = vectorIndex(nx,ny,i,j,k-1);
+                    indexPP = vectorIndex(nx,ny,i,j,k-2);
+
+                    II[counter] = index;
+                    J[counter] = index;
+                    vals[counter] = -3/settings.dx/density[i,j,k]; 
+                    if i < nx
+                        II[counter+1] = index;
+                        J[counter+1] = indexPlus;
+                        vals[counter+1] = 4/settings.dx/density[i,j,k-1]; 
+                    end
+                    if i < nx-1
+                        II[counter+2] = index;
+                        J[counter+2] = indexPP;
+                        vals[counter+2] = -1/settings.dx/density[i,j,k-2]; 
+                    end
+                end
+            end
+        end
+        L₃⁺ = sparse(II,J,vals ./ 2,nx*ny*nz,nx*ny*nz);
+
+
+        new{T}(L1x,L1y,L1z,L2x,L2y,L2z,L₁⁻,L₂⁻,L₃⁻,L₁⁺,L₂⁺,L₃⁺)
     end
 end
