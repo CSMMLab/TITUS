@@ -730,13 +730,13 @@ function SolveFirstCollisionSourceDLRHighOrder(obj::SolverCSD{T}) where {T<:Abst
             WAxW .= W'*obj.pn.Ax*W # Ax  = Ax^T
 
             k1 .= -obj.stencil.L2x*K*WAxW - obj.stencil.L2y*K*WAzW;
-            K .= K .+ dE .* k1 ./ 6;
+            KUP .= K .+ dE .* k1 ./ 6;
             k1 .= -obj.stencil.L2x*(K+0.5*dE*k1)*WAxW - obj.stencil.L2y*(K+0.5*dE*k1)*WAzW;
-            K .+= 2 * dE .* k1 ./ 6;
+            KUP .+= 2 * dE .* k1 ./ 6;
             k1 .= -obj.stencil.L2x*(K+0.5*dE*k1)*WAxW - obj.stencil.L2y*(K+0.5*dE*k1)*WAzW;
-            K .+= 2 * dE .* k1 ./ 6;
+            KUP .+= 2 * dE .* k1 ./ 6;
             k1 .= -obj.stencil.L2x*(K+dE*k1)*WAxW - obj.stencil.L2y*(K+dE*k1)*WAzW;
-            K .+= dE .* k1 ./ 6;
+            K .= KUP .+ dE .* k1 ./ 6;
 
             XNew,_,_ = svd!(K);
 
@@ -1578,13 +1578,13 @@ function CudaSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {T<:A
             WAzW .= (Az*W)'*W # Az  = Az^T
 
             k1 .= -L2x*K*WAxW .- L2y*K*WAzW;
-            K .= K .+ dE .* k1 ./ 6;
+            KUP = K .+ dE .* k1 ./ 6;
             k1 .= -L2x*(K.+dE12.*k1)*WAxW .- L2y*(K.+dE12.*k1)*WAzW;
-            K .+= 2 * dE .* k1 ./ 6;
+            KUP .+= 2 * dE .* k1 ./ 6;
             k1 .= -L2x*(K.+dE12.*k1)*WAxW .- L2y*(K.+dE12.*k1)*WAzW;
-            K .+= 2 * dE .* k1 ./ 6;
+            KUP .+= 2 * dE .* k1 ./ 6;
             k1 .= -L2x*(K.+dE.*k1)*WAxW .- L2y*(K.+dE.*k1)*WAzW;
-            K .+= dE .* k1 ./ 6;
+            K .= KUP .+ dE .* k1 ./ 6;
 
             XNew,_,_ = svd!(K);
 
@@ -1596,13 +1596,13 @@ function CudaSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {T<:A
             XL2yX .= X'*(L2y*X)
 
             l1 .= -Ax*L*XL2xX' .- Az*L*XL2yX';
-            L .= L .+ dE .* l1 ./ 6;
+            LUP = L .+ dE .* l1 ./ 6;
             l1 .= -Ax*(L+dE12*l1)*XL2xX' .- Az*(L+dE12*l1)*XL2yX';
-            L .+= 2 * dE .* l1 ./ 6;
+            LUP .+= 2 * dE .* l1 ./ 6;
             l1 .= -Ax*(L+dE12*l1)*XL2xX' .- Az*(L+dE12*l1)*XL2yX';
-            L .+= 2 * dE .* l1 ./ 6;
+            LUP .+= 2 * dE .* l1 ./ 6;
             l1 .= -Ax*(L+dE*l1)*XL2xX' .- Az*(L+dE*l1)*XL2yX';
-            L .+= dE .* l1 ./ 6;
+            L .= LUP .+ dE .* l1 ./ 6;
                     
             WNew,_,_ = svd!(L);
 
