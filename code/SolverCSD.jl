@@ -1791,7 +1791,7 @@ function FindIdxBoundary(obj::SolverCSD{T}) where {T<:AbstractFloat}
 end
 
 # full CUDA with SN upwind
-function CudaSolveDLR4thOrderSN2ndOrderUpwind(obj::SolverCSD{T}) where {T<:AbstractFloat}
+function CudaSolveDLR4thOrderSN2ndOrderUpwindOld(obj::SolverCSD{T}) where {T<:AbstractFloat}
     # Get rank
     r=obj.settings.r;
 
@@ -1967,7 +1967,7 @@ function CudaSolveDLR4thOrderSN2ndOrderUpwind(obj::SolverCSD{T}) where {T<:Abstr
                 end
             end
         end
-#=
+    #=
         # +++
         psiPPP = psiCPU[:,idxPosPosPos];
         psiPPP0 = psiPPP;
@@ -2088,7 +2088,7 @@ function CudaSolveDLR4thOrderSN2ndOrderUpwind(obj::SolverCSD{T}) where {T<:Abstr
         #=for k = 1:length(idxBeam)
             x_val = grid[k,:] .+ eTrafo[n]*obj.qReduced[q,:]
         end=#
-=#
+    =#
         psi .= CuArray(psiCPU)
        
         for l = 0:obj.pn.N
@@ -2159,6 +2159,425 @@ function CudaSolveDLR4thOrderSN2ndOrderUpwind(obj::SolverCSD{T}) where {T<:Abstr
 
             S .= S .+ dE .* (s1 .+ 2 * s2 .+ 2 * s3 .+ s4) ./ 6;
             println(norm(S))
+        end
+
+        ############## Out Scattering ##############
+        L .= W*S';
+
+        for i = 1:r
+            L[:,i] ./= (1 .+ dE*(sigmaS[1] .- Dvec))
+        end
+
+        W,Sv,Tv = svd!(L);
+
+        S .= Tv*Diagonal(Sv);
+
+        ############## In Scattering ##############
+
+        ################## K-step ##################
+        K .= X*S;
+        K .= K .+ dE * psi * (M' * (Diagonal(Dvec) * W) );
+
+        XNew,_,_ = svd!(K);
+
+        MUp .= XNew' * X;
+
+        ################## L-step ##################
+        L = W*S';
+        L = L .+dE*Diagonal(Dvec)*M*(psi'*X);
+
+        WNew,_,_ = svd!(L);
+
+        NUp .= WNew' * W;
+
+        W .= WNew;
+        X .= XNew;
+
+        ################## S-step ##################
+        S .= MUp*S*(NUp')
+        S .= S .+dE*(X'*psi)*M'*(Diagonal(Dvec)*W);
+
+        ############## Dose Computation ##############
+        dose .+= dE12 * (X*S*(W'*e1) * ∫Y₀⁰dΩ + psi * weights) * sPow[n] ./ densityVec ;
+        
+        next!(prog) # update progress bar
+    end
+
+    U,Sigma,V = svd!(Matrix(S));
+
+    # return solution and dose
+    return Matrix(X)*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*Matrix(W)*V,Matrix(W)*V,Vector(dose),Matrix(psi);
+
+end
+
+function CudaSolveDLR4thOrderSN2ndOrderUpwind(obj::SolverCSD{T}) where {T<:AbstractFloat}
+    # Get rank
+    r=obj.settings.r;
+
+    eTrafo = T.(obj.csd.eTrafo);
+    energy = T.(obj.csd.eGrid);
+
+    nx = obj.settings.NCellsX;
+    ny = obj.settings.NCellsY;
+    nz = obj.settings.NCellsZ;
+    nq = obj.Q.nquadpoints;
+    N = obj.pn.nTotalEntries;
+
+    x = obj.settings.xMid;
+    y = obj.settings.yMid;
+    z = obj.settings.zMid;
+
+    # setup spatial grid
+    grid = zeros(nx*ny*nz,3)
+    for i = 1:nx
+        for j = 1:ny
+            for k = 1:nz
+                idx = vectorIndex(nx,ny,i,j,k)
+                grid[idx,1] = x[i];
+                grid[idx,2] = y[j];
+                grid[idx,3] = z[k];
+            end
+        end
+    end
+
+    sigmaO1Inv = 10000.0;
+    sigmaO2Inv = 10000.0;
+    sigmaO3Inv = 10000.0;
+    pos_beam = [obj.settings.x0,obj.settings.y0,obj.settings.z0];
+
+    # Set up initiandition and store as matrix
+    floorPsiAll = 1e-1;
+    floorPsi = 1e-17;
+    if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" # determine relevant directions in IC
+        psi = SetupIC(obj,obj.Q.pointsxyz);
+        idxFullBeam = findall(psi .> floorPsiAll)
+        idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
+        psi = psi[:,:,idxBeam]
+    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" || obj.settings.problem == "validation" # determine relevant directions in beam
+        psiBeam = zeros(nq)
+        for k = 1:nq
+            psiBeam[k] = PsiBeam(obj,T.(obj.Q.pointsxyz[k,:]),T(obj.settings.eMax),obj.settings.x0,obj.settings.y0,obj.settings.z0,1)
+        end
+        idxBeam = findall( psiBeam .> floorPsi*maximum(psiBeam) );
+        psi = SetupIC(obj,obj.Q.pointsxyz[idxBeam,:]);
+    end
+    println("reduction of ordinates is ",(nq-length(idxBeam))/nq*100.0," percent")
+    
+    obj.qReduced = obj.Q.pointsxyz[idxBeam,:]
+    obj.M = obj.M[:,idxBeam]
+    obj.OReduced = obj.O[idxBeam,:]
+    weights = CuArray(T.(obj.Q.weights[idxBeam]));
+    nq = length(idxBeam);
+
+    idxPosPosPos = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,2].>=0.0) .&(obj.qReduced[:,3].>=0.0))
+    idxPosNegPos = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,2].<0.0) .&(obj.qReduced[:,3].>=0.0))
+    idxNegPosPos = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,2].>=0.0) .&(obj.qReduced[:,3].>=0.0))
+    idxNegNegPos = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,2].<0.0) .&(obj.qReduced[:,3].>=0.0))
+
+    idxPosPosNeg = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,2].>=0.0) .&(obj.qReduced[:,3].<0.0))
+    idxPosNegNeg = findall((obj.qReduced[:,1].>=0.0) .&(obj.qReduced[:,2].<0.0) .&(obj.qReduced[:,3].<0.0))
+    idxNegPosNeg = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,2].>=0.0) .&(obj.qReduced[:,3].<0.0))
+    idxNegNegNeg = findall((obj.qReduced[:,1].<0.0)  .&(obj.qReduced[:,2].<0.0) .&(obj.qReduced[:,3].<0.0))
+
+    # define density matrix
+    Id = Diagonal(ones(T,N));
+
+    # Low-rank approx of init data:
+    X,_,_ = svd!(zeros(T,nx*ny*nz,r));
+    W,_,_ = svd!(zeros(T,N,r));
+
+    # rank-r truncation:
+    X = CuArray(X[:,1:r]);
+    W = CuArray(W[:,1:r]);
+
+    # rank-r truncation:
+    S = CUDA.zeros(T,r,r);
+
+    K = CUDA.zeros(T,size(X));
+    k1 = CUDA.zeros(T,size(X));
+    L = CUDA.zeros(T,size(W));
+    l1 = CUDA.zeros(T,size(W));
+
+    WAxW = CUDA.zeros(T,r,r)
+    WAyW = CUDA.zeros(T,r,r)
+    WAzW = CUDA.zeros(T,r,r)
+
+    XL2xX = CUDA.zeros(T,r,r)
+    XL2yX = CUDA.zeros(T,r,r)
+    XL2zX = CUDA.zeros(T,r,r)
+
+    MUp = CUDA.zeros(T,r,r)
+    NUp = CUDA.zeros(T,r,r)
+
+    L2x = CuSparseMatrixCSC(obj.stencil.L2x);
+    L2y = CuSparseMatrixCSC(obj.stencil.L2y);
+    L2z = CuSparseMatrixCSC(obj.stencil.L2z);
+
+    Ax = CuSparseMatrixCSC(obj.pn.Ax)
+    Ay = CuSparseMatrixCSC(obj.pn.Ay)
+    Az = CuSparseMatrixCSC(obj.pn.Az)
+
+    XNew = CUDA.zeros(T,nx*ny*nz,r)
+
+    # impose boundary condition
+    X[obj.boundaryIdx,:] .= 0.0;
+
+    nEnergies = length(eTrafo);
+    dE = eTrafo[2]-eTrafo[1];
+    obj.settings.dE = dE
+
+    println("CFL = ",dE/min(obj.settings.dx,obj.settings.dy)/minimum(obj.density))
+
+    psiCPU = Ten2Vec(psi)
+    psi = CuArray(psiCPU);
+    M1 = CuArray(obj.M[1,:])
+    M = CuArray(obj.M)
+    sPow = T.(obj.csd.S)
+    densityVec = CuArray(obj.densityVec);
+    dose = CuArray(obj.dose);
+    DvecCPU = zeros(T,obj.pn.nTotalEntries)
+
+
+    prog = Progress(nEnergies-1,1)
+
+    idxBeam = FindIdxBoundary(obj)
+
+    intSigma = dE * SigmaAtEnergy(obj.csd,energy[1])[1];
+    ∫Y₀⁰dΩ = T(4 * pi / sqrt(4 * pi)); 
+
+    e1 = zeros(T,N); e1[1] = 1.0; e1 = CuArray(e1);
+    M1 = obj.M[1,:]
+
+    dE12 = T(0.5*dE);
+    #loop over energy
+    for n=2:nEnergies
+        # compute scattering coefficients at current energy
+        sigmaS = CuArray(SigmaAtEnergy(obj.csd,energy[n]))# .* sqrt.(obj.gamma));
+
+        # set boundary conditions in psiCPU
+        #SetBCs!(obj, energy[n], n,psiCPU);
+
+        ############## Dose Computation ##############
+        
+        dose .+= dE12 * (X*S*(W'*e1) .* ∫Y₀⁰dΩ + psi * weights) * sPow[n-1] ./ densityVec ;
+
+        intSigma += dE * sigmaS[1];
+
+        # backward tracing when IC given
+        psiCPU .= zeros(size(psiCPU))
+        for q = 1:nq
+            beamOmega = 10^5*exp(-sigmaO1Inv*(obj.settings.Omega1-obj.qReduced[q,1])^2)*exp(-sigmaO2Inv*(obj.settings.Omega2-obj.qReduced[q,2])^2)*exp(-sigmaO3Inv*(obj.settings.Omega3-obj.qReduced[q,3])^2) * exp(-intSigma);
+            for j = 1:ny
+                beamy = normpdf(y[j] - eTrafo[n]*obj.qReduced[q,2],pos_beam[2],obj.settings.sigmaY)
+                if beamy < 1e-6 continue; end
+                for i = 1:nx
+                    beamx = normpdf(x[i] - eTrafo[n]*obj.qReduced[q,1],pos_beam[1],obj.settings.sigmaX)
+                    if beamx < 1e-6 continue; end
+                    for k = 1:nz
+                        beamz = normpdf(z[k] - eTrafo[n]*obj.qReduced[q,3],pos_beam[3],obj.settings.sigmaZ)
+                        idx = vectorIndex(nx,ny,i,j,k)
+                        psiCPU[idx,q] = T(beamOmega * beamx * beamy * beamz)             
+                    end
+                end
+            end
+        end
+
+        
+        # +++
+        psiPPP = psiCPU[:,idxPosPosPos];
+        psiPPP0 = psiPPP;
+        muPPP = Diagonal(obj.qReduced[idxPosPosPos])
+        rhsPPP = - ( obj.stencil.L₁⁺ * psiPPP0 + obj.stencil.L₂⁺ * psiPPP0 + obj.stencil.L₃⁺ * psiPPP0 ) * muPPP
+        psiPPP .+= dE .* rhsPPP ./ 6;
+        rhsPPP .= - ( obj.stencil.L₁⁺ * (psiPPP0.+dE12.*rhsPPP) + obj.stencil.L₂⁺ * (psiPPP0.+dE12.*rhsPPP) + obj.stencil.L₃⁺ * (psiPPP0.+dE12.*rhsPPP) ) * muPPP
+        psiPPP .+= 2 * dE .* rhsPPP ./ 6;
+        rhsPPP .= - ( obj.stencil.L₁⁺ * (psiPPP0.+dE12.*rhsPPP) + obj.stencil.L₂⁺ * (psiPPP0.+dE12.*rhsPPP) + obj.stencil.L₃⁺ * (psiPPP0.+dE12.*rhsPPP) ) * muPPP
+        psiPPP .+= 2 * dE .* rhsPPP ./ 6;
+        rhsPPP .= - ( obj.stencil.L₁⁺ * (psiPPP0.+dE.*rhsPPP) + obj.stencil.L₂⁺ * (psiPPP0.+dE.*rhsPPP) + obj.stencil.L₃⁺ * (psiPPP0.+dE.*rhsPPP) ) * muPPP
+        psiPPP .+= dE .* rhsPPP ./ 6;
+
+        # ++-
+        psiPPM = psiCPU[:,idxPosPosNeg];
+        psiPPM0 = psiPPM;
+        muPPM = Diagonal(obj.qReduced[idxPosPosNeg])        
+        rhsPPM = - ( obj.stencil.L₁⁺ * psiPPM + obj.stencil.L₂⁺ * psiPPM + obj.stencil.L₃⁻ * psiPPM ) * muPPM
+        psiPPM .+= dE .* rhsPPM ./ 6;
+        rhsPPM .= - ( obj.stencil.L₁⁺ * (psiPPM0.+dE12.*rhsPPM) + obj.stencil.L₂⁺ * (psiPPM0.+dE12.*rhsPPM) + obj.stencil.L₃⁻ * (psiPPM0.+dE12.*rhsPPM) ) * muPPM
+        psiPPM .+= 2 * dE .* rhsPPM ./ 6;
+        rhsPPM .= - ( obj.stencil.L₁⁺ * (psiPPM0.+dE12.*rhsPPM) + obj.stencil.L₂⁺ * (psiPPM0.+dE12.*rhsPPM) + obj.stencil.L₃⁻ * (psiPPM0.+dE12.*rhsPPM) ) * muPPM
+        psiPPM .+= 2 * dE .* rhsPPM ./ 6;
+        rhsPPM .= - ( obj.stencil.L₁⁺ * (psiPPM0.+dE.*rhsPPM) + obj.stencil.L₂⁺ * (psiPPM0.+dE.*rhsPPM) + obj.stencil.L₃⁻ * (psiPPM0.+dE.*rhsPPM) ) * muPPM
+        psiPPM .+= dE .* rhsPPM ./ 6;
+
+        # +--
+        psiPMM = psiCPU[:,idxPosNegNeg];
+        psiPMM0 = psiPMM;
+        muPMM = Diagonal(obj.qReduced[idxPosNegNeg])
+        rhsPMM = - ( obj.stencil.L₁⁺ * psiPMM + obj.stencil.L₂⁻ * psiPMM + obj.stencil.L₃⁻ * psiPMM ) * muPMM
+        psiPMM .+= dE .* rhsPMM ./ 6;
+        rhsPMM .= - ( obj.stencil.L₁⁺ * (psiPMM0.+dE12.*rhsPMM) + obj.stencil.L₂⁻ * (psiPMM0.+dE12.*rhsPMM) + obj.stencil.L₃⁻ * (psiPMM0.+dE12.*rhsPMM) ) * muPMM
+        psiPMM .+= 2 * dE .* rhsPMM ./ 6;
+        rhsPMM .= - ( obj.stencil.L₁⁺ * (psiPMM0.+dE12.*rhsPMM) + obj.stencil.L₂⁻ * (psiPMM0.+dE12.*rhsPMM) + obj.stencil.L₃⁻ * (psiPMM0.+dE12.*rhsPMM) ) * muPMM
+        psiPMM .+= 2 * dE .* rhsPMM ./ 6;
+        rhsPMM .= - ( obj.stencil.L₁⁺ * (psiPMM0.+dE.*rhsPMM) + obj.stencil.L₂⁻ * (psiPMM0.+dE.*rhsPMM) + obj.stencil.L₃⁻ * (psiPMM0.+dE.*rhsPMM) ) * muPMM
+        psiPMM .+= dE .* rhsPMM ./ 6;
+
+        # ---
+        psiMMM = psiCPU[:,idxNegNegNeg];
+        psiMMM0 = psiMMM;
+        muMMM = Diagonal(obj.qReduced[idxNegNegNeg])
+        rhsMMM = - ( obj.stencil.L₁⁻ * psiMMM + obj.stencil.L₂⁻ * psiMMM + obj.stencil.L₃⁻ * psiMMM ) * muMMM
+        psiMMM .+= dE .* rhsMMM ./ 6;
+        rhsMMM .= - ( obj.stencil.L₁⁻ * (psiMMM0.+dE12.*rhsMMM) + obj.stencil.L₂⁻ * (psiMMM0.+dE12.*rhsMMM) + obj.stencil.L₃⁻ * (psiMMM0.+dE12.*rhsMMM) ) * muMMM
+        psiMMM .+= 2 * dE .* rhsMMM ./ 6;
+        rhsMMM .= - ( obj.stencil.L₁⁻ * (psiMMM0.+dE12.*rhsMMM) + obj.stencil.L₂⁻ * (psiMMM0.+dE12.*rhsMMM) + obj.stencil.L₃⁻ * (psiMMM0.+dE12.*rhsMMM) ) * muMMM
+        psiMMM .+= 2 * dE .* rhsMMM ./ 6;
+        rhsMMM .= - ( obj.stencil.L₁⁻ * (psiMMM0.+dE.*rhsMMM) + obj.stencil.L₂⁻ * (psiMMM0.+dE.*rhsMMM) + obj.stencil.L₃⁻ * (psiMMM0.+dE.*rhsMMM) ) * muMMM
+        psiMMM .+= dE .* rhsMMM ./ 6;
+
+        # -+-
+        psiMPM = psiCPU[:,idxNegPosNeg];
+        psiMPM0 = psiMPM;
+        muMPM = Diagonal(obj.qReduced[idxNegPosNeg])
+        rhsMPM = - ( obj.stencil.L₁⁻ * psiMPM + obj.stencil.L₂⁺ * psiMPM + obj.stencil.L₃⁻ * psiMPM ) * muMPM
+        psiMPM .+= dE .* rhsMPM ./ 6;
+        rhsMPM .= - ( obj.stencil.L₁⁻ * (psiMPM0.+dE12.*rhsMPM) + obj.stencil.L₂⁺ * (psiMPM0.+dE12.*rhsMPM) + obj.stencil.L₃⁻ * (psiMPM0.+dE12.*rhsMPM) ) * muMPM
+        psiMPM .+= 2 * dE .* rhsMPM ./ 6;
+        rhsMPM .= - ( obj.stencil.L₁⁻ * (psiMPM0.+dE12.*rhsMPM) + obj.stencil.L₂⁺ * (psiMPM0.+dE12.*rhsMPM) + obj.stencil.L₃⁻ * (psiMPM0.+dE12.*rhsMPM) ) * muMPM
+        psiMPM .+= 2 * dE .* rhsMPM ./ 6;
+        rhsMPM .= - ( obj.stencil.L₁⁻ * (psiMPM0.+dE.*rhsMPM) + obj.stencil.L₂⁺ * (psiMPM0.+dE.*rhsMPM) + obj.stencil.L₃⁻ * (psiMPM0.+dE.*rhsMPM) ) * muMPM
+        psiMPM .+= dE .* rhsMPM ./ 6;
+
+        # -++
+        psiMPP = psiCPU[:,idxNegPosPos];
+        psiMPP0 = psiMPP;
+        muMPP = Diagonal(obj.qReduced[idxNegPosPos])
+        rhsMPP = - ( obj.stencil.L₁⁻ * psiMPP + obj.stencil.L₂⁺ * psiMPP + obj.stencil.L₃⁺ * psiMPP ) * muMPP
+        psiMPP .+= dE .* rhsMPP ./ 6;
+        rhsMPP .= - ( obj.stencil.L₁⁻ * (psiMPP0.+dE12.*rhsMPP) + obj.stencil.L₂⁺ * (psiMPP0.+dE12.*rhsMPP) + obj.stencil.L₃⁺ * (psiMPP0.+dE12.*rhsMPP) ) * muMPP
+        psiMPP .+= 2 * dE .* rhsMPP ./ 6;
+        rhsMPP .= - ( obj.stencil.L₁⁻ * (psiMPP0.+dE12.*rhsMPP) + obj.stencil.L₂⁺ * (psiMPP0.+dE12.*rhsMPP) + obj.stencil.L₃⁺ * (psiMPP0.+dE12.*rhsMPP) ) * muMPP
+        psiMPP .+= 2 * dE .* rhsMPP ./ 6;
+        rhsMPP .= - ( obj.stencil.L₁⁻ * (psiMPP0.+dE.*rhsMPP) + obj.stencil.L₂⁺ * (psiMPP0.+dE.*rhsMPP) + obj.stencil.L₃⁺ * (psiMPP0.+dE.*rhsMPP) ) * muMPP
+        psiMPP .+= dE .* rhsMPP ./ 6;
+
+        # --+
+        psiMMP = psiCPU[:,idxNegNegPos];
+        psiMMP0 = psiMMP;
+        muMMP = Diagonal(obj.qReduced[idxNegNegPos])
+        rhsMMP = - ( obj.stencil.L₁⁻ * psiMMP + obj.stencil.L₂⁻ * psiMMP + obj.stencil.L₃⁺ * psiMMP ) * muMMP
+        psiMMP .+= dE .* rhsMMP ./ 6;
+        rhsMMP .= - ( obj.stencil.L₁⁻ * (psiMMP0.+dE12.*rhsMMP) + obj.stencil.L₂⁻ * (psiMMP0.+dE12.*rhsMMP) + obj.stencil.L₃⁺ * (psiMMP0.+dE12.*rhsMMP) ) * muMMP
+        psiMMP .+= 2 * dE .* rhsMMP ./ 6;
+        rhsMMP .= - ( obj.stencil.L₁⁻ * (psiMMP0.+dE12.*rhsMMP) + obj.stencil.L₂⁻ * (psiMMP0.+dE12.*rhsMMP) + obj.stencil.L₃⁺ * (psiMMP0.+dE12.*rhsMMP) ) * muMMP
+        psiMMP .+= 2 * dE .* rhsMMP ./ 6;
+        rhsMMP .= - ( obj.stencil.L₁⁻ * (psiMMP0.+dE.*rhsMMP) + obj.stencil.L₂⁻ * (psiMMP0.+dE.*rhsMMP) + obj.stencil.L₃⁺ * (psiMMP0.+dE.*rhsMMP) ) * muMMP
+        psiMMP .+= dE .* rhsMMP ./ 6;
+
+        # +-+
+        psiPMP = psiCPU[:,idxPosNegPos];
+        psiPMP0 = psiPMP;
+        muPMP = Diagonal(obj.qReduced[idxPosNegPos])
+        rhsPMP = - ( obj.stencil.L₁⁺ * psiPMP + obj.stencil.L₂⁻ * psiPMP + obj.stencil.L₃⁺ * psiPMP ) * muPMP
+        psiPMP .+= dE .* rhsPMP ./ 6;
+        rhsPMP .= - ( obj.stencil.L₁⁺ * (psiPMP0.+dE12.*rhsPMP) + obj.stencil.L₂⁻ * (psiPMP0.+dE12.*rhsPMP) + obj.stencil.L₃⁺ * (psiPMP0.+dE12.*rhsPMP) ) * muPMP
+        psiPMP .+= 2 * dE .* rhsPMP ./ 6;
+        rhsPMP .= - ( obj.stencil.L₁⁺ * (psiPMP0.+dE12.*rhsPMP) + obj.stencil.L₂⁻ * (psiPMP0.+dE12.*rhsPMP) + obj.stencil.L₃⁺ * (psiPMP0.+dE12.*rhsPMP) ) * muPMP
+        psiPMP .+= 2 * dE .* rhsPMP ./ 6;
+        rhsPMP .= - ( obj.stencil.L₁⁺ * (psiPMP0.+dE.*rhsPMP) + obj.stencil.L₂⁻ * (psiPMP0.+dE.*rhsPMP) + obj.stencil.L₃⁺ * (psiPMP0.+dE.*rhsPMP) ) * muPMP
+        psiPMP .+= dE .* rhsPMP ./ 6;     
+        
+        psiCPU[:,idxPosPosPos] = psiPPP;
+        psiCPU[:,idxPosPosNeg] = psiPPM;
+        psiCPU[:,idxNegPosPos] = psiMPP;
+        psiCPU[:,idxPosNegPos] = psiPMP;
+        psiCPU[:,idxNegNegNeg] = psiMMM;
+        psiCPU[:,idxNegPosNeg] = psiMPM;
+        psiCPU[:,idxNegNegPos] = psiMMP;
+        psiCPU[:,idxPosNegNeg] = psiPMM;
+
+        #phiU = psiPPP * weights[idxPosPosPos] + psiPPM * weights[idxPosPosNeg] + psiMPP * weights[idxNegPosPos] + psiPMP * weights[idxPosNegPos];
+        #phiU .+= psiMMM * weights[idxNeqNeqNeq] + psiMPM * weights[idxNegPosNeg] + psiMMP * weights[idxNegNegPos] + psiPMM * weights[idxPosNegNeg];
+
+        # forward tracing when BCs given
+        #=for k = 1:length(idxBeam)
+            x_val = grid[k,:] .+ eTrafo[n]*obj.qReduced[q,:]
+        end=#
+
+        # forward tracing when BCs given
+        #=for k = 1:length(idxBeam)
+            x_val = grid[k,:] .+ eTrafo[n]*obj.qReduced[q,:]
+        end=#
+
+        psi .= CuArray(psiCPU)
+       
+        for l = 0:obj.pn.N
+            for k=-l:l
+                i = GlobalIndex( l, k );
+                DvecCPU[i+1] = sigmaS[l+1]
+            end
+        end
+        Dvec = CuArray(DvecCPU)
+        
+        if n > 2 # perform streaming update after first collision (before solution is zero)
+            ################## K-step ##################
+            K .= X*S;
+
+            WAxW .= (Ax*W)'*W # Ax  = Ax^T
+            WAyW .= (Ay*W)'*W # Ax  = Ax^T
+            WAzW .= (Az*W)'*W # Az  = Az^T
+
+            k1 .= -L2x*K*WAxW .- L2y*K*WAyW .- L2z*K*WAzW;
+            KUp = K .+ dE .* k1 ./ 6;
+            k1 .= -L2x*(K.+dE12.*k1)*WAxW .- L2y*(K.+dE12.*k1)*WAyW .- L2z*(K.+dE12.*k1)*WAzW;
+            KUp .+= 2 * dE .* k1 ./ 6;
+            k1 .= -L2x*(K.+dE12.*k1)*WAxW .- L2y*(K.+dE12.*k1)*WAyW .- L2z*(K.+dE12.*k1)*WAzW;
+            KUp .+= 2 * dE .* k1 ./ 6;
+            k1 .= -L2x*(K.+dE.*k1)*WAxW .- L2y*(K.+dE.*k1)*WAyW .- L2z*(K.+dE.*k1)*WAzW;
+            K .= KUp .+ dE .* k1 ./ 6;
+
+            XNew,_,_ = svd!(K);
+
+            MUp .= XNew' * X;
+            ################## L-step ##################
+            L .= W*S';
+
+            XL2xX .= X'*(L2x*X)
+            XL2yX .= X'*(L2y*X)
+            XL2zX .= X'*(L2z*X)
+            
+            l1 .= -Ax*L*XL2xX' .- Ay*L*XL2yX' .- Az*L*XL2zX';
+            LUp = L .+ dE .* l1 ./ 6;
+            l1 .= -Ax*(L+dE12*l1)*XL2xX' .- Ay*(L+dE12*l1)*XL2yX' .- Az*(L+dE12*l1)*XL2zX';
+            LUp .+= 2 * dE .* l1 ./ 6;
+            l1 .= -Ax*(L+dE12*l1)*XL2xX' .- Ay*(L+dE12*l1)*XL2yX' .- Az*(L+dE12*l1)*XL2zX';
+            LUp .+= 2 * dE .* l1 ./ 6;
+            l1 .= -Ax*(L+dE*l1)*XL2xX' .- Ay*(L+dE*l1)*XL2yX' .- Az*(L+dE*l1)*XL2zX';
+            L .= LUp + dE .* l1 ./ 6;
+                    
+            WNew,_,_ = svd!(L);
+
+            NUp .= WNew' * W;
+            W .= WNew;
+            X .= XNew;
+
+            ################## S-step ##################
+            S .= MUp*S*(NUp')
+
+            XL2xX .= X'*(L2x*X)
+            XL2yX .= X'*(L2y*X)
+            XL2zX .= X'*(L2z*X)
+
+            WAxW .= W'*(Ax*W)
+            WAyW .= W'*(Ay*W)
+            WAzW .= W'*(Az*W)
+
+            s1 = -XL2xX*S*WAxW .- XL2yX*S*WAyW .- XL2zX*S*WAzW;
+            s2 = -XL2xX*(S+dE12*s1)*WAxW .- XL2yX*(S+dE12*s1)*WAyW .- XL2zX*(S+dE12*s1)*WAzW;
+            s3 = -XL2xX*(S+dE12*s2)*WAxW .- XL2yX*(S+dE12*s2)*WAyW .- XL2zX*(S+dE12*s2)*WAzW;
+            s4 = -XL2xX*(S+dE*s3)*WAxW .- XL2yX*(S+dE*s3)*WAyW .- XL2zX*(S+dE*s3)*WAzW;
+
+            S .= S .+ dE .* (s1 .+ 2 * s2 .+ 2 * s3 .+ s4) ./ 6;
         end
 
         ############## Out Scattering ##############

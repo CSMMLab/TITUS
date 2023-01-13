@@ -18,7 +18,7 @@ struct Stencils{T<:AbstractFloat}
     L₂⁺::SparseMatrixCSC{T, Int64};
     L₃⁺::SparseMatrixCSC{T, Int64};
 
-    function Stencils(settings::Settings,T::DataType=Float64,order::Int=2,orderSN::Int=1)
+    function Stencils(settings::Settings,T::DataType=Float64,order::Int=2,orderSN::Int=2)
         density = settings.density;
         # setup stencil matrix
         nx = settings.NCellsX;

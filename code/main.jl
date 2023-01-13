@@ -23,7 +23,9 @@ rhoMin = minimum(s.density);
 if s.problem == "validation"
     nx_MC = 300;
     doseRef = zeros(nx_MC,nx_MC,nx_MC);
-    #read!("validationData/proton_validation3D_dose.bin",doseRef)
+    if isfile("validationData/proton_validation3D_dose.bin")
+        read!("validationData/proton_validation3D_dose.bin",doseRef)
+    end
     xRef = collect(range(0,2,nx_MC));
     yRef = collect(range(0,2,nx_MC));
     zRef = collect(range(0,8,nx_MC));
@@ -36,8 +38,8 @@ end
 ############################
 
 solver1 = SolverCSD(s);
-#X_dlr,S_dlr,W_dlr_SN,W_dlr, dose_DLR, psi_DLR = CudaSolveDLR4thOrderSN2ndOrderUpwind(solver1);
-X_dlr,S_dlr,W_dlr_SN,W_dlr, dose_DLR, psi_DLR = CudaFullSolveFirstCollisionSourceDLR4thOrder(solver1);
+X_dlr,S_dlr,W_dlr_SN,W_dlr, dose_DLR, psi_DLR = CudaSolveDLR4thOrderSN2ndOrderUpwind(solver1);
+#X_dlr,S_dlr,W_dlr_SN,W_dlr, dose_DLR, psi_DLR = CudaFullSolveFirstCollisionSourceDLR4thOrder(solver1);
 #X_dlr,S_dlr,W_dlr_SN,W_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR4thOrderFP(solver1);
 #u, dose_DLR,psi = SolveFirstCollisionSource(solver1);
 u = Vec2Ten(s.NCellsX,s.NCellsY,s.NCellsZ,X_dlr*Diagonal(S_dlr)*W_dlr[1,:]);
