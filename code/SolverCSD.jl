@@ -1660,6 +1660,7 @@ function CudaSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {T<:A
     return X*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*W*V,W*V,obj.dose,psi;
 
 end
+
 function SetBCs!(obj::SolverCSD{T}, n::Int, psiCPU::Array{T,2}) where {T<:AbstractFloat}
     nx = obj.settings.NCellsX;
     ny = obj.settings.NCellsY;
@@ -1943,7 +1944,7 @@ function CudaSolveDLR4thOrderSN2ndOrderUpwind(obj::SolverCSD{T}) where {T<:Abstr
         #SetBCs!(obj, n,psiCPU);
 
         ############## Dose Computation ##############
-        #=
+        
         dose .+= dE12 * (X*S*(W'*e1) .* ∫Y₀⁰dΩ + psi * weights) * sPow[n-1] ./ densityVec ;
 
         intSigma += dE * sigmaS[1];
@@ -1965,8 +1966,8 @@ function CudaSolveDLR4thOrderSN2ndOrderUpwind(obj::SolverCSD{T}) where {T<:Abstr
                     end
                 end
             end
-        end=#
-
+        end
+#=
         # +++
         psiPPP = psiCPU[:,idxPosPosPos];
         psiPPP0 = psiPPP;
@@ -2087,7 +2088,7 @@ function CudaSolveDLR4thOrderSN2ndOrderUpwind(obj::SolverCSD{T}) where {T<:Abstr
         #=for k = 1:length(idxBeam)
             x_val = grid[k,:] .+ eTrafo[n]*obj.qReduced[q,:]
         end=#
-
+=#
         psi .= CuArray(psiCPU)
        
         for l = 0:obj.pn.N
@@ -2107,13 +2108,13 @@ function CudaSolveDLR4thOrderSN2ndOrderUpwind(obj::SolverCSD{T}) where {T<:Abstr
             WAzW .= (Az*W)'*W # Az  = Az^T
 
             k1 .= -L2x*K*WAxW .- L2y*K*WAyW .- L2z*K*WAzW;
-            K .= K .+ dE .* k1 ./ 6;
+            KUp = K .+ dE .* k1 ./ 6;
             k1 .= -L2x*(K.+dE12.*k1)*WAxW .- L2y*(K.+dE12.*k1)*WAyW .- L2z*(K.+dE12.*k1)*WAzW;
-            K .+= 2 * dE .* k1 ./ 6;
+            KUp .+= 2 * dE .* k1 ./ 6;
             k1 .= -L2x*(K.+dE12.*k1)*WAxW .- L2y*(K.+dE12.*k1)*WAyW .- L2z*(K.+dE12.*k1)*WAzW;
-            K .+= 2 * dE .* k1 ./ 6;
+            KUp .+= 2 * dE .* k1 ./ 6;
             k1 .= -L2x*(K.+dE.*k1)*WAxW .- L2y*(K.+dE.*k1)*WAyW .- L2z*(K.+dE.*k1)*WAzW;
-            K .+= dE .* k1 ./ 6;
+            K .= KUp .+ dE .* k1 ./ 6;
 
             XNew,_,_ = svd!(K);
 
@@ -2126,13 +2127,13 @@ function CudaSolveDLR4thOrderSN2ndOrderUpwind(obj::SolverCSD{T}) where {T<:Abstr
             XL2zX .= X'*(L2z*X)
             
             l1 .= -Ax*L*XL2xX' .- Ay*L*XL2yX' .- Az*L*XL2zX';
-            L .= L .+ dE .* l1 ./ 6;
+            LUp = L .+ dE .* l1 ./ 6;
             l1 .= -Ax*(L+dE12*l1)*XL2xX' .- Ay*(L+dE12*l1)*XL2yX' .- Az*(L+dE12*l1)*XL2zX';
-            L .+= 2 * dE .* l1 ./ 6;
+            LUp .+= 2 * dE .* l1 ./ 6;
             l1 .= -Ax*(L+dE12*l1)*XL2xX' .- Ay*(L+dE12*l1)*XL2yX' .- Az*(L+dE12*l1)*XL2zX';
-            L .+= 2 * dE .* l1 ./ 6;
+            LUp .+= 2 * dE .* l1 ./ 6;
             l1 .= -Ax*(L+dE*l1)*XL2xX' .- Ay*(L+dE*l1)*XL2yX' .- Az*(L+dE*l1)*XL2zX';
-            L .+= dE .* l1 ./ 6;
+            L .= LUp + dE .* l1 ./ 6;
                     
             WNew,_,_ = svd!(L);
 
@@ -2157,6 +2158,7 @@ function CudaSolveDLR4thOrderSN2ndOrderUpwind(obj::SolverCSD{T}) where {T<:Abstr
             s4 = -XL2xX*(S+dE*s3)*WAxW .- XL2yX*(S+dE*s3)*WAyW .- XL2zX*(S+dE*s3)*WAzW;
 
             S .= S .+ dE .* (s1 .+ 2 * s2 .+ 2 * s3 .+ s4) ./ 6;
+            println(norm(S))
         end
 
         ############## Out Scattering ##############

@@ -20,10 +20,10 @@ particle = "Protons"
 s = Settings(nx,ny,nz,5,problem, particle);
 rhoMin = minimum(s.density);
 
-if s.problem == "validation1"
+if s.problem == "validation"
     nx_MC = 300;
     doseRef = zeros(nx_MC,nx_MC,nx_MC);
-    read!("validationData/proton_validation3D_dose.bin",doseRef)
+    #read!("validationData/proton_validation3D_dose.bin",doseRef)
     xRef = collect(range(0,2,nx_MC));
     yRef = collect(range(0,2,nx_MC));
     zRef = collect(range(0,8,nx_MC));
