@@ -2395,13 +2395,13 @@ function CudaFullSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {
             WAzW .= (Az*W)'*W # Az  = Az^T
 
             k1 .= -L2x*K*WAxW .- L2y*K*WAyW .- L2z*K*WAzW;
-            K .= K .+ dE .* k1 ./ 6;
+            KUp = K .+ dE .* k1 ./ 6;
             k1 .= -L2x*(K.+dE12.*k1)*WAxW .- L2y*(K.+dE12.*k1)*WAyW .- L2z*(K.+dE12.*k1)*WAzW;
-            K .+= 2 * dE .* k1 ./ 6;
+            KUp .+= 2 * dE .* k1 ./ 6;
             k1 .= -L2x*(K.+dE12.*k1)*WAxW .- L2y*(K.+dE12.*k1)*WAyW .- L2z*(K.+dE12.*k1)*WAzW;
-            K .+= 2 * dE .* k1 ./ 6;
+            KUp .+= 2 * dE .* k1 ./ 6;
             k1 .= -L2x*(K.+dE.*k1)*WAxW .- L2y*(K.+dE.*k1)*WAyW .- L2z*(K.+dE.*k1)*WAzW;
-            K .+= dE .* k1 ./ 6;
+            K .= KUp .+ dE .* k1 ./ 6;
 
             XNew,_,_ = svd!(K);
 
@@ -2414,13 +2414,13 @@ function CudaFullSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {
             XL2zX .= X'*(L2z*X)
             
             l1 .= -Ax*L*XL2xX' .- Ay*L*XL2yX' .- Az*L*XL2zX';
-            L .= L .+ dE .* l1 ./ 6;
+            LUp = L .+ dE .* l1 ./ 6;
             l1 .= -Ax*(L+dE12*l1)*XL2xX' .- Ay*(L+dE12*l1)*XL2yX' .- Az*(L+dE12*l1)*XL2zX';
-            L .+= 2 * dE .* l1 ./ 6;
+            LUp .+= 2 * dE .* l1 ./ 6;
             l1 .= -Ax*(L+dE12*l1)*XL2xX' .- Ay*(L+dE12*l1)*XL2yX' .- Az*(L+dE12*l1)*XL2zX';
-            L .+= 2 * dE .* l1 ./ 6;
+            LUp .+= 2 * dE .* l1 ./ 6;
             l1 .= -Ax*(L+dE*l1)*XL2xX' .- Ay*(L+dE*l1)*XL2yX' .- Az*(L+dE*l1)*XL2zX';
-            L .+= dE .* l1 ./ 6;
+            L .= LUp + dE .* l1 ./ 6;
                     
             WNew,_,_ = svd!(L);
 

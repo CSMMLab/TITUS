@@ -12,15 +12,15 @@ close("all")
 
 info = "CUDA"
 
-nx = Int(floor(2 * 50));
-ny = Int(floor(8 * 50));
-nz = Int(floor(2 * 50));
+nx = Int(floor(1 * 50));
+ny = Int(floor(4 * 50));
+nz = Int(floor(1 * 50));
 problem ="validation" #"2DHighD"
 particle = "Protons"
 s = Settings(nx,ny,nz,5,problem, particle);
 rhoMin = minimum(s.density);
 
-if s.problem == "validation"
+if s.problem == "validation1"
     nx_MC = 300;
     doseRef = zeros(nx_MC,nx_MC,nx_MC);
     read!("validationData/proton_validation3D_dose.bin",doseRef)
@@ -36,6 +36,7 @@ end
 ############################
 
 solver1 = SolverCSD(s);
+#X_dlr,S_dlr,W_dlr_SN,W_dlr, dose_DLR, psi_DLR = CudaSolveDLR4thOrderSN2ndOrderUpwind(solver1);
 X_dlr,S_dlr,W_dlr_SN,W_dlr, dose_DLR, psi_DLR = CudaFullSolveFirstCollisionSourceDLR4thOrder(solver1);
 #X_dlr,S_dlr,W_dlr_SN,W_dlr, dose_DLR, psi_DLR = SolveFirstCollisionSourceDLR4thOrderFP(solver1);
 #u, dose_DLR,psi = SolveFirstCollisionSource(solver1);
