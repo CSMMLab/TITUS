@@ -12,9 +12,9 @@ close("all")
 
 info = "CUDA"
 
-nx = Int(floor(1 * 50));
-ny = Int(floor(4 * 50));
-nz = Int(floor(1 * 50));
+nx = Int(floor(2 * 50));
+ny = Int(floor(8 * 50));
+nz = Int(floor(2 * 50));
 problem ="validation" #"2DHighD"
 particle = "Protons"
 s = Settings(nx,ny,nz,5,problem, particle);
