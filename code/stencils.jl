@@ -461,10 +461,10 @@ struct Stencils{T<:AbstractFloat}
 
                         II[counter] = index;
                         J[counter] = index;
-                        vals[counter] = -1/settings.dx/density[i,j,k]; 
+                        vals[counter] = 1/settings.dx/density[i,j,k]; 
                         II[counter+1] = index;
                         J[counter+1] = indexPlus;
-                        vals[counter+1] = 1/settings.dx/density[i,j-1,k]; 
+                        vals[counter+1] = -1/settings.dx/density[i,j-1,k]; 
                     end
                 end
             end
@@ -589,13 +589,13 @@ struct Stencils{T<:AbstractFloat}
 
                         II[counter] = index;
                         J[counter] = index;
-                        vals[counter] = -3/settings.dx/density[i,j,k]; 
+                        vals[counter] = 3/settings.dx/density[i,j,k]; 
                         II[counter+1] = index;
                         J[counter+1] = indexPlus;
-                        vals[counter+1] = 4/settings.dx/density[i-1,j,k]; 
+                        vals[counter+1] = -4/settings.dx/density[i-1,j,k]; 
                         II[counter+2] = index;
                         J[counter+2] = indexPP;
-                        vals[counter+2] = -1/settings.dx/density[i-2,j,k]; 
+                        vals[counter+2] = 1/settings.dx/density[i-2,j,k]; 
                     end
                 end
             end
@@ -616,13 +616,13 @@ struct Stencils{T<:AbstractFloat}
 
                         II[counter] = index;
                         J[counter] = index;
-                        vals[counter] = -3/settings.dx/density[i,j,k]; 
+                        vals[counter] = 3/settings.dx/density[i,j,k]; 
                         II[counter+1] = index;
                         J[counter+1] = indexPlus;
-                        vals[counter+1] = 4/settings.dx/density[i,j-1,k]; 
+                        vals[counter+1] = -4/settings.dx/density[i,j-1,k]; 
                         II[counter+2] = index;
                         J[counter+2] = indexPP;
-                        vals[counter+2] = -1/settings.dx/density[i,j-2,k]; 
+                        vals[counter+2] = 1/settings.dx/density[i,j-2,k]; 
                     end
                 end
             end
@@ -643,13 +643,13 @@ struct Stencils{T<:AbstractFloat}
 
                         II[counter] = index;
                         J[counter] = index;
-                        vals[counter] = -3/settings.dx/density[i,j,k]; 
+                        vals[counter] = 3/settings.dx/density[i,j,k]; 
                         II[counter+1] = index;
                         J[counter+1] = indexPlus;
-                        vals[counter+1] = 4/settings.dx/density[i,j,k-1]; 
+                        vals[counter+1] = -4/settings.dx/density[i,j,k-1]; 
                         II[counter+2] = index;
                         J[counter+2] = indexPP;
-                        vals[counter+2] = -1/settings.dx/density[i,j,k-2]; 
+                        vals[counter+2] = 1/settings.dx/density[i,j,k-2]; 
                     end
                 end
             end
