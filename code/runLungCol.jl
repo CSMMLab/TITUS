@@ -10,16 +10,16 @@ using FastGaussQuadrature
 
 close("all")
 
-problem = "timeCT"
-nx = 51; ny = 51;
-Nxi = 100;
+problem = "LineSource"
+nx = 71; ny = 71;
+Nxi = 40;
 
 ############################ DLRA ############################
 
-s = Settings(nx,ny,Nxi,70,problem);
+s = Settings(nx,ny,Nxi,5,problem);
 solver = SolverCSD(s);
 #X_dlr,W_dlr,U_dlr,C, dose_dlra,dose_dlra_var, psi_DLR,doseXi = SolveFirstCollisionSourceDLR(solver2);
-u,dose_dlra,dose_dlra_var, psi_DLR = SolveFirstCollisionSourceUI(solver);
+u,dose_dlra,dose_dlra_var, psi_DLR,rankInTime = SolveFirstCollisionSourceUIAdaptive(solver);
 dose_dlra = Vec2Mat(s.NCellsX,s.NCellsY,dose_dlra);
 dose_dlra_var = Vec2Mat(s.NCellsX,s.NCellsY,dose_dlra_var);
 

@@ -71,6 +71,11 @@ mutable struct Settings
     rhoInvX::Array{Float64,2};
     rhoInvXi::Array{Float64,2};
 
+    # parameters for rank adaptivity
+    rMin::Int;
+    rMax::Array{Int64,1};
+    ε::Float64;
+
     function Settings(Nx::Int=102,Ny::Int=102,Nxi::Int=100,r::Int=15,problem::String="LineSource")
 
         # spatial grid setting
@@ -102,12 +107,37 @@ mutable struct Settings
             b = 1.5;
             c = -1.5;
             d = 1.5;
+
+            # spatial grid
+            x = collect(range(a,stop = b,length = NCellsX));
+            dx = x[2]-x[1];
+            x = [x[1]-dx;x]; # add ghost cells so that boundary cell centers lie on a and b
+            x = x.+dx/2;
+            xMid = x[1:(end-1)].+0.5*dx
+            y = collect(range(c,stop = d,length = NCellsY));
+            dy = y[2]-y[1];
+            y = [y[1]-dy;y]; # add ghost cells so that boundary cell centers lie on a and b
+            y = y.+dy/2;
+            yMid = y[1:(end-1)].+0.5*dy
+
             sigmaS = 1.0;
             sigmaA = 0.0;  
             cfl = 0.99/sqrt(2);    
             eMax = 1.0
-            adaptIndex = 0;
-            epsAdapt = 0.3;#0.5;
+            nx = NCellsX;
+            ny = NCellsY;
+            xi = collect(range(0,1,Nxi));
+            
+            rXi = 2;
+            σ = 1.0;
+            ei = zeros(size(xi)); ei[3] = 1;
+            fx = 1 .* vec(1 .+ sin.(4 .* xMid * yMid'));#ones(nx*ny);#1 .* vec(1 .+ sin.(4 .* xMid * yMid'))
+            rhoInvX,rhoInv,rhoInvXi = svd((ones(nx*ny,Nxi).+ σ * xi' .* ones(nx*ny,Nxi) .* fx).^(-1))
+            #rhoInvX,rhoInv,rhoInvXi = svd((ones(nx*ny,Nxi).+ σ * ei' .* ones(nx*ny,Nxi) .* fx).^(-1))
+            rhoInvXi = Matrix(rhoInvXi);
+            rhoInv = rhoInv[1:rXi];
+            rhoInvX = rhoInvX[:,1:rXi];
+            rhoInvXi = rhoInvXi[:,1:rXi]
             #epsAdapt = 1e-1;
         elseif problem =="2DHighLowD"
             a = 0.0
@@ -296,13 +326,33 @@ mutable struct Settings
             Omega1 = 0.8;
             Omega3 = -1.0;
             normOmega = sqrt(Omega1^2 + Omega3^2); Omega1 /= normOmega; Omega3 /= normOmega;
+        elseif problem =="deterministic"
+            nx = NCellsX;
+            ny = NCellsY;
+            
+            rXi = 1;
+            rhoInvX,rhoInv,rhoInvXi = svd(ones(nx*ny,Nxi))
+            rhoInvXi = Matrix(rhoInvXi);
+            rhoInv = rhoInv[1:rXi];
+            rhoInvX = rhoInvX[:,1:rXi];
+            rhoInvXi = rhoInvXi[:,1:rXi]
+
+            b = 14.5; # right boundary
+            d = 14.5; # upper boundary
+            eMax = 21.0
+            cfl = 0.6
+            x0 = 0.8*b;
+            y0 = 1.0*d;
+            Omega1 = 0.8;
+            Omega3 = -1.0;
+            normOmega = sqrt(Omega1^2 + Omega3^2); Omega1 /= normOmega; Omega3 /= normOmega;
         end
         sigmaT = sigmaA + sigmaS;
 
         # define inverse tissue density
         rho0Inv = 2*ones(NCellsX,NCellsY); #1.0./density;#
         rho1Inv = 1.0*ones(NCellsX,NCellsY);
-        density = ones(size(density));
+        #density = ones(size(density));
         #densityMin = 1.0
 
         # spatial grid
@@ -323,10 +373,14 @@ mutable struct Settings
         dE = cfl*min(dx,dy)*densityMin;#1/90#
         
         # number PN moments
-        nPN = 9#13, 21; # use odd number
+        nPN = 11#13, 21; # use odd number
+
+        rMin = 2;
+        rMax = [Int(floor(NCellsX*NCellsY/2)); Int(floor(nPN^2/2)); Int(floor(Nxi/2))];
+        ε = 1e-5;
 
         # build class
-        new(Nx,Ny,NCellsX,NCellsY,Nxi,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex,rho0Inv,rho1Inv,vec(rho0Inv),vec(rho1Inv),rhoInv,rhoInvX,rhoInvXi);
+        new(Nx,Ny,NCellsX,NCellsY,Nxi,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex,rho0Inv,rho1Inv,vec(rho0Inv),vec(rho1Inv),rhoInv,rhoInvX,rhoInvXi,rMin,rMax,ε);
     end
 end
 

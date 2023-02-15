@@ -11,12 +11,12 @@ using FastGaussQuadrature
 close("all")
 
 problem = "timeCT"
-nx = 151;
+nx = 51;
 nxi = 50;
 
 ############################
 
-s = Settings(nx,nx,nxi,20,problem);
+s = Settings(nx,nx,nxi,10,problem);
 solver = SolverCSD(s);
 #X_dlr,W_dlr,U_dlr,C, dose_dlra,dose_dlra_var, psi_DLR,doseXi = SolveFirstCollisionSourceDLR(solver2);
 u,dose_dlra,dose_dlra_var, psi_DLR = SolveFirstCollisionSourceUI(solver);
