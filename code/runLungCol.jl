@@ -10,9 +10,9 @@ using FastGaussQuadrature
 
 close("all")
 
-problem = "LineSource"
-nx = 75; ny = 75;
-Nxi = 80;
+problem = "timeCT"
+nx = 50; ny = 50;
+Nxi = 50;
 
 ############################ DLRA ############################
 
@@ -66,7 +66,7 @@ YY = (y'.*ones(size(x)))
 
 # full
 doseMax = maximum(dose_full[2:(end-1),2:(end-1)])
-doseMaxVar = maximum(var_full[2:(end-1),2:(end-1)])
+doseMaxVar = maximum(var_dose_full[2:(end-1),2:(end-1)])
 levels = 40;
 X = (s.xMid[2:end-1]'.*ones(size(s.yMid[2:end-1])))
 Y = (s.yMid[2:end-1]'.*ones(size(s.xMid[2:end-1])))'
