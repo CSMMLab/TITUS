@@ -44,6 +44,119 @@ function Vec2Mat(nx,ny,v)
     return m;
 end
 
+function Vec2Mat(nx,ny,v::Array{Float64,2})
+    n1 = size(v,2);
+    m = zeros(nx,ny,n1);
+    for i = 1:nx
+        for j = 1:ny
+            m[i,j,:] = v[(i-1)*ny + j,:]
+        end
+    end
+    return m;
+end
+
+function Vec2Mat(nx,ny,v::Array{Float64,3})
+    n1 = size(v,2);
+    n2 = size(v,3);
+    m = zeros(nx,ny,n1,n2);
+    for i = 1:nx
+        for j = 1:ny
+            m[i,j,:,:] = v[(i-1)*ny + j,:,:]
+        end
+    end
+    return m;
+end
+
+function expectedValue(v::Array{Float64,4})
+    nx = size(v,1);
+    ny = size(v,2);
+    nMoments = size(v,3);
+    nxi = size(v,4);
+    m = zeros(nx,ny,nMoments);
+
+    #xi, w = gausslegendre(nxi);
+    xi = collect(range(0,1,nxi));
+    w = 1.0/nxi*ones(size(xi))
+
+    for i = 1:nx
+        for j = 1:ny
+            for l = 1:nMoments
+                m[i,j,l] = sum(v[i,j,l,:] .* w)
+            end
+        end
+    end
+    return m;
+end
+
+function expectedValue(v::Array{Float64,3})
+    nx = size(v,1);
+    ny = size(v,2);
+    nxi = size(v,3);
+    m = zeros(nx,ny);
+
+    #xi, w = gausslegendre(nxi);
+    xi = collect(range(0,1,nxi));
+    w = 1.0/nxi*ones(size(xi))
+
+    for i = 1:nx
+        for j = 1:ny
+            m[i,j] = sum(v[i,j,:] .* w)
+        end
+    end
+    return m;
+end
+
+function ExpVariance(v::Array{Float64,4})
+    nx = size(v,1);
+    ny = size(v,2);
+    nMoments = size(v,3);
+    nxi = size(v,4);
+    Ev = zeros(nx,ny,nMoments);
+    var = zeros(nx,ny,nMoments);
+
+    #xi, w = gausslegendre(nxi);
+    xi = collect(range(0,1,nxi));
+    w = 1.0/nxi*ones(size(xi))
+
+    for i = 1:nx
+        for j = 1:ny
+            for l = 1:nMoments
+                Ev[i,j,l] = sum(v[i,j,l,:] .* w)
+            end
+        end
+    end
+
+    for l = 1:nxi
+        var .+= w[l]*(v[:,:,:,l] .- Ev).^2;
+    end
+
+    return Ev, var;
+end
+
+function ExpVariance(v::Array{Float64,3})
+    nx = size(v,1);
+    ny = size(v,2);
+    nxi = size(v,3);
+    Ev = zeros(nx,ny);
+    var = zeros(nx,ny);
+
+    #xi, w = gausslegendre(nxi);
+    xi = collect(range(0,1,nxi));
+    w = 1.0/nxi*ones(size(xi))
+
+    for i = 1:nx
+        for j = 1:ny
+            Ev[i,j] = sum(v[i,j,:] .* w)
+        end
+    end
+
+    for l = 1:nxi
+        var .+= w[l]*(v[:,:,l] .- Ev).^2;
+    end
+
+    return Ev, var;
+end
+
 function Mat2Vec(mat)
     nx = size(mat,1)
     ny = size(mat,2)

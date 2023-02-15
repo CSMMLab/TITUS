@@ -3090,7 +3090,7 @@ function SolveFirstCollisionSourceUIAdaptive(obj::SolverCSD)
     end
 
     # return end time and solution
-    return 0.5*sqrt(obj.gamma[1])*u,obj.dose,VarDose,psi,rankInTime;
+    return X,W,U,0.5*sqrt(obj.gamma[1])*C,obj.dose,VarDose,psi,rankInTime;
 
 end
 

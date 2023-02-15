@@ -377,7 +377,7 @@ mutable struct Settings
 
         rMin = 2;
         rMax = [Int(floor(NCellsX*NCellsY/2)); Int(floor(nPN^2/2)); Int(floor(Nxi/2))];
-        ε = 1e-5;
+        ε = 1e-4;
 
         # build class
         new(Nx,Ny,NCellsX,NCellsY,Nxi,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex,rho0Inv,rho1Inv,vec(rho0Inv),vec(rho1Inv),rhoInv,rhoInvX,rhoInvXi,rMin,rMax,ε);
