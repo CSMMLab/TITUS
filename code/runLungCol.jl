@@ -11,8 +11,8 @@ using FastGaussQuadrature
 close("all")
 
 problem = "timeCT"
-nx = 20; ny = 20;
-Nxi = 20;
+nx = 70; ny = 70;
+Nxi = 60;
 
 ############################ DLRA ############################
 

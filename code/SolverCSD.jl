@@ -2372,7 +2372,8 @@ function SolveFirstCollisionSourceUI(obj::SolverCSD)
         psiTest .= (psiTest .- dE*flux)
         psiTest = ttm(Ten2Ten(psiTest),obj.MReduced,2);
     end
-    rVec = Int.(floor.(0.25 .* deepcopy(s.rMax))); rVec[3] = 5;
+    #rVec = Int.(floor.(0.25 .* deepcopy(s.rMax))); rVec[3] = 5;
+    rVec = [50,50,15]
     TT = hosvd(psiTest,reqrank=rVec);
     C = TT.cten; C = zeros(rVec[1],rVec[2],rVec[3]);
     X = TT.fmat[1]; X = FillMatrix(X,rVec[1]);

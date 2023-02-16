@@ -309,7 +309,7 @@ mutable struct Settings
 
             #densityInvF = ones(size(densityInvF)) # CHANGED: try out constant density
             
-            rXi = 1;
+            rXi = 5;
             rhoInvX,rhoInv,rhoInvXi = svd(densityInvF)
             rhoInvXi = Matrix(rhoInvXi);
             rhoInv = rhoInv[1:rXi];
