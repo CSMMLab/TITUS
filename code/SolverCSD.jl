@@ -873,6 +873,121 @@ function SolveFirstCollisionSource(obj::SolverCSD,densityVec::Array{Float64,1})
 
 end
 
+function SolveFirstCollisionSourceDEBUG(obj::SolverCSD,densityVec::Array{Float64,1})
+    eTrafo = obj.csd.eTrafo;
+    energy = obj.csd.eGrid;
+
+    nx = obj.settings.NCellsX;
+    ny = obj.settings.NCellsY;
+    nq = obj.Q.nquadpoints;
+    N = obj.pn.nTotalEntries
+
+    # Set up initial condition and store as matrix
+    psi = SetupIC(obj);
+    floorPsi = 1e-17;
+    if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" || obj.settings.problem == "lung2" # determine relevant directions in IC
+        idxBeam = 1:size(psi,3);
+    else # determine relevant directions in beam
+        psiBeam = zeros(nq)
+        for k = 1:nq
+            psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)
+        end
+        idxBeam = findall( psiBeam .> floorPsi*maximum(psiBeam) );
+    end
+    psi = psi[:,:,idxBeam]
+    obj.qReduced = obj.Q.pointsxyz[idxBeam,:]
+    obj.MReduced = obj.M[:,idxBeam]
+    obj.OReduced = obj.O[idxBeam,:]
+    println("reduction of ordinates is ",(nq-length(idxBeam))/nq*100.0," percent")
+    nq = length(idxBeam);
+
+    # define density matrix
+    Id = Diagonal(ones(N));
+
+    nEnergies = length(eTrafo);
+    dE = eTrafo[2]-eTrafo[1];
+    obj.settings.dE = dE
+
+
+    u = zeros(nx*ny,N);
+    #u[vectorIndex(ny, nx-1,ny-1),1] = 1.0
+    #u[vectorIndex(ny, nx-1,ny-1),2] = 1.0
+    uNew = deepcopy(u)
+    flux = zeros(size(psi))
+
+    prog = Progress(nEnergies-1,1)
+
+    uOUnc = zeros(nx*ny);
+
+    psiNew = zeros(size(psi));
+    uTilde = zeros(size(u))
+
+    obj.dose .= zeros(size(obj.dose));
+
+    #loop over energy
+    for n=2:nEnergies
+        # compute scattering coefficients at current energy
+        sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
+
+        # set boundary condition
+        if obj.settings.problem != "validation" # validation testcase sets beam in initial condition
+            for k = 1:nq
+                for j = 1:nx
+                    psi[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
+                    psi[j,end,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
+                end
+                for j = 1:ny
+                    psi[1,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
+                    psi[end,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
+                end
+            end
+        end
+       
+        Dvec = zeros(obj.pn.nTotalEntries)
+        for l = 0:obj.pn.N
+            for k=-l:l
+                i = GlobalIndex( l, k );
+                Dvec[i+1] = sigmaS[l+1]
+            end
+        end
+
+        D = Diagonal(sigmaS[1] .- Dvec);
+
+        # stream uncollided particles
+        solveFluxUpwind!(obj,psi,flux);
+
+        psi .= psi .- dE*flux;
+        
+        psiNew .= psi ./ (1.0+dE*sigmaS[1]);
+
+        # stream collided particles
+        uTilde = u .- dE * (obj.L2x*u*obj.pn.Ax + obj.L2y*u*obj.pn.Az + obj.L1x*u*obj.AbsAx' + obj.L1y*u*obj.AbsAz');
+        #uTilde[obj.boundaryIdx,:] .= 0.0;
+
+        # scatter particles
+        for i = 2:(nx-1)
+            for j = 2:(ny-1)
+                idx = vectorIndex(ny,i,j);
+                # DEBUG: commented out scattering
+                uNew[idx,:] = (uTilde[idx,:] .+ dE*Diagonal(Dvec)*obj.MReduced*psiNew[i,j,:]);#(Id .+ dE*D)\(uTilde[idx,:] .+ dE*Diagonal(Dvec)*obj.MReduced*psiNew[i,j,:]);
+                uOUnc[idx] = psiNew[i,j,:]'*obj.MReduced[1,:];
+            end
+        end
+        
+        # update dose
+        obj.dose .+= dE * (uNew[:,1]+uOUnc) * obj.csd.SMid[n-1] ./( 1 + (n==2||n==nEnergies));
+
+
+        u .= uNew;
+        #u[obj.boundaryIdx,:] .= 0.0;
+        psi .= psiNew;
+        next!(prog) # update progress bar
+    end
+    # return end time and solution
+    return 0.5*sqrt(obj.gamma[1])*u,obj.dose,psi;
+
+end
+
 function SolveFirstCollisionSourceTensor(obj::SolverCSD)
     eTrafo = obj.csd.eTrafo;
     energy = obj.csd.eGrid;
@@ -1288,6 +1403,7 @@ function SolveFirstCollisionSourceUINaive(obj::SolverCSD)
 
 end
 
+#=
 function SolveFirstCollisionSourceUI(obj::SolverCSD)
     eTrafo = obj.csd.eTrafo;
     energy = obj.csd.eGrid;
@@ -1583,7 +1699,7 @@ function SolveFirstCollisionSourceUI(obj::SolverCSD)
     # return end time and solution
     return 0.5*sqrt(obj.gamma[1])*u,obj.dose,VarDose,psi;
 
-end
+end=#
 
 function SolveFirstCollisionSourceDLR(obj::SolverCSD)
     # Get rank
@@ -1926,7 +2042,6 @@ function SolveFirstCollisionSourceUIAdaptive(obj::SolverCSD)
     end
 
     # obtain tensor representation of initial data
-    r = obj.settings.r;
     if s.problem == "validation"
         psiTest = ttm(Ten2Ten(psi),obj.MReduced,2);
     else
@@ -1950,7 +2065,314 @@ function SolveFirstCollisionSourceUIAdaptive(obj::SolverCSD)
         psiTest .= (psiTest .- dE*flux)
         psiTest = ttm(Ten2Ten(psiTest),obj.MReduced,2);
     end
-    rVec = [r,r,r];
+    rVec = deepcopy(s.rMax);
+    TT = hosvd(psiTest,reqrank=rVec);
+    C = TT.cten; C = zeros(rVec[1],rVec[2],rVec[3]);
+    X = TT.fmat[1]; X = FillMatrix(X,rVec[1]);
+    W = TT.fmat[2]; W = FillMatrix(W,rVec[2]);
+    U = TT.fmat[3]; U = FillMatrix(U,rVec[3]);
+
+    rankInTime = zeros(4,nEnergies);
+
+    #loop over energy
+    prog = Progress(nEnergies-1,1);
+    for n=2:nEnergies
+
+        rankInTime[1,n] = energy[n];
+        rankInTime[2:end,n] .= rVec;
+
+        # compute scattering coefficients at current energy
+        sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
+
+        # set boundary condition
+        if s.problem != "validation" # validation testcase sets beam in initial condition
+            for l = 1:nxi
+                for k = 1:nq
+                    for j = 1:nx
+                        psi[j,1,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[1],xi[l],n-1);
+                        psi[j,end,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[end],xi[l],n-1);
+                    end
+                    for j = 1:ny
+                        psi[1,j,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[1],s.yMid[j],xi[l],n-1);
+                        psi[end,j,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[end],s.yMid[j],xi[l],n-1);
+                    end
+                end
+            end
+        end
+       
+        Dvec = zeros(obj.pn.nTotalEntries)
+        for l = 0:obj.pn.N
+            for k=-l:l
+                i = GlobalIndex( l, k );
+                Dvec[i+1] = sigmaS[l+1]
+            end
+        end
+
+        D = Diagonal(sigmaS[1] .- Dvec);
+
+        # stream uncollided particles
+        solveFluxUpwind!(obj,psi,flux,rhoInvMat);
+
+        psi .= (psi .- dE*flux) ./ (1.0+dE*sigmaS[1]);
+
+        if n > 1
+            ################## K1-step ##################
+            QT,ST = qr(tenmat(C,1)'); # decompose core tensor
+            Q = matten(Matrix(QT)',1,rVec); S = Matrix(ST)';
+            K = X*S;
+            K[obj.boundaryIdx,:] .= 0.0;
+
+            WAzW = W'*obj.pn.Az*W;
+            WAbsAzW = W'*obj.AbsAz*W;
+            WAbsAxW = W'*obj.AbsAx*W;
+            WAxW = W'*obj.pn.Ax*W;
+            
+            rhsK = zeros(nx*ny,rVec[2],rVec[3]);
+            for k = 1:rXi
+                UXiU = U'*(s.rhoInvXi[:,k].*U);
+                rhsK .+= s.rhoInv[k]*(- ttm(Q,[obj.L2x*Diagonal(s.rhoInvX[:,k])*K,WAxW,UXiU],[1,2,3]) .- ttm(Q,[obj.L2y*Diagonal(s.rhoInvX[:,k])*K,WAzW,UXiU],[1,2,3]) .- ttm(Q,[obj.L1x*Diagonal(s.rhoInvX[:,k])*K,WAbsAxW,UXiU],[1,2,3]) .- ttm(Q,[obj.L1y*Diagonal(s.rhoInvX[:,k])*K,WAbsAzW,UXiU],[1,2,3]));
+            end
+            rhsK .+= ttm(Ten2Ten(psi),[W'*Diagonal(Dvec)*obj.MReduced,Matrix(U')],[2,3]) # in-scattering from uncollided particles
+
+            K = K .+ dE*tenmat(rhsK,1)*tenmat(Q,1)';
+
+            K[obj.boundaryIdx,:] .= 0.0;
+
+            XNew,_ = qr([K X]);
+            XNew = Matrix(XNew);
+            XNew = XNew[:,1:2*rVec[1]];
+            MX = XNew'*X;
+
+            ################## K2-step ##################
+            QT,ST = qr(tenmat(C,2)'); # decompose core tensor
+            Q = matten(Matrix(QT)',2,rVec); S = Matrix(ST)';
+            K = W*S;
+
+            rhsK = zeros(rVec[1],N,rVec[3]);
+
+            for k = 1:rXi
+                XL2xX = X'*obj.L2x*Diagonal(s.rhoInvX[:,k])*X
+                XL2yX = X'*obj.L2y*Diagonal(s.rhoInvX[:,k])*X
+                XL1xX = X'*obj.L1x*Diagonal(s.rhoInvX[:,k])*X
+                XL1yX = X'*obj.L1y*Diagonal(s.rhoInvX[:,k])*X
+
+                UXiU = U'*(s.rhoInvXi[:,k].*U);
+                
+                rhsK .+= s.rhoInv[k] *(- ttm(Q,[XL2xX,obj.pn.Ax*K,UXiU],[1,2,3]) .- ttm(Q,[XL2yX,obj.pn.Az*K,UXiU],[1,2,3]) .- ttm(Q,[XL1xX,obj.AbsAx*K,UXiU],[1,2,3]) .- ttm(Q,[XL1yX,obj.AbsAz*K,UXiU],[1,2,3]));
+            end
+            rhsK .+= ttm(Ten2Ten(psi),[Matrix(X'),Diagonal(Dvec)*obj.MReduced,Matrix(U')],[1,2,3]) # in-scattering from uncollided particles
+            K = K .+ dE*tenmat(rhsK,2)*tenmat(Q,2)';
+
+            WNew,_ = qr([K W]);
+            WNew = Matrix(WNew);
+            WNew = WNew[:,1:2*rVec[2]];
+            MW = WNew'*W;
+
+            ################## K3-step ##################
+            QT,ST = qr(tenmat(C,3)'); # decompose core tensor
+            Q = matten(Matrix(QT)',3,rVec); S = Matrix(ST)';
+            K = U*S;
+
+            WAzW .= W'*obj.pn.Az*W # Az  = Az^T
+            WAbsAzW .= W'*obj.AbsAz*W
+            WAbsAxW .= W'*obj.AbsAx*W
+            WAxW .= W'*obj.pn.Ax*W # Ax  = Ax^T
+
+            rhsK = zeros(rVec[1],rVec[2],nxi);
+            for k = 1:rXi
+                XL2xX = X'*obj.L2x*Diagonal(s.rhoInvX[:,k])*X
+                XL2yX = X'*obj.L2y*Diagonal(s.rhoInvX[:,k])*X
+                XL1xX = X'*obj.L1x*Diagonal(s.rhoInvX[:,k])*X
+                XL1yX = X'*obj.L1y*Diagonal(s.rhoInvX[:,k])*X
+
+                rhsK .+= s.rhoInv[k] *(- ttm(Q,[XL2xX,WAxW,s.rhoInvXi[:,k].*K],[1,2,3]) .- ttm(Q,[XL2yX,WAzW,s.rhoInvXi[:,k].*K],[1,2,3]) .- ttm(Q,[XL1xX,WAbsAxW,s.rhoInvXi[:,k].*K],[1,2,3]) .- ttm(Q,[XL1yX,WAbsAzW,s.rhoInvXi[:,k].*K],[1,2,3]));
+            end
+            rhsK .+= ttm(Ten2Ten(psi),[Matrix(X'),W'*Diagonal(Dvec)*obj.MReduced],[1,2]) # in-scattering from uncollided particles
+            K = K .+ dE*tenmat(rhsK,3)*tenmat(Q,3)';
+
+            UNew,_ = qr([K U]);
+            UNew = Matrix(UNew); 
+            UNew = UNew[:,1:2*rVec[3]];
+            MU = UNew'*U;
+
+            ################## C-step ##################
+
+            X = XNew;
+            W = WNew;
+            U = UNew;
+
+            WAzW = W'*obj.pn.Az*W;
+            WAbsAzW = W'*obj.AbsAz*W;
+            WAbsAxW = W'*obj.AbsAx*W;
+            WAxW = W'*obj.pn.Ax*W;
+
+            C = ttm(C,[MX,MW,MU],[1,2,3]);
+
+            rhsC = zeros(size(C));
+            for k = 1:rXi
+                XL2xX = X'*obj.L2x*Diagonal(s.rhoInvX[:,k])*X
+                XL2yX = X'*obj.L2y*Diagonal(s.rhoInvX[:,k])*X
+                XL1xX = X'*obj.L1x*Diagonal(s.rhoInvX[:,k])*X
+                XL1yX = X'*obj.L1y*Diagonal(s.rhoInvX[:,k])*X
+
+                UXiU = U'*(s.rhoInvXi[:,k].*U);
+
+                rhsC .+= s.rhoInv[k] *(- ttm(C,[XL2xX,WAxW,UXiU],[1,2,3]) .- ttm(C,[XL2yX,WAzW,UXiU],[1,2,3]) .- ttm(C,[XL1xX,WAbsAxW,UXiU],[1,2,3]) .- ttm(C,[XL1yX,WAbsAzW,UXiU],[1,2,3]));
+            end
+            rhsC .+= ttm(Ten2Ten(psi),[Matrix(X'),W'*Diagonal(Dvec)*obj.MReduced,Matrix(U')],[1,2,3]) # in-scattering from uncollided particles
+            Chat = C .+ dE*rhsC;
+
+            println("|psi| = ",norm(psi))
+
+            ################## truncation-step ##################
+            rVec .= rVec .* 2;
+
+            Ci = tenmat(Chat,1);
+            X, Chat, rVec = truncate!(obj,XNew,Ci,1,rVec)
+
+            Ci = tenmat(Chat,2);
+            W, Chat, rVec = truncate!(obj,WNew,Ci,2,rVec)
+
+            Ci = tenmat(Chat,3);
+            U, C, rVec = truncate!(obj,UNew,Ci,3,rVec)
+        end
+
+        ############## Out Scattering ##############
+        QT,ST = qr(tenmat(C,2)'); # decompose core tensor such that Mat_2(C) = S*Qmat = QT*ST
+        Q = matten(Matrix(QT)',2,rVec); S = Matrix(ST)';
+        L = W*S;
+
+        for i = 1:rVec[2]
+            L[:,i] = (Id .+ dE*D)\L[:,i] 
+        end
+
+        W,S = qr(L);
+        W = Matrix(W); S = Matrix(S);
+        W = W[:,1:rVec[2]];
+
+        C = matten(S*Matrix(QT)',2,rVec);
+
+        # update dose
+        for i = 2:(nx-1)
+            for j = 2:(ny-1)
+                for l = 1:nxi
+                    idx = vectorIndex(ny,i,j);
+                    uOUnc[idx,l] = psi[i,j,:,l]'*obj.MReduced[1,:];
+                end
+            end
+        end
+        Phi = ttm(C,[X,W[1:1,:],U],[1,2,3])
+        for l = 1:nxi
+            doseXi[l,:] .+= dE * (Phi[:,1,l] .+ uOUnc[:,l] )* obj.csd.SMid[n-1] .*rhoInv[:,l]./( 1 + (n==2||n==nEnergies));
+        end
+        
+        next!(prog) # update progress bar
+    end
+
+    obj.dose .= zeros(size(obj.dose));
+    for l = 1:nxi
+        obj.dose .+= w[l]*doseXi[l,:];
+    end
+
+    # compute dose variance
+    VarDose = zeros(size(obj.dose));
+    for l = 1:nxi
+        VarDose .+= w[l]*(doseXi[l,:] .- obj.dose).^2;
+    end
+
+    # return end time and solution
+    return X,W,U,0.5*sqrt(obj.gamma[1])*C,obj.dose,VarDose,psi,rankInTime;
+
+end
+
+
+function SolveFirstCollisionSourceUI(obj::SolverCSD)
+    eTrafo = obj.csd.eTrafo;
+    energy = obj.csd.eGrid;
+
+    nx = obj.settings.NCellsX;
+    ny = obj.settings.NCellsY;
+    nq = obj.Q.nquadpoints;
+    N = obj.pn.nTotalEntries;
+    nxi = obj.settings.Nxi;
+
+    #xi, w = gausslegendre(nxi);
+    xi = collect(range(0,1,nxi));
+    w = 1.0/nxi*ones(size(xi))
+
+    # Set up initial condition and store as matrix
+    psi = zeros(nx,ny,nq,nxi);
+    for k = 1:nxi
+        psi[:,:,:,k] .= SetupIC(obj);
+    end
+    floorPsi = 1e-17;
+    if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" || obj.settings.problem == "lung2" # determine relevant directions in IC
+        #idxFullBeam = findall(psi .> floorPsi*maximum(psi))
+        #idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:,1] .> floorPsi)
+        idxBeam = 1:size(psi,3);
+    else
+        psiBeam = zeros(nq)
+        for k = 1:nq
+            for l = 1:nxi
+                psiBeam[k] += PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,xi[l],1)
+            end
+        end
+        idxBeam = findall( psiBeam .> floorPsi*maximum(psiBeam) );
+    end
+    psi = psi[:,:,idxBeam,:];
+    obj.qReduced = obj.Q.pointsxyz[idxBeam,:];
+    obj.MReduced = obj.M[:,idxBeam];
+    obj.OReduced = obj.O[idxBeam,:];
+    println("reduction of ordinates is ",(nq-length(idxBeam))/nq*100.0," percent");
+    nq = length(idxBeam);
+
+    # define density matrix
+    Id = Diagonal(ones(N));
+
+    nEnergies = length(eTrafo);
+    dE = eTrafo[2]-eTrafo[1];
+    obj.settings.dE = dE;
+
+
+    u = zeros(nx*ny,N,nxi);
+    flux = zeros(size(psi));
+
+    uOUnc = zeros(nx*ny,nxi);
+
+    doseXi = zeros(nxi,nx*ny);
+
+    rXi = length(s.rhoInv)
+    rhoInv = s.rhoInvX*Diagonal(s.rhoInv)*s.rhoInvXi';
+    rhoInvMat = zeros(nx,ny,nxi)
+    for l = 1:nxi
+        rhoInvMat[:,:,l] = Vec2Mat(nx,ny,rhoInv[:,l]);
+    end
+
+    # obtain tensor representation of initial data
+    if s.problem == "validation"
+        psiTest = ttm(Ten2Ten(psi),obj.MReduced,2);
+    else
+        psiTest = zeros(size(psi));
+        n = 2;
+        for l = 1:nxi
+            for k = 1:nq
+                for j = 1:nx
+                    psiTest[j,1,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[1],xi[l],n-1);
+                    psiTest[j,end,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[end],xi[l],n-1);
+                end
+                for j = 1:ny
+                    psiTest[1,j,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[1],s.yMid[j],xi[l],n-1);
+                    psiTest[end,j,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[end],s.yMid[j],xi[l],n-1);
+                end
+            end
+        end
+        
+        solveFluxUpwind!(obj,psiTest,flux,rhoInvMat);
+
+        psiTest .= (psiTest .- dE*flux)
+        psiTest = ttm(Ten2Ten(psiTest),obj.MReduced,2);
+    end
+    rVec = Int.(floor.(0.25 .* deepcopy(s.rMax))); rVec[3] = 5;
     TT = hosvd(psiTest,reqrank=rVec);
     C = TT.cten; C = zeros(rVec[1],rVec[2],rVec[3]);
     X = TT.fmat[1]; X = FillMatrix(X,rVec[1]);
@@ -2022,9 +2444,9 @@ function SolveFirstCollisionSourceUIAdaptive(obj::SolverCSD)
 
         K[obj.boundaryIdx,:] .= 0.0;
 
-        XNew,_ = qr([K X]);
+        XNew,_ = qr(K);
         XNew = Matrix(XNew);
-        XNew = XNew[:,1:2*rVec[1]];
+        XNew = XNew[:,1:rVec[1]];
         MX = XNew'*X;
 
         ################## K2-step ##################
@@ -2047,9 +2469,9 @@ function SolveFirstCollisionSourceUIAdaptive(obj::SolverCSD)
         rhsK .+= ttm(Ten2Ten(psi),[Matrix(X'),Diagonal(Dvec)*obj.MReduced,Matrix(U')],[1,2,3]) # in-scattering from uncollided particles
         K = K .+ dE*tenmat(rhsK,2)*tenmat(Q,2)';
 
-        WNew,_ = qr([K W]);
+        WNew,_ = qr(K);
         WNew = Matrix(WNew);
-        WNew = WNew[:,1:2*rVec[2]];
+        WNew = WNew[:,1:rVec[2]];
         MW = WNew'*W;
 
         ################## K3-step ##################
@@ -2074,9 +2496,9 @@ function SolveFirstCollisionSourceUIAdaptive(obj::SolverCSD)
         rhsK .+= ttm(Ten2Ten(psi),[Matrix(X'),W'*Diagonal(Dvec)*obj.MReduced],[1,2]) # in-scattering from uncollided particles
         K = K .+ dE*tenmat(rhsK,3)*tenmat(Q,3)';
 
-        UNew,_ = qr([K U]);
+        UNew,_ = qr(K);
         UNew = Matrix(UNew); 
-        UNew = UNew[:,1:2*rVec[3]];
+        UNew = UNew[:,1:rVec[3]];
         MU = UNew'*U;
 
         ################## C-step ##################
@@ -2094,29 +2516,17 @@ function SolveFirstCollisionSourceUIAdaptive(obj::SolverCSD)
 
         rhsC = zeros(size(C));
         for k = 1:rXi
-            XL2xX = X'*obj.L2x*Diagonal(s.rhoInvX[:,k])*X
-            XL2yX = X'*obj.L2y*Diagonal(s.rhoInvX[:,k])*X
-            XL1xX = X'*obj.L1x*Diagonal(s.rhoInvX[:,k])*X
-            XL1yX = X'*obj.L1y*Diagonal(s.rhoInvX[:,k])*X
+            XL2xX = X'*obj.L2x*Diagonal(s.rhoInvX[:,k])*X;
+            XL2yX = X'*obj.L2y*Diagonal(s.rhoInvX[:,k])*X;
+            XL1xX = X'*obj.L1x*Diagonal(s.rhoInvX[:,k])*X;
+            XL1yX = X'*obj.L1y*Diagonal(s.rhoInvX[:,k])*X;
 
             UXiU = U'*(s.rhoInvXi[:,k].*U);
 
             rhsC .+= s.rhoInv[k] *(- ttm(C,[XL2xX,WAxW,UXiU],[1,2,3]) .- ttm(C,[XL2yX,WAzW,UXiU],[1,2,3]) .- ttm(C,[XL1xX,WAbsAxW,UXiU],[1,2,3]) .- ttm(C,[XL1yX,WAbsAzW,UXiU],[1,2,3]));
         end
-        rhsC .+= ttm(Ten2Ten(psi),[Matrix(X'),W'*Diagonal(Dvec)*obj.MReduced,Matrix(U')],[1,2,3]) # in-scattering from uncollided particles
-        Chat = C .+ dE*rhsC;
-
-        ################## truncation-step ##################
-        rVec .= rVec .* 2;
-
-        Ci = tenmat(Chat,1);
-        X, Chat, rVec = truncate!(obj,XNew,Ci,1,rVec)
-
-        Ci = tenmat(Chat,2);
-        W, Chat, rVec = truncate!(obj,WNew,Ci,2,rVec)
-
-        Ci = tenmat(Chat,3);
-        U, C, rVec = truncate!(obj,UNew,Ci,3,rVec)
+        rhsC .+= ttm(Ten2Ten(psi),[Matrix(X'),W'*Diagonal(Dvec)*obj.MReduced,Matrix(U')],[1,2,3]); # in-scattering from uncollided particles
+        C = C .+ dE*rhsC;
 
         ############## Out Scattering ##############
         QT,ST = qr(tenmat(C,2)'); # decompose core tensor such that Mat_2(C) = S*Qmat = QT*ST
@@ -2134,7 +2544,6 @@ function SolveFirstCollisionSourceUIAdaptive(obj::SolverCSD)
         C = matten(S*Matrix(QT)',2,rVec);
 
         # update dose
-        # scatter particles
         for i = 2:(nx-1)
             for j = 2:(ny-1)
                 for l = 1:nxi
@@ -2146,6 +2555,559 @@ function SolveFirstCollisionSourceUIAdaptive(obj::SolverCSD)
         Phi = ttm(C,[X,W[1:1,:],U],[1,2,3])
         for l = 1:nxi
             doseXi[l,:] .+= dE * (Phi[:,1,l] .+ uOUnc[:,l] )* obj.csd.SMid[n-1] .*rhoInv[:,l]./( 1 + (n==2||n==nEnergies));
+        end
+        
+        next!(prog) # update progress bar
+    end
+
+    obj.dose .= zeros(size(obj.dose));
+    for l = 1:nxi
+        obj.dose .+= w[l]*doseXi[l,:];
+    end
+
+    # compute dose variance
+    VarDose = zeros(size(obj.dose));
+    for l = 1:nxi
+        VarDose .+= w[l]*(doseXi[l,:] .- obj.dose).^2;
+    end
+
+    # return end time and solution
+    return X,W,U,0.5*sqrt(obj.gamma[1])*C,obj.dose,VarDose,psi,rankInTime;
+
+end
+
+function SolveFirstCollisionSourceUIAdaptiveDEBUG(obj::SolverCSD)
+    eTrafo = obj.csd.eTrafo;
+    energy = obj.csd.eGrid;
+
+    nx = obj.settings.NCellsX;
+    ny = obj.settings.NCellsY;
+    nq = obj.Q.nquadpoints;
+    N = obj.pn.nTotalEntries;
+    nxi = obj.settings.Nxi;
+
+    #xi, w = gausslegendre(nxi);
+    xi = collect(range(0,1,nxi));
+    w = 1.0/nxi*ones(size(xi))
+
+    # Set up initial condition and store as matrix
+    psi = zeros(nx,ny,nq,nxi);
+    for k = 1:nxi
+        psi[:,:,:,k] .= SetupIC(obj);
+    end
+    floorPsi = 1e-17;
+    if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" || obj.settings.problem == "lung2" # determine relevant directions in IC
+        #idxFullBeam = findall(psi .> floorPsi*maximum(psi))
+        #idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:,1] .> floorPsi)
+        idxBeam = 1:size(psi,3);
+    else
+        psiBeam = zeros(nq)
+        for k = 1:nq
+            for l = 1:nxi
+                psiBeam[k] += PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,xi[l],1)
+            end
+        end
+        idxBeam = findall( psiBeam .> floorPsi*maximum(psiBeam) );
+    end
+    psi = psi[:,:,idxBeam,:];
+    obj.qReduced = obj.Q.pointsxyz[idxBeam,:];
+    obj.MReduced = obj.M[:,idxBeam];
+    obj.OReduced = obj.O[idxBeam,:];
+    println("reduction of ordinates is ",(nq-length(idxBeam))/nq*100.0," percent");
+    nq = length(idxBeam);
+
+    # define density matrix
+    Id = Diagonal(ones(N));
+
+    nEnergies = length(eTrafo);
+    dE = eTrafo[2]-eTrafo[1];
+    obj.settings.dE = dE;
+
+
+    u = zeros(nx*ny,N,nxi);
+    flux = zeros(size(psi));
+
+    uOUnc = zeros(nx*ny,nxi);
+
+    doseXi = zeros(nxi,nx*ny);
+
+    # obtain tensor representation of initial data
+    if s.problem == "validation"
+        psiTest = ttm(Ten2Ten(psi),obj.MReduced,2);
+    else
+        psiTest = zeros(size(psi));
+        n = 2;
+        for l = 1:nxi
+            for k = 1:nq
+                for j = 1:nx
+                    psiTest[j,1,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[1],xi[l],n-1);
+                    psiTest[j,end,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[end],xi[l],n-1);
+                end
+                for j = 1:ny
+                    psiTest[1,j,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[1],s.yMid[j],xi[l],n-1);
+                    psiTest[end,j,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[end],s.yMid[j],xi[l],n-1);
+                end
+            end
+        end
+        
+        for k = 1:nxi
+            fluxK = zeros(size(psiTest[:,:,:,k]))
+            # stream uncollided particles
+            solveFluxUpwind!(obj,psiTest[:,:,:,k],fluxK);
+
+            psiTest[:,:,:,k] .= (psiTest[:,:,:,k] .- dE*fluxK);
+        end
+
+        psiTest = ttm(Ten2Ten(psiTest),obj.MReduced,2);
+    end
+    rVec = deepcopy(s.rMax);
+    #psiTest = zeros(size(psiTest));
+    #psiTest[vectorIndex(ny, nx-1,ny-1),1,:] .= 1.0
+    #psiTest[vectorIndex(ny, nx-1,ny-1),2,:] .= 1.0
+    TT = hosvd(psiTest,reqrank=rVec);
+    
+    C = TT.cten; C = zeros(rVec[1],rVec[2],rVec[3]);
+    X = TT.fmat[1]; X = FillMatrix(X,rVec[1]);
+    W = TT.fmat[2]; W = FillMatrix(W,rVec[2]);
+    U = TT.fmat[3]; U = FillMatrix(U,rVec[3]);
+
+    rankInTime = zeros(4,nEnergies);
+
+    #loop over energy
+    prog = Progress(nEnergies-1,1);
+    for n=2:nEnergies
+
+        rankInTime[1,n] = energy[n];
+        rankInTime[2:end,n] .= rVec;
+
+        # compute scattering coefficients at current energy
+        sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
+
+        # set boundary condition
+        if s.problem != "validation" # validation testcase sets beam in initial condition
+            for l = 1:nxi
+                for k = 1:nq
+                    for j = 1:nx
+                        #psi[j,1,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[1],xi[l],n-1);
+                        #psi[j,end,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[end],xi[l],n-1);
+                        psi[j,1,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[1],n-1);
+                        psi[j,end,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[end],n-1);
+                    end
+                    for j = 1:ny
+                        #psi[1,j,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[1],s.yMid[j],xi[l],n-1);
+                        #psi[end,j,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[end],s.yMid[j],xi[l],n-1);
+                        psi[1,j,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[1],s.yMid[j],n-1);
+                        psi[end,j,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[end],s.yMid[j],n-1);
+                    end
+                end
+            end
+        end
+       
+        Dvec = zeros(obj.pn.nTotalEntries)
+        for l = 0:obj.pn.N
+            for k=-l:l
+                i = GlobalIndex( l, k );
+                Dvec[i+1] = sigmaS[l+1]
+            end
+        end
+
+        D = Diagonal(sigmaS[1] .- Dvec);
+
+        for k = 1:nxi
+            fluxK = zeros(size(psi[:,:,:,k]))
+            # stream uncollided particles
+            solveFluxUpwind!(obj,psi[:,:,:,k],fluxK);
+
+            psi[:,:,:,k] .= (psi[:,:,:,k] .- dE*fluxK) ./ (1.0+dE*sigmaS[1]);
+        end
+
+        ################## K1-step ##################
+        QT,ST = qr(tenmat(C,1)'); # decompose core tensor
+        Q = matten(Matrix(QT)',1,rVec); S = Matrix(ST)';
+        K = X*S;
+        K[obj.boundaryIdx,:] .= 0.0;
+
+        WAzW = W'*obj.pn.Az*W;
+        WAbsAzW = W'*obj.AbsAz*W;
+        WAbsAxW = W'*obj.AbsAx*W;
+        WAxW = W'*obj.pn.Ax*W;
+        
+        rhsK = zeros(nx*ny,rVec[2],rVec[3]);
+        UXiU = U'*U;
+        rhsK .+= (- ttm(Q,[obj.L2x*K,WAxW,UXiU],[1,2,3]) .- ttm(Q,[obj.L2y*K,WAzW,UXiU],[1,2,3]) .- ttm(Q,[obj.L1x*K,WAbsAxW,UXiU],[1,2,3]) .- ttm(Q,[obj.L1y*K,WAbsAzW,UXiU],[1,2,3]));
+        rhsK .+= ttm(Ten2Ten(psi),[W'*Diagonal(Dvec)*obj.MReduced,Matrix(U')],[2,3]) # in-scattering from uncollided particles
+
+        K = K .+ dE*tenmat(rhsK,1)*tenmat(Q,1)';
+
+        K[obj.boundaryIdx,:] .= 0.0;
+
+        XNew,_ = qr([K X]);
+        XNew = Matrix(XNew);
+        XNew = XNew[:,1:2*rVec[1]];
+        MX = XNew'*X;
+
+        ################## K2-step ##################
+        QT,ST = qr(tenmat(C,2)'); # decompose core tensor
+        Q = matten(Matrix(QT)',2,rVec); S = Matrix(ST)';
+        K = W*S;
+
+        #println(norm(ttm(Q,[X,K,U],[1,2,3]) - ttm(C,[X,W,U],[1,2,3])))
+
+        XL2xX = X'*obj.L2x*X
+        XL2yX = X'*obj.L2y*X
+        XL1xX = X'*obj.L1x*X
+        XL1yX = X'*obj.L1y*X
+
+        UXiU = U'*U;
+        rhsK = zeros(rVec[1],N,rVec[3]);
+        rhsK .+= (- ttm(Q,[XL2xX,obj.pn.Ax*K,UXiU],[1,2,3]) .- ttm(Q,[XL2yX,obj.pn.Az*K,UXiU],[1,2,3]) .- ttm(Q,[XL1xX,obj.AbsAx*K,UXiU],[1,2,3]) .- ttm(Q,[XL1yX,obj.AbsAz*K,UXiU],[1,2,3]));
+        rhsK .+= ttm(Ten2Ten(psi),[Matrix(X'),Diagonal(Dvec)*obj.MReduced,Matrix(U')],[1,2,3]) # in-scattering from uncollided particles
+        K = K .+ dE*tenmat(rhsK,2)*tenmat(Q,2)';
+
+        WNew,_ = qr([K W]);
+        WNew = Matrix(WNew);
+        WNew = WNew[:,1:2*rVec[2]];
+        MW = WNew'*W;
+
+        ################## C-step ##################
+
+        X = XNew;
+        W = WNew;
+        UNew,_ = qr([U U]); UNew = Matrix(UNew);
+        MU =UNew'*U;
+        U = UNew;
+
+        WAxW = W'*obj.pn.Ax*W;
+        WAzW = W'*obj.pn.Az*W;
+        WAbsAxW = W'*obj.AbsAx*W;
+        WAbsAzW = W'*obj.AbsAz*W;
+
+        C = ttm(C,[MX,MW,MU],[1,2,3]);
+
+        rhsC = zeros(size(C));
+
+        XL2xX = X'*obj.L2x*X
+        XL2yX = X'*obj.L2y*X
+        XL1xX = X'*obj.L1x*X
+        XL1yX = X'*obj.L1y*X
+
+        UXiU = U'*U;
+
+        rhsC .+= (- ttm(C,[XL2xX,WAxW,UXiU],[1,2,3]) .- ttm(C,[XL2yX,WAzW,UXiU],[1,2,3]) .- ttm(C,[XL1xX,WAbsAxW,UXiU],[1,2,3]) .- ttm(C,[XL1yX,WAbsAzW,UXiU],[1,2,3]));
+
+            rhsC .+= ttm(Ten2Ten(psi),[Matrix(X'),W'*Diagonal(Dvec)*obj.MReduced,Matrix(U')],[1,2,3]) # in-scattering from uncollided particles
+        Chat = C .+ dE*rhsC;
+
+        ################## truncation-step ##################
+        rVec .= rVec .* 2;
+
+        Ci = tenmat(Chat,1);
+        X, Chat, rVec = truncate!(obj,XNew,Ci,1,rVec)
+
+        Ci = tenmat(Chat,2);
+        W, Chat, rVec = truncate!(obj,WNew,Ci,2,rVec)
+
+        Ci = tenmat(Chat,3);
+        U, C, rVec = truncate!(obj,UNew,Ci,3,rVec)
+        
+
+        ############## Out Scattering ##############
+        #=QT,ST = qr(tenmat(C,2)'); # decompose core tensor such that Mat_2(C) = S*Qmat = QT*ST
+        Q = matten(Matrix(QT)',2,rVec); S = Matrix(ST)';
+        L = W*S;
+
+        for i = 1:rVec[2]
+            L[:,i] = (Id .+ dE*D)\L[:,i] 
+        end
+
+        W,S = qr(L);
+        W = Matrix(W); S = Matrix(S);
+        W = W[:,1:rVec[2]];
+
+        C = matten(S*Matrix(QT)',2,rVec);=#
+
+        # update dose
+        for i = 2:(nx-1)
+            for j = 2:(ny-1)
+                for l = 1:nxi
+                    idx = vectorIndex(ny,i,j);
+                    uOUnc[idx,l] = psi[i,j,:,l]'*obj.MReduced[1,:];
+                end
+            end
+        end
+        Phi = ttm(C,[X,W[1:1,:],U],[1,2,3])
+        for l = 1:nxi
+            doseXi[l,:] .+= dE * (Phi[:,1,l] .+ uOUnc[:,l] )* obj.csd.SMid[n-1] ./ ( 1 + (n==2||n==nEnergies));
+        end
+        
+        next!(prog) # update progress bar
+    end
+
+    obj.dose .= zeros(size(obj.dose));
+    for l = 1:nxi
+        obj.dose .+= w[l]*doseXi[l,:];
+    end
+
+    # compute dose variance
+    VarDose = zeros(size(obj.dose));
+    for l = 1:nxi
+        VarDose .+= w[l]*(doseXi[l,:] .- obj.dose).^2;
+    end
+
+    # return end time and solution
+    return X,W,U,0.5*sqrt(obj.gamma[1])*C,obj.dose,VarDose,psi,rankInTime;
+
+end
+
+function SolveFirstCollisionSourceUIDEBUG(obj::SolverCSD)
+    eTrafo = obj.csd.eTrafo;
+    energy = obj.csd.eGrid;
+
+    nx = obj.settings.NCellsX;
+    ny = obj.settings.NCellsY;
+    nq = obj.Q.nquadpoints;
+    N = obj.pn.nTotalEntries;
+    nxi = obj.settings.Nxi;
+
+    #xi, w = gausslegendre(nxi);
+    xi = collect(range(0,1,nxi));
+    w = 1.0/nxi*ones(size(xi))
+
+    # Set up initial condition and store as matrix
+    psi = zeros(nx,ny,nq,nxi);
+    for k = 1:nxi
+        psi[:,:,:,k] .= SetupIC(obj);
+    end
+    floorPsi = 1e-17;
+    if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD" || obj.settings.problem == "2DHighLowD" || obj.settings.problem == "lung2" # determine relevant directions in IC
+        #idxFullBeam = findall(psi .> floorPsi*maximum(psi))
+        #idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:,1] .> floorPsi)
+        idxBeam = 1:size(psi,3);
+    else
+        psiBeam = zeros(nq)
+        for k = 1:nq
+            for l = 1:nxi
+                psiBeam[k] += PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,xi[l],1)
+            end
+        end
+        idxBeam = findall( psiBeam .> floorPsi*maximum(psiBeam) );
+    end
+    psi = psi[:,:,idxBeam,:];
+    obj.qReduced = obj.Q.pointsxyz[idxBeam,:];
+    obj.MReduced = obj.M[:,idxBeam];
+    obj.OReduced = obj.O[idxBeam,:];
+    println("reduction of ordinates is ",(nq-length(idxBeam))/nq*100.0," percent");
+    nq = length(idxBeam);
+
+    # define density matrix
+    Id = Diagonal(ones(N));
+
+    nEnergies = length(eTrafo);
+    dE = eTrafo[2]-eTrafo[1];
+    obj.settings.dE = dE;
+
+
+    u = zeros(nx*ny,N,nxi);
+    flux = zeros(size(psi));
+
+    uOUnc = zeros(nx*ny,nxi);
+
+    doseXi = zeros(nxi,nx*ny);
+
+    # obtain tensor representation of initial data
+    if s.problem == "validation"
+        psiTest = ttm(Ten2Ten(psi),obj.MReduced,2);
+    else
+        psiTest = zeros(size(psi));
+        n = 2;
+        for l = 1:nxi
+            for k = 1:nq
+                for j = 1:nx
+                    psiTest[j,1,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[1],xi[l],n-1);
+                    psiTest[j,end,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[end],xi[l],n-1);
+                end
+                for j = 1:ny
+                    psiTest[1,j,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[1],s.yMid[j],xi[l],n-1);
+                    psiTest[end,j,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[end],s.yMid[j],xi[l],n-1);
+                end
+            end
+        end
+        
+        for k = 1:nxi
+            fluxK = zeros(size(psiTest[:,:,:,k]))
+            # stream uncollided particles
+            solveFluxUpwind!(obj,psiTest[:,:,:,k],fluxK);
+
+            psiTest[:,:,:,k] .= (psiTest[:,:,:,k] .- dE*fluxK);
+        end
+
+        psiTest = ttm(Ten2Ten(psiTest),obj.MReduced,2);
+    end
+    rVec = Int.(floor.(0.25 * deepcopy(s.rMax))); rVec[3] = 5;
+    #psiTest = zeros(size(psiTest));
+    #psiTest[vectorIndex(ny, nx-1,ny-1),1,:] .= 1.0
+    #psiTest[vectorIndex(ny, nx-1,ny-1),2,:] .= 1.0
+    TT = hosvd(psiTest,reqrank=rVec);
+    
+    C = TT.cten; C = zeros(rVec[1],rVec[2],rVec[3]);
+    X = TT.fmat[1]; X = FillMatrix(X,rVec[1]);
+    W = TT.fmat[2]; W = FillMatrix(W,rVec[2]);
+    U = TT.fmat[3]; U = FillMatrix(U,rVec[3]);
+
+    rankInTime = zeros(4,nEnergies);
+
+    #loop over energy
+    prog = Progress(nEnergies-1,1);
+    for n=2:nEnergies
+
+        rankInTime[1,n] = energy[n];
+        rankInTime[2:end,n] .= rVec;
+
+        # compute scattering coefficients at current energy
+        sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
+
+        # set boundary condition
+        if s.problem != "validation" # validation testcase sets beam in initial condition
+            for l = 1:nxi
+                for k = 1:nq
+                    for j = 1:nx
+                        #psi[j,1,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[1],xi[l],n-1);
+                        #psi[j,end,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[end],xi[l],n-1);
+                        psi[j,1,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[1],n-1);
+                        psi[j,end,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[j],s.yMid[end],n-1);
+                    end
+                    for j = 1:ny
+                        #psi[1,j,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[1],s.yMid[j],xi[l],n-1);
+                        #psi[end,j,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[end],s.yMid[j],xi[l],n-1);
+                        psi[1,j,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[1],s.yMid[j],n-1);
+                        psi[end,j,k,l] = PsiBeam(obj,obj.qReduced[k,:],energy[n-1],s.xMid[end],s.yMid[j],n-1);
+                    end
+                end
+            end
+        end
+       
+        Dvec = zeros(obj.pn.nTotalEntries)
+        for l = 0:obj.pn.N
+            for k=-l:l
+                i = GlobalIndex( l, k );
+                Dvec[i+1] = sigmaS[l+1]
+            end
+        end
+
+        D = Diagonal(sigmaS[1] .- Dvec);
+
+        for k = 1:nxi
+            fluxK = zeros(size(psi[:,:,:,k]))
+            # stream uncollided particles
+            solveFluxUpwind!(obj,psi[:,:,:,k],fluxK);
+
+            psi[:,:,:,k] .= (psi[:,:,:,k] .- dE*fluxK) ./ (1.0+dE*sigmaS[1]);
+        end
+
+        ################## K1-step ##################
+        QT,ST = qr(tenmat(C,1)'); # decompose core tensor
+        Q = matten(Matrix(QT)',1,rVec); S = Matrix(ST)';
+        K = X*S;
+        K[obj.boundaryIdx,:] .= 0.0;
+
+        WAzW = W'*obj.pn.Az*W;
+        WAbsAzW = W'*obj.AbsAz*W;
+        WAbsAxW = W'*obj.AbsAx*W;
+        WAxW = W'*obj.pn.Ax*W;
+        
+        rhsK = zeros(nx*ny,rVec[2],rVec[3]);
+        UXiU = U'*U;
+        rhsK .+= (- ttm(Q,[obj.L2x*K,WAxW,UXiU],[1,2,3]) .- ttm(Q,[obj.L2y*K,WAzW,UXiU],[1,2,3]) .- ttm(Q,[obj.L1x*K,WAbsAxW,UXiU],[1,2,3]) .- ttm(Q,[obj.L1y*K,WAbsAzW,UXiU],[1,2,3]));
+        rhsK .+= ttm(Ten2Ten(psi),[W'*Diagonal(Dvec)*obj.MReduced,Matrix(U')],[2,3]) # in-scattering from uncollided particles
+
+        K = K .+ dE*tenmat(rhsK,1)*tenmat(Q,1)';
+
+        K[obj.boundaryIdx,:] .= 0.0;
+
+        XNew,_ = qr(K);
+        XNew = Matrix(XNew);
+        XNew = XNew[:,1:rVec[1]];
+        MX = XNew'*X;
+
+        ################## K2-step ##################
+        QT,ST = qr(tenmat(C,2)'); # decompose core tensor
+        Q = matten(Matrix(QT)',2,rVec); S = Matrix(ST)';
+        K = W*S;
+
+        #println(norm(ttm(Q,[X,K,U],[1,2,3]) - ttm(C,[X,W,U],[1,2,3])))
+
+        XL2xX = X'*obj.L2x*X
+        XL2yX = X'*obj.L2y*X
+        XL1xX = X'*obj.L1x*X
+        XL1yX = X'*obj.L1y*X
+
+        UXiU = U'*U;
+        rhsK = zeros(rVec[1],N,rVec[3]);
+        rhsK .+= (- ttm(Q,[XL2xX,obj.pn.Ax*K,UXiU],[1,2,3]) .- ttm(Q,[XL2yX,obj.pn.Az*K,UXiU],[1,2,3]) .- ttm(Q,[XL1xX,obj.AbsAx*K,UXiU],[1,2,3]) .- ttm(Q,[XL1yX,obj.AbsAz*K,UXiU],[1,2,3]));
+        rhsK .+= ttm(Ten2Ten(psi),[Matrix(X'),Diagonal(Dvec)*obj.MReduced,Matrix(U')],[1,2,3]) # in-scattering from uncollided particles
+        K = K .+ dE*tenmat(rhsK,2)*tenmat(Q,2)';
+
+        WNew,_ = qr(K);
+        WNew = Matrix(WNew);
+        WNew = WNew[:,1:rVec[2]];
+        MW = WNew'*W;
+
+        ################## C-step ##################
+
+        X = XNew;
+        W = WNew;
+        UNew,_ = qr(U); UNew = Matrix(UNew);
+        MU =UNew'*U;
+        U = UNew;
+
+        WAxW = W'*obj.pn.Ax*W;
+        WAzW = W'*obj.pn.Az*W;
+        WAbsAxW = W'*obj.AbsAx*W;
+        WAbsAzW = W'*obj.AbsAz*W;
+
+        C = ttm(C,[MX,MW,MU],[1,2,3]);
+
+        rhsC = zeros(size(C));
+
+        XL2xX = X'*obj.L2x*X
+        XL2yX = X'*obj.L2y*X
+        XL1xX = X'*obj.L1x*X
+        XL1yX = X'*obj.L1y*X
+
+        UXiU = U'*U;
+
+        rhsC .+= (- ttm(C,[XL2xX,WAxW,UXiU],[1,2,3]) .- ttm(C,[XL2yX,WAzW,UXiU],[1,2,3]) .- ttm(C,[XL1xX,WAbsAxW,UXiU],[1,2,3]) .- ttm(C,[XL1yX,WAbsAzW,UXiU],[1,2,3]));
+        rhsC .+= ttm(Ten2Ten(psi),[Matrix(X'),W'*Diagonal(Dvec)*obj.MReduced,Matrix(U')],[1,2,3]) # in-scattering from uncollided particles
+        C = C .+ dE*rhsC;
+        
+
+        ############## Out Scattering ##############
+        #=QT,ST = qr(tenmat(C,2)'); # decompose core tensor such that Mat_2(C) = S*Qmat = QT*ST
+        Q = matten(Matrix(QT)',2,rVec); S = Matrix(ST)';
+        L = W*S;
+
+        for i = 1:rVec[2]
+            L[:,i] = (Id .+ dE*D)\L[:,i] 
+        end
+
+        W,S = qr(L);
+        W = Matrix(W); S = Matrix(S);
+        W = W[:,1:rVec[2]];
+
+        C = matten(S*Matrix(QT)',2,rVec);=#
+
+        # update dose
+        for i = 2:(nx-1)
+            for j = 2:(ny-1)
+                for l = 1:nxi
+                    idx = vectorIndex(ny,i,j);
+                    uOUnc[idx,l] = psi[i,j,:,l]'*obj.MReduced[1,:];
+                end
+            end
+        end
+        Phi = ttm(C,[X,W[1:1,:],U],[1,2,3])
+        for l = 1:nxi
+            doseXi[l,:] .+= dE * (Phi[:,1,l] .+ uOUnc[:,l] )* obj.csd.SMid[n-1] ./ ( 1 + (n==2||n==nEnergies));
         end
         
         next!(prog) # update progress bar

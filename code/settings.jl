@@ -306,8 +306,10 @@ mutable struct Settings
                     densityInvF[j,i] = xiToDensity(xi[i])
                 end
             end
+
+            #densityInvF = ones(size(densityInvF)) # CHANGED: try out constant density
             
-            rXi = 5;
+            rXi = 1;
             rhoInvX,rhoInv,rhoInvXi = svd(densityInvF)
             rhoInvXi = Matrix(rhoInvXi);
             rhoInv = rhoInv[1:rXi];
@@ -324,6 +326,7 @@ mutable struct Settings
             x0 = 0.8*b;
             y0 = 1.0*d;
             Omega1 = 0.8;
+            #Omega1 = 0.0;
             Omega3 = -1.0;
             normOmega = sqrt(Omega1^2 + Omega3^2); Omega1 /= normOmega; Omega3 /= normOmega;
         elseif problem =="deterministic"
@@ -376,8 +379,8 @@ mutable struct Settings
         nPN = 11#13, 21; # use odd number
 
         rMin = 2;
-        rMax = [Int(floor(NCellsX*NCellsY/2)); Int(floor(nPN^2/2)); Int(floor(Nxi/2))];
-        ε = 1e-4;
+        rMax = [Int(floor(NCellsX*NCellsY/2)); Int(floor((nPN+1)^2/2)); Int(floor(Nxi/2))];
+        ε = 1e-5;
 
         # build class
         new(Nx,Ny,NCellsX,NCellsY,Nxi,a,b,c,d,dx,dy,eMax,dE,cfl,nPN,x,xMid,y,yMid,problem,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex,rho0Inv,rho1Inv,vec(rho0Inv),vec(rho1Inv),rhoInv,rhoInvX,rhoInvXi,rMin,rMax,ε);

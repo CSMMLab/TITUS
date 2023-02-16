@@ -11,15 +11,15 @@ using FastGaussQuadrature
 close("all")
 
 problem = "timeCT"
-nx = 50; ny = 50;
-Nxi = 50;
+nx = 20; ny = 20;
+Nxi = 20;
 
 ############################ DLRA ############################
 
 s = Settings(nx,ny,Nxi,5,problem);
 solver = SolverCSD(s);
 #X_dlr,W_dlr,U_dlr,C, dose_dlra,dose_dlra_var, psi_DLR,doseXi = SolveFirstCollisionSourceDLR(solver2);
-X_dlr,W_dlr,U_dlr,C,dose_dlra,dose_dlra_var, psi_DLR,rankInTime = SolveFirstCollisionSourceUIAdaptive(solver);
+X_dlr,W_dlr,U_dlr,C,dose_dlra,dose_dlra_var, psi_DLR,rankInTime = SolveFirstCollisionSourceUI(solver);
 dose_dlra = Vec2Mat(s.NCellsX,s.NCellsY,dose_dlra);
 dose_dlra_var = Vec2Mat(s.NCellsX,s.NCellsY,dose_dlra_var);
 u = ttm(C,[W_dlr],[2])[:,1,:]
