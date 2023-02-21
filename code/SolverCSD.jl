@@ -3469,3 +3469,25 @@ function Solve(obj::SolverCSD{T}) where {T<:AbstractFloat}
     return 0.5*sqrt(obj.gamma[1])*u,obj.dose./ obj.densityVec;
 
 end
+
+function SolveUncollided(obj::SolverCSD{T})
+
+    s = obj.settings;
+    v = obj.qReduced; # velocities for ray tracer
+    nq = size(v,1);
+    edges = (s.x, s.y, s.z,)
+
+    for q in 1:nq
+        ray = (position=[s.x0,s.y0,s.z0], velocity=v[q])
+        x = [0.0];
+        ρ = [];
+
+        # build spatial grid and densities
+        for hit in eachtraversal(ray, edges)
+            entry = hit[2]; exit = hit[3];
+            x = [x; x[end] + exit - entry]
+            ρ = [ρ; s.density[hit[1]]]
+        end
+    end
+
+end
