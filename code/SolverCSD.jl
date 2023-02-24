@@ -1419,7 +1419,7 @@ function Solve(obj::SolverCSD{T}) where {T<:AbstractFloat}
 
 end
 
-function CudaSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {T<:AbstractFloat}
+function CudaSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}, recordGif::Bool=false) where {T<:AbstractFloat}
     # Get rank
     r=obj.settings.r;
 
@@ -1667,7 +1667,7 @@ function CudaSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {T<:A
         dose .+= dE12 * (X*S*(W' * e1)+psi * M1) * sPow[n] ./ densityVec;
 
         ######## Plotting #########
-        if mod(n-1,Int(round(7*nEnergies/474/7))) == 0 && false
+        if mod(n-1,Int(round(7*nEnergies/474/7))) == 0 && recordGif
             counterPNG += 1;
             
             U,Sigma,V = svd(S);
@@ -1723,7 +1723,7 @@ function CudaSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {T<:A
 
 end
 
-function SolveFirstCollisionSourceDLRParallel(obj::SolverCSD{T}) where {T<:AbstractFloat}
+function SolveFirstCollisionSourceDLRParallel(obj::SolverCSD{T}, recordGif::Bool=false) where {T<:AbstractFloat}
     # Get rank
     r=Int(floor(obj.settings.r / 2));
 
@@ -1783,10 +1783,10 @@ function SolveFirstCollisionSourceDLRParallel(obj::SolverCSD{T}) where {T<:Abstr
     XL1xX = zeros(T,r,r)
     XL1yX = zeros(T,r,r)
 
-    MUp = zeros(T,r,r)
-    NUp = zeros(T,r,r)
-
     XNew = zeros(T,nx*ny,r)
+
+    XX = (s.xMid[2:end-1]'.*ones(size(s.yMid[2:end-1])))
+    YY = (s.yMid[2:end-1]'.*ones(size(s.xMid[2:end-1])))'
 
     # impose boundary condition
     X[obj.boundaryIdx,:] .= 0.0;
@@ -1802,6 +1802,8 @@ function SolveFirstCollisionSourceDLRParallel(obj::SolverCSD{T}) where {T<:Abstr
     prog = Progress(nEnergies-1,1)
     rVec = r .* ones(2,nEnergies)
     t = 0;
+
+    counterPNG = 0;
 
     uOUnc = zeros(T,nx*ny);
     
@@ -1947,6 +1949,54 @@ function SolveFirstCollisionSourceDLRParallel(obj::SolverCSD{T}) where {T<:Abstr
         rVec[2,n] = r;
 
         t += dE;
+
+        ######## Plotting #########
+        if mod(n-1,Int(round(7*nEnergies/474/7))) == 0 && recordGif
+            counterPNG += 1;
+            
+            U,Sigma,V = svd(S);
+            close("all")
+            fig = figure("Dose, DLRA",figsize=(10*(s.d/s.b),10),dpi=100)
+            ax = gca()
+            pcolormesh(YY,XX,Vec2Mat(s.NCellsX,s.NCellsY,X*S*W[1,:]+uOUnc)[2:end-1,2:end-1]')
+            ax.tick_params("both",labelsize=20) 
+            plt.xlabel("x", fontsize=20)
+            plt.ylabel("y", fontsize=20)
+            plt.title("scalar flux,  E = $(round(obj.csd.eGrid[n], digits=3)) MeV", fontsize=25)
+            tight_layout()
+            if counterPNG < 10
+                savefig("output/gifPhi/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)_000$(counterPNG).png")
+            elseif counterPNG < 100
+                savefig("output/gifPhi/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)_00$(counterPNG).png")
+            elseif counterPNG < 1000
+                savefig("output/gifPhi/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)_0$(counterPNG).png")
+            else
+                savefig("output/gifPhi/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)_$(counterPNG).png")
+            end
+
+            close("all")
+            fig = figure("Dose, DLRA",figsize=(10*(s.d/s.b),10),dpi=100)
+            ax = gca()
+            pcolormesh(YY,XX,Vec2Mat(s.NCellsX,s.NCellsY,X*U[:,1])[2:end-1,2:end-1]')
+            ax.tick_params("both",labelsize=20) 
+            #plt.xlabel("x", fontsize=20)
+            #plt.ylabel("y", fontsize=20)
+            plt.title("dominant spatial mode,  E = $(round(obj.csd.eGrid[n], digits=3)) MeV", fontsize=25)
+            tight_layout()
+            if counterPNG < 10
+                savefig("output/gifX/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)_000$(counterPNG).png")
+            elseif counterPNG < 100
+                savefig("output/gifX/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)_00$(counterPNG).png")
+            elseif counterPNG < 1000
+                savefig("output/gifX/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)_0$(counterPNG).png")
+            else
+                savefig("output/gifX/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)_$(counterPNG).png")
+            end
+            
+            # write modal basis
+            writedlm("output/gifW/W_$(counterPNG)",W*V)
+            #break
+        end
         
         next!(prog) # update progress bar
     end
@@ -1957,7 +2007,7 @@ function SolveFirstCollisionSourceDLRParallel(obj::SolverCSD{T}) where {T<:Abstr
 
 end
 
-function SolveFirstCollisionSourceDLRParallelCombined(obj::SolverCSD{T}) where {T<:AbstractFloat}
+function SolveFirstCollisionSourceDLRParallelCombined(obj::SolverCSD{T}, recordGif::Bool=false) where {T<:AbstractFloat}
     # Get rank
     r=Int(floor(obj.settings.r / 2));
 
@@ -2041,6 +2091,7 @@ function SolveFirstCollisionSourceDLRParallelCombined(obj::SolverCSD{T}) where {
     prog = Progress(nEnergies-1,1)
     rVec = r .* ones(2,nEnergies)
     t = 0;
+    counterPNG = 0;
 
     uOUnc = zeros(T,nx*ny);
     
@@ -2174,6 +2225,54 @@ function SolveFirstCollisionSourceDLRParallelCombined(obj::SolverCSD{T}) where {
         obj.dose .+= 0.5*dE * (X*S*W[1,:]+uOUnc) * obj.csd.S[n] ./ obj.densityVec;
 
         t += dE;
+
+        ######## Plotting #########
+        if mod(n-1,Int(round(7*nEnergies/474/7))) == 0 && recordGif
+            counterPNG += 1;
+            
+            U,Sigma,V = svd(S);
+            close("all")
+            fig = figure("Dose, DLRA",figsize=(10*(s.d/s.b),10),dpi=100)
+            ax = gca()
+            pcolormesh(YY,XX,Vec2Mat(s.NCellsX,s.NCellsY,X*S*W[1,:]+psi * M1)[2:end-1,2:end-1]')
+            ax.tick_params("both",labelsize=20) 
+            plt.xlabel("x", fontsize=20)
+            plt.ylabel("y", fontsize=20)
+            plt.title("scalar flux,  E = $(round(obj.csd.eGrid[n], digits=3)) MeV", fontsize=25)
+            tight_layout()
+            if counterPNG < 10
+                savefig("output/gifPhi/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)_000$(counterPNG).png")
+            elseif counterPNG < 100
+                savefig("output/gifPhi/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)_00$(counterPNG).png")
+            elseif counterPNG < 1000
+                savefig("output/gifPhi/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)_0$(counterPNG).png")
+            else
+                savefig("output/gifPhi/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)_$(counterPNG).png")
+            end
+
+            close("all")
+            fig = figure("Dose, DLRA",figsize=(10*(s.d/s.b),10),dpi=100)
+            ax = gca()
+            pcolormesh(YY,XX,Vec2Mat(s.NCellsX,s.NCellsY,X*U[:,1])[2:end-1,2:end-1]')
+            ax.tick_params("both",labelsize=20) 
+            #plt.xlabel("x", fontsize=20)
+            #plt.ylabel("y", fontsize=20)
+            plt.title("dominant spatial mode,  E = $(round(obj.csd.eGrid[n], digits=3)) MeV", fontsize=25)
+            tight_layout()
+            if counterPNG < 10
+                savefig("output/gifX/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)_000$(counterPNG).png")
+            elseif counterPNG < 100
+                savefig("output/gifX/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)_00$(counterPNG).png")
+            elseif counterPNG < 1000
+                savefig("output/gifX/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)_0$(counterPNG).png")
+            else
+                savefig("output/gifX/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)_$(counterPNG).png")
+            end
+            
+            # write modal basis
+            writedlm("output/gifW/W_$(counterPNG)",W*V)
+            #break
+        end
         
         next!(prog) # update progress bar
     end
