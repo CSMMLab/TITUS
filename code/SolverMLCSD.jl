@@ -1261,6 +1261,169 @@ function SolveMCollisionSourceDLR(obj::SolverMLCSD)
 
 end
 
+function SolveMCollisionSourceDLRRejection(obj::SolverMLCSD)
+    # Get rank
+    r=15;
+    L = obj.L;
+    remap = 1.0;
+
+    eTrafo = obj.csd.eTrafo;
+    energy = obj.csd.eGrid;
+    S = obj.csd.S;
+
+    nx = obj.settings.NCellsX;
+    ny = obj.settings.NCellsY;
+    nq = obj.Q.nquadpoints;
+    N = obj.pn.nTotalEntries
+
+    # Set up initial condition and store as matrix
+    psi = SetupIC(obj);
+    floorPsiAll = 1e-1;
+    floorPsi = 1e-17;
+    if obj.settings.problem == "LineSource" || obj.settings.problem == "2DHighD"# determine relevant directions in IC
+        idxFullBeam = findall(psi .> floorPsiAll)
+        idxBeam = findall(psi[idxFullBeam[1][1],idxFullBeam[1][2],:] .> floorPsi)
+    elseif obj.settings.problem == "lung" || obj.settings.problem == "lungOrig" || obj.settings.problem == "liver" # determine relevant directions in beam
+        psiBeam = zeros(nq)
+        for k = 1:nq
+            psiBeam[k] = PsiBeam(obj,obj.Q.pointsxyz[k,:],obj.settings.eMax,obj.settings.x0,obj.settings.y0,1)
+        end
+        idxBeam = findall( psiBeam .> floorPsi*maximum(psiBeam) );
+    end
+    psi = psi[:,:,idxBeam]
+    obj.qReduced = obj.Q.pointsxyz[idxBeam,:]
+    obj.MReduced = obj.M[:,idxBeam]
+    obj.OReduced = obj.O[idxBeam,:]
+    println("reduction of ordinates is ",(nq-length(idxBeam))/nq*100.0," percent")
+    nq = length(idxBeam);
+
+    # Low-rank approx of init data:
+    X1,S1,W1 = svd(zeros(nx*ny,N));
+    
+    # rank-r truncation:
+    X = zeros(L,nx*ny,r);
+    W = zeros(L,N,r);
+    for l = 1:L
+        X[l,:,:] = X1[:,1:r];
+        W[l,:,:] = W1[:,1:r];
+    end
+    S = zeros(L,r,r);
+
+    nEnergies = length(eTrafo);
+    dE = eTrafo[2]-eTrafo[1];
+    obj.settings.dE = dE
+
+    println("CFL = ",dE/min(obj.settings.dx,obj.settings.dy)*maximum(Diagonal(1.0 ./obj.density)))
+
+    flux = zeros(size(psi))
+
+    prog = Progress(nEnergies-1,1)
+
+    uOUnc = zeros(nx*ny);
+    
+    psiNew = deepcopy(psi);
+
+    timeVec = [];
+    rankInTime = [];
+    etaVec = [];
+    etaVecTime = [];
+    etaBoundVec = [];
+
+    ranks::Array{Int,1} = r*ones(L)
+
+    t = 0.0;
+    n = 1;
+
+    while t < nT*Δt
+        n = n+1;
+        timeVec = [timeVec; t];
+        rankInTime = [rankInTime; ranks];
+        # compute scattering coefficients at current energy
+        sigmaS = SigmaAtEnergy(obj.csd,energy[n])#.*sqrt.(obj.gamma); # TODO: check sigma hat to be divided by sqrt(gamma)
+
+        # set boundary condition
+        for k = 1:nq
+            for j = 1:nx
+                psi[j,1,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[1],n-1);
+                psi[j,end,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[j],obj.settings.yMid[end],n-1);
+            end
+            for j = 1:ny
+                psi[1,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[1],obj.settings.yMid[j],n-1);
+                psi[end,j,k] = PsiBeam(obj,obj.qReduced[k,:],energy[n],obj.settings.xMid[end],obj.settings.yMid[j],n-1);
+            end
+        end
+
+        # stream uncollided particles
+        solveFluxUpwind!(obj,psi,flux);
+
+        psi .= psi .- dE*flux;
+
+        psiNew .= psi ./ (1+dE*sigmaS[1]);
+       
+        Dvec = zeros(obj.pn.nTotalEntries)
+        for l = 0:obj.pn.N
+            for k=-l:l
+                i = GlobalIndex( l, k );
+                Dvec[i+1] = sigmaS[l+1]
+            end
+        end
+
+        D = Diagonal(sigmaS[1] .- Dvec);
+        if L > 1
+            ranks[1] = UnconventionalIntegratorAdaptive!(obj,Dvec,D,obj.X[1,:,1:ranks[1]],obj.S[1,1:ranks[1],1:ranks[1]],obj.W[1,:,1:ranks[1]],psiNew,1,n)
+        else
+            ranks[1] = UnconventionalIntegratorCollidedAdaptive!(obj,Dvec,D,obj.X[1,:,1:ranks[1]],obj.S[1,1:ranks[1],1:ranks[1]],obj.W[1,:,1:ranks[1]],psiNew,1,n)
+        end
+        obj.X[1,obj.boundaryIdx,:] .= 0.0;
+        rankInTime[2,n] = ranks[1];
+
+        for l = 2:(L-1)
+            ranks[l] = UnconventionalIntegratorAdaptive!(obj,Dvec,D,obj.X[l,:,1:ranks[l]],obj.S[l,1:ranks[l],1:ranks[l]],obj.W[l,:,1:ranks[l]],obj.X[l-1,:,1:ranks[l-1]],obj.S[l-1,1:ranks[l-1],1:ranks[l-1]],obj.W[l-1,:,1:ranks[l-1]],l,n)
+            obj.X[l,obj.boundaryIdx,:] .= 0.0;
+            rankInTime[l+1,n] = ranks[l];
+        end
+
+        if L > 1
+            ranks[L] = UnconventionalIntegratorCollidedAdaptive!(obj,Dvec,D,obj.X[L,:,1:ranks[L]],obj.S[L,1:ranks[L],1:ranks[L]],obj.W[L,:,1:ranks[L]],obj.X[L-1,:,1:ranks[L-1]],obj.S[L-1,1:ranks[L-1],1:ranks[L-1]],obj.W[L-1,:,1:ranks[L-1]],L,n)
+            obj.X[L,obj.boundaryIdx,:] .= 0.0;
+            rankInTime[L+1,n] = ranks[L];
+        end
+
+        for i = 1:nx
+            for j = 1:ny
+                idx = (i-1)*ny + j
+                uOUnc[idx] = psiNew[i,j,:]'*obj.MReduced[1,:];
+            end
+        end
+        
+        # update dose
+        obj.dose .+= dE * uOUnc * obj.csd.SMid[n-1] ./ obj.densityVec ./( 1 + (n==1||n==nEnergies));
+
+        for l = 1:L
+            obj.dose .+= dE * obj.X[l,:,1:ranks[l]]*obj.S[l,1:ranks[l],1:ranks[l]]*obj.W[l,1,1:ranks[l]] * obj.csd.SMid[n-1] ./ obj.densityVec ./( 1 + (n==2||n==nEnergies));
+        end
+
+        # remap strategy
+        #WOr = obj.W[L,:,1:ranks[L]]'*obj.OReduced';
+        #obj.W[L,:,1:ranks[L]] .= obj.W[L,:,1:ranks[L]] - remap*(WOr*obj.MReduced')';
+
+        #W,S = qr(obj.W[L,:,1:ranks[L]]);
+        #W = Matrix(W)
+        #obj.W[L,:,1:ranks[L]] = W[:, 1:ranks[L]];
+        #S = Matrix(S)
+        #S = S[1:ranks[L], 1:ranks[L]];
+        #obj.S[L,1:ranks[L],1:ranks[L]] .= obj.S[L,1:ranks[L],1:ranks[L]]*S';
+
+        
+        psi .= psiNew;# + remap*Vec2Mat(nx,ny,obj.X[L,:,1:ranks[L]]*obj.S[L,1:ranks[L],1:ranks[L]]*WOr);
+        next!(prog) # update progress bar
+    end
+    U,Sigma,V = svd(obj.S[L,1:ranks[L],1:ranks[L]]);
+    # return solution and dose
+    return obj.X[L,:,1:ranks[L]]*U, 0.5*sqrt(obj.gamma[1])*Sigma, obj.O*obj.W[L,:,1:ranks[L]]*V,obj.W[L,:,1:ranks[L]]*V,obj.dose,rankInTime,psi;
+
+end
+
 function vectorIndex(ny,i,j)
     return (i-1)*ny + j;
 end

@@ -60,8 +60,9 @@ mutable struct Settings
     r::Int;
 
     # tolerance for rank adaptivity
-    epsAdapt::Float64;  
-    adaptIndex::Float64;
+    ϑ::Float64;  
+    ϑIndex::Float64;
+    cη::Float64;
 
     function Settings(Nx::Int=102,Ny::Int=102,r::Int=15,problem::String="LineSource",particle::String="Electrons")
         #Proton rest energy
@@ -91,8 +92,8 @@ mutable struct Settings
         Omega1 = -1.0;
         Omega3 = -1.0;
         densityMin = 0.2;
-        adaptIndex = 1;
-        epsAdapt = 1e-2;
+        ϑIndex = 1;
+        ϑ = 1e-2;
         if problem =="LineSource"
             a = -1.5
             b = 1.5;
@@ -102,9 +103,9 @@ mutable struct Settings
             sigmaA = 0.0;  
             cfl = 0.99/sqrt(2);    
             eMax = 1.0
-            adaptIndex = 0;
-            epsAdapt = 0.3;#0.5;
-            #epsAdapt = 1e-1;
+            ϑIndex = 0;
+            ϑ = 0.3;#0.5;
+            #ϑ = 1e-1;
         elseif problem =="2DHighLowD"
             a = 0.0
             b = 1.0;
@@ -114,8 +115,8 @@ mutable struct Settings
             sigmaA = 0.0;  
             cfl = 0.99/sqrt(2)*2.5;    
             eMax = 1.0
-            adaptIndex = 0;
-            epsAdapt = 0.3;#0.5;
+            ϑIndex = 0;
+            ϑ = 0.3;#0.5;
             density[Int(floor(NCellsX*0.5/(b-a))):end,:] .= 5.0;
             density[Int(floor(NCellsX*0.55/(b-a))):end,:] .= 1.0;
             density[1:Int(floor(NCellsX*0.45/(b-a))),:] .= 7.0;
@@ -130,8 +131,8 @@ mutable struct Settings
             cfl = 0.99/sqrt(2)*0.5;    
             eKin = 80;  
             eMax = eKin + eRest
-            adaptIndex = 0;
-            epsAdapt = 0.3;#0.5;
+            ϑIndex = 0;
+            ϑ = 0.3;#0.5;
             density[Int(floor(NCellsX*0.56/(b-a))):end,:] .= 5.0;
         elseif problem =="validation"
             pathlib = pyimport("pathlib")
@@ -160,8 +161,8 @@ mutable struct Settings
             cfl = 0.99/sqrt(2)*120.5;  
             eKin = 85;
             eMax = eKin + eRest
-            adaptIndex = 0;
-            epsAdapt = 0.3;#0.5;
+            ϑIndex = 0;
+            ϑ = 0.3;#0.5;
 
             Omega1 = -1.0;
             Omega3 = 0.1;
@@ -181,8 +182,8 @@ mutable struct Settings
             cfl = 0.99/sqrt(2)*2.0;  
             eKin = 21;
             eMax = eKin + eRest
-            adaptIndex = 0;
-            epsAdapt = 0.3;#0.5;
+            ϑIndex = 0;
+            ϑ = 0.3;#0.5;
 
             Omega1 = -1.0;
             Omega3 = 0.0;
@@ -215,8 +216,8 @@ mutable struct Settings
             cfl = 0.99/sqrt(2)*120.5;  
             eKin = 85;
             eMax = eKin + eRest
-            adaptIndex = 0;
-            epsAdapt = 0.3;#0.5;
+            ϑIndex = 0;
+            ϑ = 0.3;#0.5;
 
             Omega1 = -1.0;
             Omega3 = 0.0;
@@ -261,7 +262,7 @@ mutable struct Settings
             y0 = 1.0*d;
             Omega1 = -1.0;
             Omega3 = -1.0;
-            epsAdapt = 1e-3;
+            ϑ = 1e-3;
         elseif problem =="lung"
             #img = Float64.(Gray.(load("phantom.png")))
             pathlib = pyimport("pathlib")
@@ -330,8 +331,10 @@ mutable struct Settings
         # number PN moments
         nPN = 21#7, 13, 21; # use odd number
 
+        cη = 5;
+
         # build class
-        new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,eRest,dE,cfl,nPN,x,xMid,y,yMid,problem,particle,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,epsAdapt,adaptIndex);
+        new(Nx,Ny,NCellsX,NCellsY,a,b,c,d,dx,dy,eMax,eRest,dE,cfl,nPN,x,xMid,y,yMid,problem,particle,x0,y0,Omega1,Omega3,densityMin,sigmaT,sigmaS,density,r,ϑ,ϑIndex,cη);
     end
 end
 

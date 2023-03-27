@@ -6,7 +6,6 @@ using WriteVTK
 
 include("settings.jl")
 include("SolverCSD.jl")
-include("SolverMLCSD.jl")
 
 close("all")
 
@@ -14,25 +13,28 @@ problem = "lungOrig"
 nx = 201;
 problem = "lung";#"waterBeam" #"2DHighD"
 particle = "Electrons";#"Protons"
-s = Settings(nx,nx,100,problem,particle);
+
+ϑᵤ = 0.01;
+ϑₚ= 0.007;
 
 ############################
-solver = SolverCSD(s);
-u, dose_full, ψ_full = SolveFirstCollisionSource(solver);
-dose_full = Vec2Mat(s.NCellsX,s.NCellsY,dose_full);
 
-L1 = 1;
 sᵤ = Settings(nx,nx,400,problem);
-sᵤ.epsAdapt = 0.01
-solver1 = SolverMLCSD(sᵤ,L1);
-Xᵤ,Sᵤ,Wᵤ,_, doseᵤ, rankInTimeᵤ, ψᵤ = SolveMCollisionSourceDLR(solver1);
+sᵤ.ϑ = ϑᵤ
+solver1 = SolverCSD(sᵤ);
+@time Xᵤ,Sᵤ,Wᵤ,_, doseᵤ, rankInTimeᵤ,ηᵤ,ηᵤBound, ψᵤ = SolveFirstCollisionSourceDLRBUGRejection(solver1);
 doseᵤ = Vec2Mat(sᵤ.NCellsX,sᵤ.NCellsY,doseᵤ);
 
 sₚ = Settings(nx,nx,400,problem);
-sₚ.epsAdapt = 0.007
+sₚ.ϑ = ϑₚ
 solverₚ = SolverCSD(sₚ);
-Xₚ,Sₚ,Wₚ,_, doseₚ, rankInTimeₚ, ψₚ = SolveFirstCollisionSourceDLRParallel(solverₚ);
+@time Xₚ,Sₚ,Wₚ,_, doseₚ, rankInTimeₚ,ηₚ,ηₚBound,ψₚ = SolveFirstCollisionSourceDLRParallelRejection(solverₚ,false);
 doseₚ = Vec2Mat(sₚ.NCellsX,sₚ.NCellsY,doseₚ);
+
+s = Settings(nx,nx,100,problem,particle);
+solver = SolverCSD(s);
+@time u, dose_full, ψ_full = SolveFirstCollisionSource(solver);
+dose_full = Vec2Mat(s.NCellsX,s.NCellsY,dose_full);
 
 ##################### plot dose #####################
 
@@ -53,13 +55,44 @@ levels = 40;
 X = (sₚ.xMid[2:end-1]'.*ones(size(sₚ.yMid[2:end-1])))
 Y = (sₚ.yMid[2:end-1]'.*ones(size(sₚ.xMid[2:end-1])))'
 
+
+fig, ax = plt.subplots(1, 1,figsize=(8,8),dpi=100)
+ax.pcolormesh(XX,YY,density[2:(end-1),2:(end-1)]',cmap="gray")
+ax.contour(Y,X,dose_full[2:(end-1),2:(end-1)]'./doseMax4,levels,cmap="plasma",vmin=0,vmax=1)
+#ax.set_title(L"BUG, $\vartheta$="*LaTeXString(string(sᵤ.ϑ)), fontsize=20)
+#ax.tick_params("both",labelsize=15) 
+#ax.set_xlabel("x / [cm]", fontsize=15)
+#ax.set_ylabel("y / [cm]", fontsize=15)
+plt.axis("off")
+ax.set_aspect(1)
+#cb = plt.colorbar(CS,fraction=0.035, pad=0.02)
+#cb.ax.tick_params(labelsize=15)
+tight_layout()
+#savefig("output/DoseIsolinesParallelTheta$(sᵤ.ϑ)BUGTheta$(sₚ.ϑ)nx$(nx)N$(s.nPN).png")
+
+close("all")
+XXd = (x'.*ones(size(y)))'
+YYd = (y'.*ones(size(x)))
+fig = figure("density",figsize=(10*(s.d/s.b),10),dpi=100)
+ax = gca()
+pcolormesh(XX,YY,density[2:(end-1),2:(end-1)]',cmap="gray")
+#ax.contour(Y,X,dose_full[2:(end-1),2:(end-1)]'./doseMax4,levels,cmap="plasma",vmin=0,vmax=1)
+#ax.contour(Y,X,doseᵤ[2:(end-1),2:(end-1)]'./doseMax2,levels,cmap="plasma",vmin=0,vmax=1)
+ax.contour(Y,X,doseₚ[2:(end-1),2:(end-1)]'./doseMax3,levels,cmap="plasma",vmin=0,vmax=1)
+ax.tick_params("both",labelsize=20) 
+plt.xlabel("x", fontsize=20)
+plt.ylabel("y", fontsize=20)
+#plt.title("tissue density", fontsize=25)
+plt.title("dose", fontsize=25)
+tight_layout()
+
 fig, (ax2, ax3) = plt.subplots(1, 2,figsize=(15,8),dpi=100)
 ax2.pcolormesh(XX,YY,density[2:(end-1),2:(end-1)]',cmap="gray")
 ax2.contour(Y,X,doseᵤ[2:(end-1),2:(end-1)]'./doseMax2,levels,cmap="plasma",vmin=0,vmax=1)
 ax3.pcolormesh(XX,YY,density[2:(end-1),2:(end-1)]',cmap="gray")
 CS = ax3.contour(Y,X,doseₚ[2:(end-1),2:(end-1)]'./doseMax3,levels,cmap="plasma",vmin=0,vmax=1)
-ax2.set_title(L"BUG, $\vartheta$="*LaTeXString(string(sᵤ.epsAdapt)), fontsize=20)
-ax3.set_title(L"parallel, $\vartheta$="*LaTeXString(string(sₚ.epsAdapt)), fontsize=20)
+ax2.set_title(L"BUG, $\vartheta$="*LaTeXString(string(sᵤ.ϑ)), fontsize=20)
+ax3.set_title(L"parallel, $\vartheta$="*LaTeXString(string(sₚ.ϑ)), fontsize=20)
 ax2.tick_params("both",labelsize=15) 
 ax3.tick_params("both",labelsize=15) 
 ax2.set_xlabel("x / [cm]", fontsize=15)
@@ -71,7 +104,7 @@ ax3.set_aspect(1)
 #cb = plt.colorbar(CS,fraction=0.035, pad=0.02)
 #cb.ax.tick_params(labelsize=15)
 tight_layout()
-savefig("output/DoseIsolinesParallelTheta$(sᵤ.epsAdapt)BUGTheta$(sₚ.epsAdapt)nx$(nx)N$(s.nPN).png")
+savefig("output/DoseIsolinesParallelTheta$(sᵤ.ϑ)BUGTheta$(sₚ.ϑ)nx$(nx)N$(s.nPN).png")
 
 
 fig, (ax2, ax3) = plt.subplots(1, 2,figsize=(15,8),dpi=100)
@@ -125,25 +158,47 @@ fig = figure("rank in energy",figsize=(14, 10), dpi=100)
 ax = gca()
 ltype = ["b-","r--","m-","g-","y-","k-","b--","r--","m--","g--","y--","k--","b-","r-","m-","g-","y-","k-","b--","r--","m--","g--","y--","k--","b-","r-","m-","g-","y-","k-","b--","r--","m--","g--","y--","k--"]
 labelvec = ["BUG","parallel"]
-ax.plot(rankInTimeᵤ[1,1:(end-1)],rankInTimeᵤ[2,1:(end-1)], ltype[1], linewidth=2, label=labelvec[1], alpha=1.0)
-ax.plot(rankInTimeᵤ[1,1:(end-1)],rankInTimeₚ[2,1:(end-1)], ltype[2], linewidth=2, label=labelvec[2], alpha=1.0)
+#ax.plot(rankInTimeᵤ[1,1:(end-1)],rankInTimeᵤ[2,1:(end-1)], ltype[1], linewidth=2, label=labelvec[1], alpha=1.0)
+#ax.plot(rankInTimeᵤ[1,1:(end-1)],rankInTimeₚ[2,1:(end-1)], ltype[2], linewidth=2, label=labelvec[2], alpha=1.0)
+ax.plot(solver.csd.eGrid[2:end-2],rankInTimeᵤ[2,1:(end-1)], ltype[1], linewidth=2, label=labelvec[1], alpha=1.0)
+ax.plot(solver.csd.eGrid[2:end-2],rankInTimeₚ[2,1:(end-1)], ltype[2], linewidth=2, label=labelvec[2], alpha=1.0)
 ax.set_xlim([0.0,s.eMax])
-ax.set_ylim([0.0,maximum(rankInTimeᵤ[2,2:end]) + 1])
+ax.set_ylim([0.0,max(maximum(rankInTimeᵤ[2,2:end]),maximum(rankInTimeₚ[2,2:end])) + 1])
 ax.set_xlabel("energy [MeV]", fontsize=20);
 ax.set_ylabel("rank", fontsize=20);
 ax.tick_params("both",labelsize=20) 
 ax.legend(loc="lower left", fontsize=20)
 tight_layout()
 fig.canvas.draw() # Update the figure
-savefig("output/ranksParallelTheta$(sᵤ.epsAdapt)BUGTheta$(sₚ.epsAdapt)nx$(nx)N$(s.nPN).png")
+savefig("output/ranksParallelTheta$(sᵤ.ϑ)BUGTheta$(sₚ.ϑ)nx$(nx)N$(s.nPN).png")
+
+##################### plot eta in energy #####################
+
+fig = figure("eta in energy",figsize=(14, 10), dpi=100)
+ax = gca()
+ltype = ["b-","r--","m-","g-","y-","k-","b--","r--","m--","g--","y--","k--","b-","r-","m-","g-","y-","k-","b--","r--","m--","g--","y--","k--","b-","r-","m-","g-","y-","k-","b--","r--","m--","g--","y--","k--"]
+labelvec = ["BUG","parallel"]
+ax.plot(solver.csd.eGrid[2:end-2],ηᵤ[:,2], "r-.", label=L"BUG, $\bar\vartheta =$ "*LaTeXString(string(ϑᵤ)), linewidth=2, alpha=1.0)
+ax.plot(solver.csd.eGrid[2:end-2],ηₚ[:,2], "b--", label=L"parallel, $\bar\vartheta =$ "*LaTeXString(string(ϑₚ)), linewidth=2, alpha=1.0)
+ax.plot(solver.csd.eGrid[2:end-2],ηᵤBound[:,2], "r:", label=L"$c\Vert f\Vert\bar\vartheta_{\mathrm{BUG}} / h$, $c = $ "*LaTeXString(string(s.cη)), linewidth=2, alpha=1.0)
+ax.plot(solver.csd.eGrid[2:end-2],ηₚBound[:,2], "b-", label=L"$c\Vert f\Vert\bar\vartheta_{\mathrm{parallel}} / h$, $c = $ "*LaTeXString(string(s.cη)), linewidth=2, alpha=0.4)
+ax.set_xlim([0.0,s.eMax])
+ax.set_ylim([0,max(maximum(ηᵤ[1:end,2]),maximum(ηₚ[1:end,2]),maximum(ηᵤBound[1:end,2]),maximum(ηₚBound[1:end,2]))+1])
+ax.set_xlabel("energy [MeV]", fontsize=20);
+ax.set_ylabel(L"\eta", fontsize=30);
+ax.tick_params("both",labelsize=30);
+ax.legend(loc="upper right", fontsize=30);
+tight_layout()
+fig.canvas.draw() # Update the figure
+savefig("output/etaParallelTheta$(sᵤ.ϑ)BUGTheta$(sₚ.ϑ)nx$(nx)N$(s.nPN).png")
 
 ##################### dominant spatial modes #####################
 
 fig, (ax1, ax3, ax2, ax4) = plt.subplots(2, 2,figsize=(15,13),dpi=100)
-CS1 = ax1.pcolormesh(Y,X,Vec2Mat(s.NCellsX,s.NCellsY,-Xᵤ[:,1])[2:(end-1),2:(end-1)]',cmap="viridis")
+CS1 = ax1.pcolormesh(Y,X,Vec2Mat(s.NCellsX,s.NCellsY,Xᵤ[:,1])[2:(end-1),2:(end-1)]',cmap="viridis")
 CS2 = ax2.pcolormesh(Y,X,Vec2Mat(s.NCellsX,s.NCellsY,Xₚ[:,1])[2:(end-1),2:(end-1)]',cmap="viridis")
 CS3 = ax3.pcolormesh(Y,X,Vec2Mat(s.NCellsX,s.NCellsY,-Xᵤ[:,2])[2:(end-1),2:(end-1)]',cmap="viridis")
-CS4 = ax4.pcolormesh(Y,X,Vec2Mat(s.NCellsX,s.NCellsY,Xₚ[:,2])[2:(end-1),2:(end-1)]',cmap="viridis")
+CS4 = ax4.pcolormesh(Y,X,Vec2Mat(s.NCellsX,s.NCellsY,-Xₚ[:,2])[2:(end-1),2:(end-1)]',cmap="viridis")
 ax1.set_title(L"$X_1$, BUG", fontsize=20)
 ax2.set_title(L"$X_1$, parallel", fontsize=20)
 ax3.set_title(L"$X_2$, BUG", fontsize=20)
@@ -173,44 +228,7 @@ cb.ax.tick_params(labelsize=15)
 cb = plt.colorbar(CS4,fraction=0.035, pad=0.02, ax=ax4)
 cb.ax.tick_params(labelsize=15)
 tight_layout()
-savefig("output/spatialModesTheta$(sᵤ.epsAdapt)BUGTheta$(sₚ.epsAdapt)nx$(nx)N$(s.nPN).png")
-
-##################### dominant spatial modes parallel #####################
-
-fig, (ax1, ax3, ax2, ax4) = plt.subplots(2, 2,figsize=(15,13),dpi=100)
-CS1 = ax1.pcolormesh(Y,X,Vec2Mat(s.NCellsX,s.NCellsY,X_dlrₚ[:,1])[2:(end-1),2:(end-1)],cmap="plasma")
-CS2 = ax2.pcolormesh(Y,X,Vec2Mat(s.NCellsX,s.NCellsY,X_dlrₚ[:,2])[2:(end-1),2:(end-1)],cmap="plasma")
-CS3 = ax3.pcolormesh(Y,X,Vec2Mat(s.NCellsX,s.NCellsY,X_dlrₚ[:,3])[2:(end-1),2:(end-1)],cmap="plasma")
-CS4 = ax4.pcolormesh(Y,X,Vec2Mat(s.NCellsX,s.NCellsY,X_dlrₚ[:,4])[2:(end-1),2:(end-1)],cmap="plasma")
-ax1.set_title(L"X_1", fontsize=20)
-ax2.set_title(L"X_2", fontsize=20)
-ax3.set_title(L"X_3", fontsize=20)
-ax4.set_title(L"X_4", fontsize=20)
-ax1.tick_params("both",labelsize=15) 
-ax2.tick_params("both",labelsize=15) 
-ax3.tick_params("both",labelsize=15) 
-ax4.tick_params("both",labelsize=15) 
-ax1.set_xlabel("x / [cm]", fontsize=15)
-ax1.set_ylabel("y / [cm]", fontsize=15)
-ax2.set_xlabel("x / [cm]", fontsize=15)
-ax2.set_ylabel("y / [cm]", fontsize=15)
-ax3.set_xlabel("x / [cm]", fontsize=15)
-ax3.set_ylabel("y / [cm]", fontsize=15)
-ax4.set_xlabel("x / [cm]", fontsize=15)
-ax4.set_ylabel("y / [cm]", fontsize=15)
-ax1.set_aspect(1)
-ax2.set_aspect(1)
-ax3.set_aspect(1)
-ax4.set_aspect(1)
-cb = plt.colorbar(CS1,fraction=0.035, pad=0.02, ax=ax1)
-cb.ax.tick_params(labelsize=15)
-cb = plt.colorbar(CS2,fraction=0.035, pad=0.02, ax=ax2)
-cb.ax.tick_params(labelsize=15)
-cb = plt.colorbar(CS3,fraction=0.035, pad=0.02, ax=ax3)
-cb.ax.tick_params(labelsize=15)
-cb = plt.colorbar(CS4,fraction=0.035, pad=0.02, ax=ax4)
-cb.ax.tick_params(labelsize=15)
-tight_layout()
+savefig("output/spatialModesTheta$(sᵤ.ϑ)BUGTheta$(sₚ.ϑ)nx$(nx)N$(s.nPN).png")
 
 ##################### dominant directional modes #####################
 
@@ -267,16 +285,13 @@ for i=1:nq
 end
 
 writedlm("output/W_plot_lung.txt", O*W_modal)
+writedlm("output/W_plot_lung_parallel.txt", O*solver.M*Wₚ)
 
-run(`python plotWLung.py`)
-
-writedlm("output/W_plot_lung.txt", O*solver.M*Wₚ)
-
-run(`python plotWLung.py`)
+run(`python plotWLungCompareParallel.py`)
 
 rhoMin = minimum(s.density);
 writedlm("output/dose1_csd_1stcollision_nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin).txt", dose_full)
-writedlm("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)theta$(sᵤ.epsAdapt).txt", doseᵤ)
-writedlm("output/dose_csd_1stcollision_parallel_rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)theta$(sₚ.epsAdapt).txt", doseₚ)
+writedlm("output/dose_csd_1stcollision_DLRA_Rank$(s.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)theta$(sᵤ.ϑ).txt", doseᵤ)
+writedlm("output/dose_csd_1stcollision_parallel_rank$(s3.r)nx$(s.NCellsX)ny$(s.NCellsY)nPN$(s.nPN)eMax$(s.eMax)rhoMin$(rhoMin)theta$(sₚ.ϑ).txt", doseₚ)
 
 println("runLung finished")
