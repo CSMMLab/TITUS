@@ -2790,8 +2790,6 @@ function CudaFullSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {
         #SetBCs!(obj, energy[n], n,psiCPU);
 
         ############## Dose Computation ##############
-        
-        dose .+= dE12 * (X*S*(W'*e1) .* ∫Y₀⁰dΩ + psi * weights) * sPow[n-1] ./ densityVec ;
 
         intSigma += dE * sigmaS[1];
 
@@ -2927,7 +2925,7 @@ function CudaFullSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {
         S .= S .+dE*(X'*psi)*M'*(Diagonal(Dvec)*W);
 
         ############## Dose Computation ##############
-        dose .+= dE12 * (X*S*(W'*e1) * ∫Y₀⁰dΩ + psi * weights) * sPow[n] ./ densityVec ;
+        dose .+= dE * (X*S*(W'*e1) * ∫Y₀⁰dΩ + psi * weights) * sPow[n] ./ densityVec ;
         
         next!(prog) # update progress bar
     end
