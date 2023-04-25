@@ -48,15 +48,15 @@ R0 = (0.022 * (s.eMax - s.eRest)^1.77)/10 #Bragg-Kleemann rule with parameters a
 idx_0 = ceil(Int,s.NCellsY/s.d*(0 + s.y0))
 sigma_z = 0.012.* R0^(0.935) #std of range straggling convolution kernel (Bortfeld 1997)
 z = collect(1:s.NCellsY).*s.d ./s.NCellsY .- s.y0
-dose_DLRconv = zeros(size(dose_DLR))
-for j=1:s.NCellsX
-     for k=1:s.NCellsZ
-         for i=1:s.NCellsY
-            dose_DLRconv[j,i,k]=trapz(z[idx_0:end], normpdf.(z[idx_0:end],z[i],sigma_z).* dropdims(dose_DLR[j,idx_0:end,k], dims = tuple(findall(size(dose_DLR[j,idx_0:end,k]) .== 1)...))); 
-         end
-     end
-end
-dose_DLR = dose_DLRconv
+# dose_DLRconv = zeros(size(dose_DLR))
+# for j=1:s.NCellsX
+#      for k=1:s.NCellsZ
+#          for i=1:s.NCellsY
+#             dose_DLRconv[j,i,k]=trapz(z[idx_0:end], normpdf.(z[idx_0:end],z[i],sigma_z).* dropdims(dose_DLR[j,idx_0:end,k], dims = tuple(findall(size(dose_DLR[j,idx_0:end,k]) .== 1)...))); 
+#          end
+#      end
+# end
+# dose_DLR = dose_DLRconv
 idxX = Int(floor(s.NCellsX/2))
 idxY = Int(floor(s.NCellsY/2))   #idxY = floor(Int,s.NCellsY/s.d*(0.5*s.d + s.y0))
 idxZ = Int(floor(s.NCellsZ/2))

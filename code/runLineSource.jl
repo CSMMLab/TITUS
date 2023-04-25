@@ -27,14 +27,14 @@ dose_DLR = Vec2Mat(s.NCellsX,s.NCellsY,dose_DLR);
 
 L1 = 2;
 s2 = Settings(nx,nx,400,problem);
-#s2.epsAdapt = 0.01
+s2.epsAdapt = 0.01
 solver1 = SolverMLCSD(s2,L1);
 X,S,W, dose, rankInTime, psi = SolveMCollisionSourceDLR(solver1);
 dose = Vec2Mat(s2.NCellsX,s2.NCellsY,dose);
 
 L = 5;
 s3 = Settings(nx,nx,400,problem);
-#s3.epsAdapt = 0.001
+s3.epsAdapt = 0.001
 solver3 = SolverMLCSD(s3,L);
 X_dlrM,S_dlrM,W_dlrM, dose_DLRM, rankInTimeML, psiML = SolveMCollisionSourceDLR(solver3);
 dose_DLRM = Vec2Mat(s3.NCellsX,s3.NCellsY,dose_DLRM);

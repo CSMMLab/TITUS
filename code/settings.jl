@@ -125,7 +125,7 @@ mutable struct Settings
             sigmaS = 1.0;
             sigmaA = 0.0;  
             cfl = 0.99/sqrt(2);    
-            eMax = 1.0
+            eMax = 1.5
             adaptIndex = 0;
             epsAdapt = 0.3;#0.5;
             #epsAdapt = 1e-1;

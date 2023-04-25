@@ -2807,13 +2807,9 @@ struct MaterialParametersProtons
          E_rest = 938.26 #MeV proton rest energy
          #sigmaEl_OInt_ICRU = Proton_Oxygen_nuclear(E_tab_PSTAR,Omega)
          sigmaEl_tab_pp = Proton_Proton_nuclear(E_tab_PSTAR,Omega);
-         #sigma_ce = Coulomb(E_tab_PSTAR,Omega_sigmaElTab) #multiple coulomb scattering (dependent on unknown spacial stepsize)
-         sigma_ce = ScreenedRutherford(E_tab_PSTAR,Omega) #single coulomb scattering
-         #sigma_ce = CoulombOlbrant(E_tab_PSTAR,Omega_sigmaElTab) 
+         sigma_ce = Sigma_eModels(E_tab_PSTAR,cosd.(Omega),1,[11.11, 0, 0, 88.89, 0, 0, 0, 0, 0, 0, 0, 0],0) #Caution, so far only model 1 is validated!
          E_tab_PSTAR= dropdims(E_tab_PSTAR, dims = tuple(findall(size(E_tab_PSTAR) .== 1)...)).+ E_rest
          E_sigmaTab= E_sigmaTab .+ E_rest
-         #sigmaTab = 0.88810600 .* sigmaEl_OInt_ICRU .+ 0.11189400.* sigmaEl_tab_pp + sigma_ce;
-         #S_tab_PSTAR = StoppingPower(E_tab_PSTAR)
          S_tab_PSTAR = dropdims(S_tab_PSTAR, dims = tuple(findall(size(S_tab_PSTAR) .== 1)...))
          new(S_tab_PSTAR,E_tab_PSTAR,E_sigmaTab,sigmaEl_OInt_ICRU,sigmaEl_tab_pp, sigma_ce,StarMAPmoments);
      end
@@ -2844,7 +2840,7 @@ struct MaterialParametersProtons
     # function for proton-proton nuclear interactions
     function Proton_Proton_nuclear(E,Omega_sigmaElTab)
         #nuclear elastic proton-proton xs
-        N_A = 6.02214076*10^23 #Avogadro constant
+        N_A = 6.02214076e23 #Avogadro constant
         w_H = 0.1111 #weight fraction hydrogen in water
         A_H = 1.0078250322 #atomic weight of hydrogen
         rho_H = 0.07 #g/cm^3
@@ -2870,7 +2866,7 @@ struct MaterialParametersProtons
     # function for proton-oxygen nuclear interactions
     function Proton_Oxygen_nuclear(E,Omega_sigmaElTab)
         #nuclear elastic proton-proton xs
-        N_A = 6.02214076*10^23 #Avogadro constant
+        N_A = 6.02214076e23 #Avogadro constant
         w_O = 0.8889#weight fraction oxygen in water
         A_O = 15.99 #atomic weight of oxygen
         rho_O = 1.141 #g/cm^3
@@ -2878,7 +2874,7 @@ struct MaterialParametersProtons
         #idx = findall(x->x>=10, E)
         sigma_pp_macro = zeros(size(E,1),1)
         #sigma_pp_macro[idx] = rho_O .*( 1.88 ./E[idx] + 4.0 .*10^-5 .* E[idx] .- 0.01475); #formula fit from ICRU databasem see Fippel 2004
-        sigma_pp_macro = rho_O .*( 1.88 ./E + 4.0 .*10^-5 .* E .- 0.01475); 
+        sigma_pp_macro = rho_O .*( 1.88 ./E + 4.0e-5 .* E .- 0.01475); 
         sigma_pp_micro = sigma_pp_macro .*A_O ./w_O ./N_A
         sigma =zeros(size(E,1),size(Omega_sigmaElTab,1));
         for i=1:size(E,1)
@@ -2892,200 +2888,41 @@ struct MaterialParametersProtons
         xi = integrateRutherfordXS_Poly3D(N,Omega_sigmaElTab,E,sigma)
         return xi
     end
-    #function for Coulomb elastic scattering
-    function Coulomb(E,Omega_sigmaElTab)
-        #use small-angle Gaussian approximation
-        # Omega = cosd(Omega_sigmaElTab);
-        # c = 299792458 #m/s speed of light
-        # E_rest = 938.26 #MeV proton rest energy
-        # E_total = E_rest + E
-        # gamma = E_total/E_rest
-        # E_s = 12.9 #MeV using Fluka2002.4 for fitting (or 12.4, using Geant4 version 5.1 or 12.0, using Geant4 version 5.2)
-        # beta = sqrt.(1 -(1 / gamma)^2) #ratio of proton velocity to velocity of light (formula "Review of formulas for relativistic motion")
-        # m0 = 1.67262192e-27 #kg mass of proton
-        # p = E_total*beta/c
-        # delta_z =1 #?
-         Xw = 36.0863 #cm radiation length of water
-        # f_X0 = 1.19 + 0.44*log(1-0.44) #density dependence according to Fippel 2004
-        # X0 = Xw/f_X0 #radiation length of water
-        # z = 1 #charge number of proton(?)
-        # #stddev = sqrt((E_s/beta/p)^2*(delta_z/X0))  #formula and parameters, see e.g. Fippel et al 2004 (approach originally introduced by Rossi and Greisen)
-        # #stddev= 13.6/(beta*c*p)*z*sqrt(1/X0)*[1+0.038*log((x*z^2)/(X0*beta^2))] #according to "Passage of Particles Through Matter"
-        # stddev = 13.6 * (sqrt(1 / X0) / p / beta)*[1 + 0.088*log10(1 / X0)] #according to Lynch 1990
-        stddev = Highland(E./1000,1,Xw*10) .* 180 ./pi #energy in GeV, thickness of water, radiation length of water in mm
-        sigma_ce=zeros(size(E,1),size(Omega_sigmaElTab,1));
-        for i=1:size(E,1)
-           # dist = Normal(0,stddev[i])
-           # sigma_ce[i,:] = pdf(dist,Omega_sigmaElTab)
-            sigma_ce[i,:] = exp.(-0.5.*(Omega_sigmaElTab ./ stddev[i]).^2)./(stddev[i].*sqrt(2*pi)) 
-        end
-        N = 40;
-        xi = integrateXS_Poly(N,cosd.(Omega_sigmaElTab),E,sigma_ce)
-        return xi
-    end
 
-    function Highland(energy,thickness,x0)
-        return 0.0136 ./energy.*sqrt.(thickness./x0).*(1 .+ 0.038*log(thickness./x0)) #width of multiple coulomb scattering distribution in rad
-    end
-     
-    function Rutherford(E,Omega)
-        #This is valid for single Coulomb scattering events
-        Z_effH2O = 7.42 #effective atomic number of water
-        M_H2O = 18.02 #g/mol~=amu
-        Z_p = 1 #atomic number of protons
-        M_p = 1.007276466621 #unit amu/Da
-        e = 1.602176634*10^-19 #elementary electric charge
-        eps0 = 8.8541878128*10^-12 #elektrische Feldkonstante
-        sigma=zeros(size(E,1),size(Omega,1));
-        for i=1:size(E,1)
-             #sigma[i,:] = (4*pi*eps0).^-2 .* (Z_effH2O*Z_p*e^2/(4*E[i]))^2 .* (1 ./ (sind.(Omega./2).^4)) #in b/sr [Otter, G., Honecker, R. (1993). Klassische Atomphysik. In: Atome — Moleküle — Kerne. Vieweg+Teubner Verlag. https://doi.org/10.1007/978-3-322-94764-2_2]
-             sigma[i,:] =  1.3*10^-3 .*(Z_effH2O*Z_p/(4*E[i]))^2 .* (1 ./ (sind.(Omega./2).^4)) #in b/sr [Otter, G., Honecker, R. (1993). Klassische Atomphysik. In: Atome — Moleküle — Kerne. Vieweg+Teubner Verlag. https://doi.org/10.1007/978-3-322-94764-2_2]
-        end
-        N = 40;
-        xi = integrateRutherfordXS_Poly3D(N,Omega,E,sigma)
-        return xi
-    end
+    # function ScreenedRutherford(E,Omega)
+    #     #This is valid for single Coulomb scattering events
+    #     #screened crosssection transforms xs from center of mass to laboratory frame and accounts for singularity at cos(1)
+    #     #[Uikema, 2012]
+    #     c = 299792458 #speed of light in m/s
+    #     E = E .* 1.60217733e-13;
+    #     Z_effH2O = 7.42 #effective atomic number of water
+    #     M_H2O = 18.02 #atomic mass number of water g/mol~=amu 
+    #     mH2O_kg = 2.988e26 #H2O molecule mass in kg
+    #     N_H2O = 6.022e23 * 1 / M_H2O *(100)^3 #atomic density of water 
+    #     Z_p = 1 #atomic number of protons
+    #     M_p = 1.007276466621 # proton mass number unit amu/Da
+    #     mp_kg = 1.67262192e-27 #proton mass in kg
+    #     e = 1.602176634e-19 #elementary electric charge
+    #     eps0 = 8.8541878128e-12 #elektrische Feldkonstante
+    #     mu = cosd.(Omega)
+    #     sigma=zeros(size(E,1),size(Omega,1));
+    #     m0 =  1/(1/mH2O_kg + 1/mp_kg) #reduced proton mass
+    #     v02 = 2*E./mp_kg #squared initial velocity of protons 
+    #     alpha = 0.0072973525 #fine-structure constant
+    #     me =  9.1093837015e-31 #electron mass in kg
+    #     p = mp_kg .* sqrt.(v02) #momentum of protons 
 
-    function ScreenedRutherford(E,Omega)
-        #This is valid for single Coulomb scattering events
-        #screened crosssection transforms xs from center of mass to laboratory frame and accounts for singularity at cos(1)
-        #[Uikema, 2012]
-        c = 299792458 #speed of light in m/s
-        E = E .* 1.60217733*10^-13;
-        Z_effH2O = 7.42 #effective atomic number of water
-        M_H2O = 18.02 #atomic mass number of water g/mol~=amu 
-        mH2O_kg = 2.988*10^-26 #H2O molecule mass in kg
-        N_H2O = 6.022*10^23 * 1 / M_H2O *(100)^3 #atomic density of water 
-        Z_p = 1 #atomic number of protons
-        M_p = 1.007276466621 # proton mass number unit amu/Da
-        mp_kg = 1.67262192*10^-27 #proton mass in kg
-        e = 1.602176634*10^-19 #elementary electric charge
-        eps0 = 8.8541878128*10^-12 #elektrische Feldkonstante
-        mu = cosd.(Omega)
-        sigma=zeros(size(E,1),size(Omega,1));
-        m0 =  1/(1/mH2O_kg + 1/mp_kg) #reduced proton mass
-        v02 = 2*E./mp_kg #squared initial velocity of protons 
-        alpha = 0.0072973525 #fine-structure constant
-        me =  9.1093837015*10^-31 #electron mass in kg
-        p = mp_kg .* sqrt.(v02) #momentum of protons 
-
-        eta = ( Z_effH2O^(1/3) .* alpha .* me .*c ./ p ).^2 #lower bound for scattering angle due to screening of the nucleus
-        for i=1:size(E,1)
-            sigma[i,:] = ((1 .+ 2 .* mu ./ M_H2O .+ 1/M_H2O^2).^(3/2)) ./(1 .+ mu ./ M_H2O) .*((Z_effH2O .*Z_p .*(e^2)) ./(4 .*pi .*eps0 .* m0.*v02[i] )).^2 ./(1 .- mu .+ 2 .*eta[i]).^2 *10^4 #in [m^-2] [Uikema, 2012]
-        end
-        sigma = sigma .* N_H2O #Transfer to macroscopic cross section
-        E = E ./ (1.60217733*10^-13);
-        N = 100;
-        xi = integrateRutherfordXS_Poly3D(N,Omega,E,sigma)
-        #xi = integrateXS_Poly(N,mu,E,sigma)
-        return xi
-    end
-
-    function ScreenedRutherfordSep(E,Omega)
-        #This is valid for single Coulomb scattering events
-        #screened crosssection transforms xs from center of mass to laboratory frame and accounts for singularity at cos(1)
-        #[Uikema, 2012]
-        c = 299792458 #speed of light in m/s
-        E = E .* 1.60217733*10^-13;
-        Z_effH2O = 7.42 #effective atomic number of water
-        M_H2O = 18.02 #atomic mass number of water g/mol~=amu 
-        mH2O_kg = 2.988*10^-26 #H2O molecule mass in kg
-        N_H2O = 6.022*10^23 * 1 / M_H2O *(100)^3 #atomic density of water 
-        Z_p = 1 #atomic number of protons
-        M_p = 1.007276466621 # proton mass number unit amu/Da
-        mp_kg = 1.67262192*10^-27 #proton mass in kg
-        e = 1.602176634*10^-19 #elementary electric charge
-        eps0 = 8.8541878128*10^-12 #elektrische Feldkonstante
-        mu = cosd.(Omega)
-        sigma=zeros(size(E,1),size(Omega,1));
-        m0 =  1/(1/mH2O_kg + 1/mp_kg) #reduced proton mass
-        v02 = 2*E./mp_kg #squared initial velocity of protons 
-        alpha = 0.0072973525 #fine-structure constant
-        me =  9.1093837015*10^-31 #electron mass in kg
-        p = mp_kg .* sqrt.(v02) #momentum of protons 
-
-        eta = ( Z_effH2O^(1/3) .* alpha .* me .*c ./ p ).^2 #lower bound for scattering angle due to screening of the nucleus
-        for i=1:size(E,1)
-            sigma[i,:] = ((1 .+ 2 .* mu ./ M_H2O .+ 1/M_H2O^2).^(3/2)) ./(1 .+ mu ./ M_H2O) .*((Z_effH2O .*Z_p .*(e^2)) ./(4 .*pi .*eps0 .* m0.*v02[i] )).^2 ./(1 .- mu .+ 2 .*eta[i]).^2 *10^4 #in [m^-2] [Uikema, 2012]
-        end
-        sigma = sigma .* N_H2O #Transfer to macroscopic cross section
-        E = E ./ (1.60217733*10^-13);
-        N = 40;
-        xi = integrateRutherfordXS_Poly3D(N,Omega,E,sigma)
-        #xi = integrateXS_Poly(N,mu,E,sigma)
-        return xi
-    end
-
-    function CoulombOlbrant(E,Omega)
-        #This is valid for single Coulomb scattering events
-        #screened crosssection transforms xs from center of mass to laboratory frame and accounts for singularity at cos(1)
-        #[Uikema, 2012]
-        Z_effH2O = 7.42 #effective atomic number of water
-        M_H2O = 18.02 #atomic mass number of water g/mol~=amu 
-        M_H = 15.999 #atomic mass number (AMU)
-        mH2O_kg = 2.988*10^-26 #H2O molecule mass in kg
-        Z_p = 1 #atomic number of protons
-        Z_O = 8 #atomic number of oxygen
-        M_p = 1.007276466621 # proton mass number unit amu/Da
-        mu =  collect(-0.99:0.1:0.99) #cosd.(Omega) #cosine of scattering angle in center of mass system
-        s=0.5 #spin
-        #ratios of target to projectile masses
-        A_O = M_H/M_p
-        A_H = 1 #because here protons interact only with protons in nucleaus
-        sigma=zeros(size(E,1),size(mu,1));
-        sigma_cd=zeros(size(E,1),size(mu,1));
-        sigma_ci=zeros(size(E,1),size(mu,1));
-        sigma_ciLab=zeros(size(E,1),size(mu,1));
-
-        for i=1:size(E,1)
-            k_O = A_O/(1+A_O) * sqrt.(4.78453* 10^-6 * M_p .* E[i])
-            eta_O = Z_p * Z_O * sqrt.(2.48058 * 10^4 * M_p ./(E[i]))
-            sigma_cd[i,:] = eta_O.^2 ./(k_O.^2 .* (1 .- mu.^2))  #coulomb scattering for different particles (i.e. proton, O)
-            k_H = A_H/(1+A_H) * sqrt.(4.78453*10^-6 * M_p .* E[i])
-            eta_H = Z_p * Z_p * sqrt.(2.48058 * 10^4 * M_p ./(E[i]))
-            sigma_ci[i,:] = 2 .* eta_H.^2 ./(k_H.^2 .* (1 .- mu.^2)) .*  ((1 .+ mu.^2)./(1 .- mu.^2) .+ (-1)^(2*s) ./ (2*s+1) .* cos.(eta_H .* log.((1 .+mu)./(1 .-mu))))#coulomb scattering for same particles (i.e. proton-proton (projectile with proton in H core))
-        end
-         
-        N = 40;
-
-        sigma_ciInt = integrateXS_Poly(N,mu_Lab,E,sigma_ciLab)
-        #need transformation from  center of mass to laboratory system 
-        xi = sigma_cdInt .+ 2 .* sigma_ciInt
-        return xi
-    end
-
-end
-
-function ScreenedRutherfordAngle(E,Omega)
-    #This is valid for single Coulomb scattering events
-    #screened crosssection transforms xs from center of mass to laboratory frame and accounts for singularity at cos(1)
-    #[Uikema, 2012]
-    c = 299792458 #speed of light in m/s
-    E = E .* 1.60217733*10^-13;
-    Z_effH2O = 7.42 #effective atomic number of water
-    M_H2O = 18.02 #atomic mass number of water g/mol~=amu 
-    mH2O_kg = 2.988*10^-26 #H2O molecule mass in kg
-    N_H2O = 6.022*10^23 * 1 / M_H2O *(100)^3 #atomic density of water 
-    Z_p = 1 #atomic number of protons
-    M_p = 1.007276466621 # proton mass number unit amu/Da
-    mp_kg = 1.67262192*10^-27 #proton mass in kg
-    e = 1.602176634*10^-19 #elementary electric charge
-    eps0 = 8.8541878128*10^-12 #elektrische Feldkonstante
-    mu = cosd.(Omega)
-    sigma=zeros(size(E,1),size(Omega,1));
-    m0 =  1/(1/mH2O_kg + 1/mp_kg) #reduced proton mass
-    v02 = 2*E./mp_kg #squared initial velocity of protons 
-    alpha = 0.0072973525 #fine-structure constant
-    me =  9.1093837015*10^-31 #electron mass in kg
-    p = mp_kg .* sqrt.(v02) #momentum of protons 
-
-    eta = ( Z_effH2O^(1/3) .* alpha .* me .*c ./ p ).^2 #lower bound for scattering angle due to screening of the nucleus
-    for i=1:size(E,1)
-        sigma[i,:] = ((1 .+ 2 .* mu ./ M_H2O .+ 1/M_H2O^2).^(3/2)) ./(1 .+ mu ./ M_H2O) .*((Z_effH2O .*Z_p .*(e^2)) ./(4 .*pi .*eps0 .* m0.*v02[i] )).^2 ./(1 .- mu .+ 2 .*eta[i]).^2 *10^4 #in [m^-2] [Uikema, 2012]
-    end
-    sigma = sigma .* N_H2O #Transfer to macroscopic cross section
-    return sigma, mu
-end
+    #     eta = ( Z_effH2O^(1/3) .* alpha .* me .*c ./ p ).^2 #lower bound for scattering angle due to screening of the nucleus
+    #     for i=1:size(E,1)
+    #         sigma[i,:] = ((1 .+ 2 .* mu ./ M_H2O .+ 1/M_H2O^2).^(3/2)) ./(1 .+ mu ./ M_H2O) .*((Z_effH2O .*Z_p .*(e^2)) ./(4 .*pi .*eps0 .* m0.*v02[i] )).^2 ./(1 .- mu .+ 2 .*eta[i]).^2 *1e4 #in [m^-2] [Uikema, 2012]
+    #     end
+    #     sigma = sigma .* N_H2O #Transfer to macroscopic cross section
+    #     E = E ./ (1.60217733*e-13);
+    #     N = 100;
+    #     xi = integrateRutherfordXS_Poly3D(N,Omega,E,sigma)
+    #     #xi = integrateXS_Poly(N,mu,E,sigma)
+    #     return xi
+    # end
 
 function integrateXS_Poly(N,mu,E,sigma)
     nMu = length(mu);
@@ -3107,4 +2944,157 @@ function integrateXS_Poly(N,mu,E,sigma)
         end
     end
     return xi
+end
+
+function Sigma_eModels(E_MeV,mu_0,rho,comp_vector,model)
+    #Caution, so far only model 1 is validated!
+    #Gives the (macroscopic) elastic scatter cross section based on
+    #the energy, material and angle for different models specified by
+    #the model variable
+    #
+    #- E is energy in MeV
+    #- mu is cosine of the deflection angle
+    #- rho is density
+    #- comp_vector is vector with percentage wise composition (according to mass?) of following materials:
+    # H_mat  =  1
+    # C_mat  =  2
+    # N_mat  =  3
+    # O_mat  =  4
+    # Na_mat =  5
+    # Mg_mat =  6
+    # P_mat  =  7
+    # S_mat  =  8
+    # Cl_mat =  9
+    # Ar_mat = 10
+    # K_mat  = 11
+    # Ca_mat = 12
+    # --> e.g. for water comp_vector = [11.11, 0, 0, 88.89, 0, 0, 0, 0, 0, 0, 0, 0]
+    #- model is number in {0,1,2} to specify model for cross section computation 
+    # model = 0 -> 2.15 from Uilkema
+    # model = 1 -> Moliere
+    # model = 2 -> Geant
+    #
+    # The way this is calculated is:
+    #
+    #Note: Equation 2.15 from Uilkema is the microscopic elastic scatter
+    #       cs. In the proton transport equation one needs to
+    #       use the macroscopic cs. This is obtained as
+    #       Macroscopic cs = atomic density x microscopic cs
+    #Some physical constants:
+    m_p = 1.67262192e-27 #proton mass in kg
+    m_e =  9.1093837015e-31 #electron mass in kg
+    g_to_MeV_per_c_sq = 5.6095886e26 #factor to transform units from grams to MeV/c^2?
+    m_p = m_p * g_to_MeV_per_c_sq * 1000  #transform from kg to MeV/c^2
+    m_e = m_e * g_to_MeV_per_c_sq * 1000 #transform from kg to MeV/c^2
+    N_A = 6.02214076e23 #avogadro constant
+    alpha = 0.0072973525 #fine-structure constant (unitless)
+    ee = 1.602176634e-19 #elementary electric charge
+    eps0 = 8.8541878128e-12 #elektrische Feldkonstante ([A s/ Vm ]=[F/m])
+    h_bar_x_c = 197e-15 #MeV·m
+    #atomic numbers
+    Z_array = [1, 6, 7, 8, 11, 12, 15, 16, 17, 18, 19, 20]
+    #atomic weights
+    Mol_weights = [1.008, 12.011, 14.007, 15.999, 22.989, 24.305, 30.973, 32.060, 35.450, 39.948, 39.098, 40.078] #g/Mol;
+    #Ionization energies
+    #I_eV  = vcat(19.0, (11.2 .+ 11.7.*Z_array[2:6]), (52.8 .+ 8.71.*Z_array[7:12]))
+    #I_MeV = 1.0e-6 .* I_eV
+    #ln_I_MeV = log.(I_MeV)
+    Sigma_e = zeros(size(E_MeV,1),size(mu_0,1))
+
+    for j=1:size(mu_0,1)
+        N_i = rho .* (comp_vector ./ 100) .* N_A ./ Mol_weights
+        m_t_i = (Mol_weights ./ N_A) .* g_to_MeV_per_c_sq
+        m_t_i = m_t_i - Z_array * m_e
+        com_to_lab = (1.0 .+ mu_0[j]*2.0*m_p./m_t_i .+ (m_p./m_t_i).^2).^(3.0/2.0) ./ (1.0 .+ mu_0[j].*m_p./m_t_i)
+
+        if model == 0 
+            for i=1:size(E_MeV,1)
+                if E_MeV[i] == 0
+                    Sigma_e[i,j] = 0
+                else
+                    v_p = sqrt(2.0 * E_MeV[i] / m_p)
+
+                    m_0_i = m_p .* m_t_i ./ (m_p .+ m_t_i)
+                    eta_i = (Z_array.^(1.0/3.0) .* alpha .* m_e ./ (m_p * v_p)).^2
+                
+                    F1_i = (Z_array .* ee^2 ./ (4.0 * pi * eps0 * m_0_i * v_p^2)).^2
+                    F2_i = 1.0 ./ (1.0 .- mu_0[j] .+ 2.0 .* eta_i).^2
+                
+                    Sigma_e_i = (F1_i .* F2_i .* com_to_lab) .* N_i
+                    Sigma_e[i,j] = sum(Sigma_e_i)
+                end
+            end
+        elseif model == 1
+            for i=1:size(E_MeV,1)
+                if E_MeV[i] == 0
+                    Sigma_e[i,j] = 0
+                else
+                    gamma = E_MeV[i]  / m_p + 1.0
+                    p_x_c = m_p * sqrt(gamma^2 - 1.0)
+
+                    #alpha squared = (z Z / 137 * beta)^2 with z = 1 for protons
+                    alpha_sq = (Z_array .* alpha).^2 ./ (1.0 .- 1.0 ./ gamma.^2)
+
+                    #(1 / k)^2 = (h_bar / p)^2 = (h_bar c / p c)^2
+                    inv_k_sq = (h_bar_x_c / p_x_c)^2
+
+                    #Shielding factor
+                    chi_0_sq = (1.13 .* alpha .* Z_array.^(1.0/3.0) .* m_e ./ p_x_c).^2
+                    chi_alpha_sq = chi_0_sq .* (1.13 .+ 3.76 .* alpha_sq)
+
+                    #Factor that accounts for electronic screening
+                    q_screen = 1.0 ./ (1.0 .- mu_0[j] .+ chi_alpha_sq).^2
+
+                    Sigma_e_i = 4.0 .* N_i .* alpha_sq .* inv_k_sq .* q_screen
+                    Sigma_e_i = Sigma_e_i .* com_to_lab
+                    Sigma_e[i,j] = sum(Sigma_e_i)
+                end
+            end
+        elseif model == 2
+            for i=1:size(E_MeV,1)
+                if E_MeV[i] == 0
+                    Sigma_e[i,j] = 0
+                else
+                    #gamma = E/(m_p c^2). m_p in units of MeV/c^2 -> gamma dimensionless
+                    gamma = E_MeV[i] / m_p + 1.0
+
+                    #momentum times speed of light
+                    p_x_c = m_p * sqrt(gamma^2 - 1.0)
+
+                    #alpha squared = (z Z / 137 * beta)^2 with z = 1 for protons
+                    alpha_sq = (Z_array .* alpha).^2 ./ (1.0 .- 1.0./gamma.^2)
+
+                    #(1 / k)^2 = (h_bar / p)^2 = (h_bar c / p c)^2
+                    inv_k_sq = (h_bar_x_c/p_x_c)^2
+
+                    #Shielding factor
+                    chi_0_sq = (1.13 .* alpha .* Z_array.^(1.0/3.0) .* m_e ./ p_x_c).^2
+                    chi_alpha_sq = chi_0_sq .* (1.13 .+ 3.76 .* alpha_sq)
+
+                    #Factor that accounts for electronic screening
+                    q_screen = 1.0./(1.0 .- mu_0[j] .+ chi_alpha_sq).^2
+
+                    #Factor for nuclear size
+                    R_N = 1.27 .* Mol_weights.^(0.27)
+                    q_N = 1.0 ./ R_N
+                    a_A = 3.0 .* q_N.^2 ./ E_MeV[i]^2
+
+                    q_p = 232.0 # MeV
+                    a_p = 3.0 * q_p^2/ E_MeV[i]^2
+                    F_N = (1.0 .- 1.0 ./ Z_array) .* exp.(-(1.0 .- mu_0[j]).^2 ./ a_A.^2) .+ 1.0 ./ Z_array .* exp(-(1.0 .- mu_0[j]).^2 ./ a_p.^2)
+
+                    Sigma_e_i = 4.0 * N_i .* alpha_sq .* inv_k_sq .* q_screen .* F_N
+                    Sigma_e_i = Sigma_e_i .* com_to_lab
+                    Sigma_e[i,j]  = sum(Sigma_e_i)
+                end
+            end
+        else
+            println("No valid model number entered!")
+        end 
+    end
+    #Sigma_e = integrateRutherfordXS_Poly3D(N,arccosd.(mu_0),E_MeV,Sigma_e)
+    N = 40;
+    Sigma_e = integrateXS_Poly(N,mu_0,E_MeV,Sigma_e)
+    return Sigma_e
+end
 end
