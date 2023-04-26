@@ -2807,7 +2807,7 @@ struct MaterialParametersProtons
          E_rest = 938.26 #MeV proton rest energy
          #sigmaEl_OInt_ICRU = Proton_Oxygen_nuclear(E_tab_PSTAR,Omega)
          sigmaEl_tab_pp = Proton_Proton_nuclear(E_tab_PSTAR,Omega);
-         sigma_ce = Sigma_eModels(E_tab_PSTAR,cosd.(Omega),0,[11.11, 0, 0, 88.89, 0, 0, 0, 0, 0, 0, 0, 0],0)
+         sigma_ce = Sigma_eModels(E_tab_PSTAR,cosd.(Omega),1,[11.11, 0, 0, 88.89, 0, 0, 0, 0, 0, 0, 0, 0],0)
          E_tab_PSTAR= dropdims(E_tab_PSTAR, dims = tuple(findall(size(E_tab_PSTAR) .== 1)...)).+ E_rest
          E_sigmaTab= E_sigmaTab .+ E_rest
          S_tab_PSTAR = dropdims(S_tab_PSTAR, dims = tuple(findall(size(S_tab_PSTAR) .== 1)...))
