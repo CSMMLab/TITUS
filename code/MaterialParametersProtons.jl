@@ -2807,7 +2807,7 @@ struct MaterialParametersProtons
          E_rest = 938.26 #MeV proton rest energy
          #sigmaEl_OInt_ICRU = Proton_Oxygen_nuclear(E_tab_PSTAR,Omega)
          sigmaEl_tab_pp = Proton_Proton_nuclear(E_tab_PSTAR,Omega);
-         sigma_ce = Sigma_eModels(E_tab_PSTAR,cosd.(Omega),1,[11.11, 0, 0, 88.89, 0, 0, 0, 0, 0, 0, 0, 0],0) #Caution, so far only model 1 is validated!
+         sigma_ce = Sigma_eModels(E_tab_PSTAR,cosd.(Omega),0,[11.11, 0, 0, 88.89, 0, 0, 0, 0, 0, 0, 0, 0],0)
          E_tab_PSTAR= dropdims(E_tab_PSTAR, dims = tuple(findall(size(E_tab_PSTAR) .== 1)...)).+ E_rest
          E_sigmaTab= E_sigmaTab .+ E_rest
          S_tab_PSTAR = dropdims(S_tab_PSTAR, dims = tuple(findall(size(S_tab_PSTAR) .== 1)...))
@@ -2888,7 +2888,7 @@ struct MaterialParametersProtons
         xi = integrateRutherfordXS_Poly3D(N,Omega_sigmaElTab,E,sigma)
         return xi
     end
-
+ 
     # function ScreenedRutherford(E,Omega)
     #     #This is valid for single Coulomb scattering events
     #     #screened crosssection transforms xs from center of mass to laboratory frame and accounts for singularity at cos(1)
@@ -2897,7 +2897,7 @@ struct MaterialParametersProtons
     #     E = E .* 1.60217733e-13;
     #     Z_effH2O = 7.42 #effective atomic number of water
     #     M_H2O = 18.02 #atomic mass number of water g/mol~=amu 
-    #     mH2O_kg = 2.988e26 #H2O molecule mass in kg
+    #     mH2O_kg = 2.988e-26 #H2O molecule mass in kg
     #     N_H2O = 6.022e23 * 1 / M_H2O *(100)^3 #atomic density of water 
     #     Z_p = 1 #atomic number of protons
     #     M_p = 1.007276466621 # proton mass number unit amu/Da
@@ -2914,10 +2914,10 @@ struct MaterialParametersProtons
 
     #     eta = ( Z_effH2O^(1/3) .* alpha .* me .*c ./ p ).^2 #lower bound for scattering angle due to screening of the nucleus
     #     for i=1:size(E,1)
-    #         sigma[i,:] = ((1 .+ 2 .* mu ./ M_H2O .+ 1/M_H2O^2).^(3/2)) ./(1 .+ mu ./ M_H2O) .*((Z_effH2O .*Z_p .*(e^2)) ./(4 .*pi .*eps0 .* m0.*v02[i] )).^2 ./(1 .- mu .+ 2 .*eta[i]).^2 *1e4 #in [m^-2] [Uikema, 2012]
+    #         sigma[i,:] = ((1 .+ 2 .* mu ./ M_H2O .+ 1/M_H2O^2).^(3/2)) ./(1 .+ mu ./ M_H2O) .*((Z_effH2O .*Z_p .*(e^2)) ./(4 .*pi .*eps0 .* m0.*v02[i] )).^2 ./(1 .- mu .+ 2 .*eta[i]).^2 #in [m^-2] [Uikema, 2012]
     #     end
     #     sigma = sigma .* N_H2O #Transfer to macroscopic cross section
-    #     E = E ./ (1.60217733*e-13);
+    #     E = E ./ (1.60217733e-13);
     #     N = 100;
     #     xi = integrateRutherfordXS_Poly3D(N,Omega,E,sigma)
     #     #xi = integrateXS_Poly(N,mu,E,sigma)
@@ -2947,7 +2947,7 @@ function integrateXS_Poly(N,mu,E,sigma)
 end
 
 function Sigma_eModels(E_MeV,mu_0,rho,comp_vector,model)
-    #Caution, so far only model 1 is validated!
+   #Caution, so far only model 1 is validated!
     #Gives the (macroscopic) elastic scatter cross section based on
     #the energy, material and angle for different models specified by
     #the model variable
@@ -2981,16 +2981,16 @@ function Sigma_eModels(E_MeV,mu_0,rho,comp_vector,model)
     #       use the macroscopic cs. This is obtained as
     #       Macroscopic cs = atomic density x microscopic cs
     #Some physical constants:
-    m_p = 1.67262192e-27 #proton mass in kg
-    m_e =  9.1093837015e-31 #electron mass in kg
-    g_to_MeV_per_c_sq = 5.6095886e26 #factor to transform units from grams to MeV/c^2?
-    m_p = m_p * g_to_MeV_per_c_sq * 1000  #transform from kg to MeV/c^2
-    m_e = m_e * g_to_MeV_per_c_sq * 1000 #transform from kg to MeV/c^2
+    #m_p = 1.67262192e-27 #proton mass in kg
+    #m_e =  9.1093837015e-31 #electron mass in kg
+    g_to_MeV_per_c_sq = 1.0/(1.78266192e-36*1.0e9) #factor to transform units from grams to MeV/c^2?
+    m_p = 938.2720813  #MeV/c^2
+    m_e = 0.5109989461 #MeV/c^2
     N_A = 6.02214076e23 #avogadro constant
     alpha = 0.0072973525 #fine-structure constant (unitless)
     ee = 1.602176634e-19 #elementary electric charge
-    eps0 = 8.8541878128e-12 #elektrische Feldkonstante ([A s/ Vm ]=[F/m])
-    h_bar_x_c = 197e-15 #MeV·m
+    eps0 = 1.418284572502546e-26 #elektrische Feldkonstante ([A s/ Vm ]=[F/m])
+    h_bar_x_c = hbc = 0.19732697e-10 #MeV·m
     #atomic numbers
     Z_array = [1, 6, 7, 8, 11, 12, 15, 16, 17, 18, 19, 20]
     #atomic weights
