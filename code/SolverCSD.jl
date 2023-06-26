@@ -2890,7 +2890,7 @@ function CudaFullSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {
     for n=2:nEnergies
         # compute scattering coefficients at current energy
         sigmaS = T.(SigmaAtEnergy(obj.csd,energy[n]))# .* sqrt.(obj.gamma));
-        writedlm(io, sigmaS[1])
+        #writedlm(io, sigmaS[1])
         # set boundary conditions in psiCPU
         #SetBCs!(obj, energy[n], n,psiCPU);
 
@@ -3058,7 +3058,7 @@ function CudaFullSolveFirstCollisionSourceDLR4thOrder(obj::SolverCSD{T}) where {
         
         next!(prog) # update progress bar
     end
-    close(io)   
+    #close(io)   
     U,Sigma,V = svd!(Matrix(S));
 
     # return solution and dose
