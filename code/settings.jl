@@ -235,6 +235,36 @@ mutable struct Settings
             y0 = 1.0*d;
             Omega1 = -1.0;
             Omega3 = -1.0;
+        elseif problem =="IMRT"
+            a = 0; # left boundary
+            b = 6; # right boundary
+            c = 0; # lower boundary
+            d = 18; # upper boundary
+            e = 0;
+            f = 6;
+            sigmaX = 0.3440;
+            sigmaZ = 0.3440; 
+            sigmaS = 1.0;
+            sigmaA = 0.0;  
+            sigmaE = 0.001;
+            cfl = 0.99/sqrt(2)*40.5* 1.3;  
+            eKin = 134.68;
+            eMax = eKin+ eRest
+            sigmaY = sqrt((0.0022*1.77*(eKin^0.77))^2*(0.01*eKin));
+            adaptIndex = 0;
+            epsAdapt = 0.3;#0.5;
+            Omega1 = 0.0;
+            Omega2 = 1.0;
+            Omega3 = 0.0;
+            x0 = 0.5 * b;
+            y0 = 0.5;
+            z0 = 0.5 * f ;
+            
+            
+            #epsAdapt = 1e-1;
+            #density[Int(floor(NCellsX*0.5)):end,:] .= 5.0; #beam hits interface
+            #density[:,Int(floor(NCellsX*0.56)):end] .= 5.0; #beam perpendicular to interface
+            #density[:,Int(floor(NCellsY*0.75)):Int(floor(NCellsY*0.8))] .= 5.0; #inserted box of high density 
         elseif problem =="liver"
             #img = Float64.(Gray.(load("phantom.png")))
             pathlib = pyimport("pathlib")

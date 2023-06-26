@@ -160,3 +160,34 @@ function Ten2Vec(mat::Array{T,3}) where {T<:AbstractFloat}
     return v;
 end
 
+function tensorizePointSet(x, y)
+    #assume x and y are vectors, then
+    #z is the matrix of points that contains x_i y_j for all combinations
+
+    n = length(x)
+    m = length(y)
+    z = zeros(n*m,2);
+   
+    for i = 1:n
+        for j = 1:m
+            z[(i-1)*n+j,:]= collect((x[i], y[j]));
+        end
+    end
+    return z;
+end
+    
+function tensorizeWeightSet(x, y)
+   # assume x and y are vectors, then
+   # z is the matrix of weights that contains x_i*y_j for all combinations
+    n = length(x)
+    m = length(y)
+    z = zeros(n*m,);
+    
+    for i = 1:length(x)
+        for j = 1:length(y)
+            z[(i-1)*n+j] = x[i]*y[j];
+        end
+    end
+    return z;
+end
+    

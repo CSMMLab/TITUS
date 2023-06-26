@@ -13,15 +13,18 @@ close("all")
 
 info = "CUDA"
 
-nx = Int(floor(2 * 50));
-ny = Int(floor(8 * 50));
-nz = Int(floor(2 * 50));
-problem ="validation" #"2DHighD"
+nx = Int(floor(6 * 10));
+ny = Int(floor(18 * 10));
+nz = Int(floor(6 * 10));
+# nx = Int(floor(2 * 50));
+# ny = Int(floor(8 * 50));
+# nz = Int(floor(2 * 50));
+problem = "IMRT" #"2DHighD"
 particle = "Protons"
-s = Settings(nx,ny,nz,5,problem, particle);
+s = Settings(nx,ny,nz,8,problem, particle);
 rhoMin = minimum(s.density);
 
-if s.problem == "validation"
+if s.problem == "validation" || s.problem =="IMRT"
     nx_MC = 300;
     doseRef = zeros(nx_MC,nx_MC,nx_MC);
     if isfile("validationData/proton_validation3D_dose.bin")
