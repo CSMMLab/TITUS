@@ -192,7 +192,7 @@ struct MaterialParametersProtons
             S_tab_PSTAR = get_S(E_tab_PSTAR,rho,comp_vector,"testCase_CSD/data/proton_S_data_topas") # p_S_Bethe(E_tab_PSTAR,rho,comp_vector)
             E_tab_PSTAR= dropdims(E_tab_PSTAR, dims = tuple(findall(size(E_tab_PSTAR) .== 1)...)).+ E_rest
         end
-        
+        println("Computed cross sections and stopping powers")
         new(S_tab_PSTAR,E_tab_PSTAR,sigma_ce, sigma_xi,comp_vector);
      end
 

@@ -168,7 +168,7 @@ mutable struct solverCSD{T<:AbstractFloat}
                 end
             end
             # setup quadrature
-            qorder = 22; 
+            qorder = 1; 
             if iseven(qorder) qorder += 1; end # make quadrature odd to ensure direction (0,1,0) is contained
             qtype = 1; # Type must be 1 for "standard" or 2 for "octa" and 3 for "ico".
             Q = Quadrature(qorder,qtype);
@@ -300,10 +300,12 @@ function solve_rankAdaptive(obj::solverCSD{T}, model::String="Boltzmann") where 
     Id = Diagonal(ones(T,N));
     idx = Base.unique(i -> obj.densityVec[i], 1:length(obj.densityVec))
     idxK = Vector{Vector{Int64}}([])
-    Threads.@threads for k=1:length(idx)
+    el_time = @elapsed begin
+    for k=1:length(idx)
     push!(idxK,findall(i->(i==obj.densityVec[idx[k]]),obj.densityVec))
     end
-
+    end
+    println("Time for material indexing = $el_time")
     rVec = r .* ones(2,nEnergies)
     t = 0;
  
@@ -358,9 +360,9 @@ function solve_rankAdaptive(obj::solverCSD{T}, model::String="Boltzmann") where 
     S_CPU = zeros(T,nx,ny,nz)
     wMat = T.(CuArray(matComp(obj.settings.densityHU[:]).*obj.settings.density[:]'./100));
     Nmat = size(wMat,1)
-    #prog = Progress(nEnergies-1,1)
+    prog = Progress(nEnergies-1,1)
     CUDA.reclaim()
-
+    println("Starting energy loop")
     for n=2:nEnergies
         dE = energy[n-1] - energy[n]
         dEGrid = energy[n-1] - energy[n]
@@ -519,7 +521,7 @@ function solve_rankAdaptive(obj::solverCSD{T}, model::String="Boltzmann") where 
         dose .+= dEGrid * (X*S*(W'*e1)+psi*M1) * ∫Y₀⁰dΩ#add density to compute dose instead of energy dep.
         # truncate
         X, S, W = truncateCUDA(obj,T.(X),T.(S),T.(W));
-        #next!(prog) # update progress bar
+        next!(prog) # update progress bar
     end
     #normalize
     dose = dose./maximum(dose)

@@ -45,7 +45,7 @@ include("solverCSD.jl")
 close("all")
     
 info = "CUDA"
-Nx = 20+3; Ny = 20+3; Nz =80+3;
+Nx = 20+3; Ny = 20+3; Nz =20+3;
 nPN = 35;
 r = 5;
 epsAdapt = 0.1;

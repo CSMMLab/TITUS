@@ -351,9 +351,9 @@ mutable struct Settings
             NCellsY = tmp["cubeDim"][2]
             NCellsZ = tmp["cubeDim"][3]
 
-            dx = tmp["resolution"]["x"]/10 # divide by 10 bc of unit conversion mm -> cm
-            dy = tmp["resolution"]["y"]/10
-            dz = tmp["resolution"]["z"]/10
+            dx = tmp["resolution"]["x"]/10/4 # divide by 10 bc of unit conversion mm -> cm, divide by 4 for smaller test case
+            dy = tmp["resolution"]["y"]/10/4
+            dz = tmp["resolution"]["z"]/10/4
             a = 0.0; # left boundary
             b = NCellsX * dx/2; # right boundary
             c = 0.0; # lower boundary
@@ -367,9 +367,9 @@ mutable struct Settings
             close(file)
             w_e = [1, 1];
              if particle == "Protons"
-                mu_e = [90, 90]
+                mu_e = [60, 60]
             else
-                mu_e = [10,10]
+                mu_e = [5,5]
             end
             N_E = length(mu_e)
             sigmaE = mu_e * 1/100; #set to 1% of the beam energy
@@ -504,8 +504,8 @@ mutable struct Settings
         else
             cfl = 0.6 * minimum(mu_e) #*minimum(density)# CFL condition
         end
-        #println("cfl = $cfl")
-        dE = cfl*min(dx,dy,dz)*minimum(density);
+        println("cfl = $cfl")
+        dE = cfl*min(dx,dy,dz)#*minimum(density);
         sigmaE = maximum(sigmaE)
         # build class
         new(Nx,Ny,Nz,NCellsX,NCellsY,NCellsZ,a,b,c,d,e,f,dx,dy,dz,eMax,eMin,eRest,dE,cfl,N_E,nPN,x,xMid,y,yMid,z,zMid,problem,particle,x0,y0,z0,Omega1,Omega2,Omega3,OmegaMin,densityMin,sigmaX,sigmaY,sigmaZ,sigmaE,sigmaT,sigmaS,density,densityHU,waterEq,r,rMax,gridSize,gridWidth,gridScale,epsAdapt,adaptIndex,model,order);

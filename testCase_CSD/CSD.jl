@@ -58,6 +58,7 @@ struct CSD{T<:AbstractFloat}
         if ~iseven(nEnergies)
             nEnergies = nEnergies + 1;
         end
+        println("number energies = $nEnergies")
         eGrid = collect(range(minE,maxE,length=nEnergies))[end:-1:1]
         #eGrid = collect(exp.(range(log(minE),log(maxE),length=nEnergies)))[end:-1:1]
         dEGrid=zeros(length(eGrid)-1)
