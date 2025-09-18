@@ -450,6 +450,79 @@ function generateRadTree2D(s::Settings)
 end
 
 # Create original tree
+function generateRadTree3D(s::Settings)
+    Q = []
+    R = []
+    QUQ = []
+    RUQ = []
+    n = s.NCells^3
+    nΩ = GlobalIndex( s.nPN, s.nPN ) + 1
+    nξ = s.Nxi
+    nη = s.Neta
+    r = s.r
+    input = zeros(n, r)
+    input[:, 1] .= vec(IC(s, s.xMid, s.xMid, s.xMid))
+    Qᵢ, Rᵢ = np.linalg.qr(input, mode="reduced");
+    push!(Q, Qᵢ); push!(R, Rᵢ)
+    subleaf1 = TTN(1, Qᵢ) # space
+
+    input = zeros(nΩ, r)
+    input[1, 1] = 1
+    Qᵢ, Rᵢ = np.linalg.qr(input, mode="reduced");
+    push!(Q, Qᵢ); push!(R, Rᵢ)
+    subleaf2 = TTN(2, Qᵢ) # angle (moments)
+
+    input = ones(nξ, r)
+    Qᵢ, Rᵢ = np.linalg.qr(input, mode="reduced");
+    push!(QUQ, Qᵢ); push!(RUQ, Rᵢ)
+    subleaf3 = TTN(3, Qᵢ) # ξ
+
+    input = ones(nη, r)
+    Qᵢ, Rᵢ = np.linalg.qr(input, mode="reduced");
+    push!(QUQ, Qᵢ); push!(RUQ, Rᵢ)
+    subleaf4 = TTN(4, Qᵢ) # η
+
+    input = zeros(r, r, r)
+    input[1, 1, 1] = 1.0
+    for (i, Rᵢ) in enumerate(R)
+        input = Rᵢ * tenmat(input, i+1)
+        input = matten(input, i+1, [r, r, r])
+    end
+    Q₁, R₁ = np.linalg.qr(tenmat(input, 1)', mode="reduced");
+    Q₁ = matten(Q₁', 1, [r, r, r])
+    leaf1 = TTN(3, Q₁)
+
+    input = zeros(r, r, r)
+    input[1, 1, 1] = 1.0
+    for (i, Rᵢ) in enumerate(RUQ)
+        input = Rᵢ * tenmat(input, i+1)
+        input = matten(input, i+1, [r, r, r])
+    end
+    Q₂, R₂ = np.linalg.qr(tenmat(input, 1)', mode="reduced");
+    Q₂ = matten(Q₂', 1, [r, r, r])
+    leaf2 = TTN(2, Q₂)
+
+    Rroot = [R₁, R₂]
+    input = zeros(1, r, r)
+    input[1, 1, 1] = 1.0
+    for (i, Rᵢ) in enumerate(Rroot)
+        input = Rᵢ * tenmat(input, i+1)
+        input = matten(input, i+1, [1, r, r])
+    end
+    root = TTN(1, input)
+    root.S = ones(Float64,1,1)
+    root.VᵀFV = ones(Float64,1,1)
+
+    add_leaf!(root, leaf1)
+    add_leaf!(root, leaf2)
+    add_leaf!(leaf1, subleaf1)
+    add_leaf!(leaf1, subleaf2)
+    add_leaf!(leaf2, subleaf3)
+    add_leaf!(leaf2, subleaf4)
+    return root
+end
+
+# Create original tree
 function generateSource(s::Settings, source)
     Q = []
     R = []

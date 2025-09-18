@@ -2,11 +2,27 @@ function vectorIndex(nx,i,j)
     return (i-1)*nx + j;
 end
 
+function vectorIndex(nx, ny, i, j, k)
+    return (k-1) * nx * ny + (j-1) * nx + i
+end
+
 function Vec2Mat(nx,ny,v)
     m = zeros(nx,ny);
     for i = 1:nx
         for j = 1:ny
             m[i,j] = v[(i-1)*ny + j]
+        end
+    end
+    return m;
+end
+
+function Vec2Ten(nx,ny,nz,v)
+    m = zeros(nx,ny,nz);
+    for i = 1:nx
+        for j = 1:ny
+            for k = 1:nz
+                m[i,j,k] = v[vectorIndex(nx, ny, i, j, k)]
+            end
         end
     end
     return m;
@@ -25,7 +41,7 @@ function Mat2Vec(m)
 end
 
 ## Extra functions
-function rk(f, Y, h, order=1)
+function rk(f, Y, h, order=4)
     if order == 1
         return Y .+ h*f(Y)
     elseif order == 2

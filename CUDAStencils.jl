@@ -1,16 +1,12 @@
 __precompile__
 
-using ProgressMeter
-using LinearAlgebra
-using LegendrePolynomials
-using QuadGK
 using SparseArrays
-using SphericalHarmonicExpansions, SphericalHarmonics, TypedPolynomials, GSL
-using MultivariatePolynomials
-using PyCall
-np = pyimport("numpy")
 
 include("utils.jl")
+
+function vectorIndex(nx, ny, i, j, k)
+    return (k-1) * nx * ny + (j-1) * nx + i
+end
 
 function stencil_weights(x::AbstractVector{<:Real}, x₀::Real, m::Integer) #derivation: https://github.com/mitmath/matrixcalc/blob/iap2024/psets/pset2sol.pdf (problem 2d)
     ℓ = 0:length(x)-1
@@ -19,157 +15,23 @@ function stencil_weights(x::AbstractVector{<:Real}, x₀::Real, m::Integer) #der
     return A \ (ℓ .== m) # vector of weights w
 end
 
-struct Stencil
-    Dxx::SparseMatrixCSC{Float64,Int64}
-    Dyy::SparseMatrixCSC{Float64,Int64}
-    Dx::SparseMatrixCSC{Float64,Int64}
-    Dy::SparseMatrixCSC{Float64,Int64}
+struct UpwindStencil3DCUDA
+    D⁺₁::CuSparseMatrixCSC{T, Int32}
+    D⁺₂::CuSparseMatrixCSC{T, Int32}
+    D⁺₃::CuSparseMatrixCSC{T, Int32}
+    D⁻₁::CuSparseMatrixCSC{T, Int32}
+    D⁻₂::CuSparseMatrixCSC{T, Int32}
+    D⁻₃::CuSparseMatrixCSC{T, Int32}
 
-    # constructor
-    function Stencil(settings, nx, ny)
-        # setup stencil matrix
-        Dxx = spzeros(nx * ny, nx * ny)
-        Dyy = spzeros(nx * ny, nx * ny)
-        Dx = spzeros(nx * ny, nx * ny)
-        Dy = spzeros(nx * ny, nx * ny)
-
-        Δy = settings.Δx
-        Δx = settings.Δx
-
-        # setup index arrays and values for allocation of stencil matrices
-        # setup index arrays and values for allocation of stencil matrices
-        II = zeros(3 * (nx - 2) * (ny - 2))
-        J = zeros(3 * (nx - 2) * (ny - 2))
-        vals = zeros(3 * (nx - 2) * (ny - 2))
-        counter = -2
-
-        for i = 2:nx-1
-            for j = 2:ny-1
-                counter = counter + 3
-                # x part
-                index = vectorIndex(nx, i, j)
-                indexPlus = vectorIndex(nx, i + 1, j)
-                indexMinus = vectorIndex(nx, i - 1, j)
-
-                II[counter+1] = index
-                J[counter+1] = index
-                vals[counter+1] = 2.0 / 2 / Δx
-                if i > 1
-                    II[counter] = index
-                    J[counter] = indexMinus
-                    vals[counter] = -1 / 2 / Δx
-                end
-                if i < nx
-                    II[counter+2] = index
-                    J[counter+2] = indexPlus
-                    vals[counter+2] = -1 / 2 / Δx
-                end
-            end
-        end
-        Dxx = sparse(II, J, vals, nx * ny, nx * ny)
-
-        II .= zeros(3 * (nx - 2) * (ny - 2))
-        J .= zeros(3 * (nx - 2) * (ny - 2))
-        vals .= zeros(3 * (nx - 2) * (ny - 2))
-        counter = -2
-
-        for i = 2:nx-1
-            for j = 2:ny-1
-                counter = counter + 3
-                # y part
-                index = vectorIndex(nx, i, j)
-                indexPlus = vectorIndex(nx, i, j + 1)
-                indexMinus = vectorIndex(nx, i, j - 1)
-
-                II[counter+1] = index
-                J[counter+1] = index
-                vals[counter+1] = 2.0 / 2 / Δy
-
-                if j > 1
-                    II[counter] = index
-                    J[counter] = indexMinus
-                    vals[counter] = -1 / 2 / Δy
-                end
-                if j < ny
-                    II[counter+2] = index
-                    J[counter+2] = indexPlus
-                    vals[counter+2] = -1 / 2 / Δy
-                end
-            end
-        end
-        Dyy = sparse(II, J, vals, nx * ny, nx * ny)
-
-        II = zeros(2 * (nx - 2) * (ny - 2))
-        J = zeros(2 * (nx - 2) * (ny - 2))
-        vals = zeros(2 * (nx - 2) * (ny - 2))
-        counter = -1
-
-        for i = 2:nx-1
-            for j = 2:ny-1
-                counter = counter + 2
-                # x part
-                index = vectorIndex(nx, i, j)
-                indexPlus = vectorIndex(nx, i + 1, j)
-                indexMinus = vectorIndex(nx, i - 1, j)
-
-                if i > 1
-                    II[counter] = index
-                    J[counter] = indexMinus
-                    vals[counter] = -1 / 2 / Δx
-                end
-                if i < nx
-                    II[counter+1] = index
-                    J[counter+1] = indexPlus
-                    vals[counter+1] = 1 / 2 / Δx
-                end
-            end
-        end
-        Dx = sparse(II, J, vals, nx * ny, nx * ny)
-
-        II .= zeros(2 * (nx - 2) * (ny - 2))
-        J .= zeros(2 * (nx - 2) * (ny - 2))
-        vals .= zeros(2 * (nx - 2) * (ny - 2))
-        counter = -1
-
-        for i = 2:nx-1
-            for j = 2:ny-1
-                counter = counter + 2
-                # y part
-                index = vectorIndex(nx, i, j)
-                indexPlus = vectorIndex(nx, i, j + 1)
-                indexMinus = vectorIndex(nx, i, j - 1)
-
-                if j > 1
-                    II[counter] = index
-                    J[counter] = indexMinus
-                    vals[counter] = -1 / 2 / Δy
-                end
-                if j < ny
-                    II[counter+1] = index
-                    J[counter+1] = indexPlus
-                    vals[counter+1] = 1 / 2 / Δy
-                end
-            end
-        end
-        Dy = sparse(II, J, vals, nx * ny, nx * ny)
-        
-        new(Dxx, Dyy, Dx, Dy)
-    end
-end
-
-struct UpwindStencil3D
-    D⁺₁::SparseMatrixCSC{Float64,Int32}
-    D⁺₂::SparseMatrixCSC{Float64,Int32}
-    D⁺₃::SparseMatrixCSC{Float64,Int32}
-    D⁻₁::SparseMatrixCSC{Float64,Int32}
-    D⁻₂::SparseMatrixCSC{Float64,Int32}
-    D⁻₃::SparseMatrixCSC{Float64,Int32}
-
-    function UpwindStencil3D(settings::Settings, nx, ny, nz, order::Int=2)
-        Δx, Δy, Δz = settings.Δx, settings.Δx, settings.Δx
+    function UpwindStencil3DCUDA(settings::Settings, order::Int=2)
+        nx, ny, nz = settings.NCellsX, settings.NCellsY, settings.NCellsZ
+        Δx, Δy, Δz = settings.dx, settings.dy, settings.dz
+        density = ones(size(settings.density,1),size(settings.density,2),size(settings.density,3))
         x_coords = settings.xMid
-        y_coords = settings.xMid
-        z_coords = settings.xMid
+        y_coords = settings.yMid
+        z_coords = settings.zMid
+
+        # density = settings.density 
         
         D⁺₁ = spzeros(nx*ny*nz, nx*ny*nz)
         D⁺₂ = spzeros(nx*ny*nz, nx*ny*nz)
@@ -193,14 +55,14 @@ struct UpwindStencil3D
 
                 II[counter+1] = index
                 J[counter+1] = index
-                vals[counter+1] = 1 / Δx 
+                vals[counter+1] = 1 / Δx / density[i, j, k]
                 if i > 1
                     II[counter] = index
                     J[counter] = indexMinus
-                    vals[counter] = -1 / Δx 
+                    vals[counter] = -1 / Δx / density[i-1, j, k]
                 end
             end
-            D⁺₁ = sparse(II, J, vals, nx*ny*nz, nx*ny*nz);
+            D⁺₁ = CuSparseMatrixCSC(sparse(II, J, T.(vals), nx*ny*nz, nx*ny*nz));
 
             # Set up D⁺₂
             II = zeros(2*(nx-2)*(ny-2)*(nz-2)); J = zeros(2*(nx-2)*(ny-2)*(nz-2)); vals = zeros(2*(nx-2)*(ny-2)*(nz-2))
@@ -214,14 +76,14 @@ struct UpwindStencil3D
                 indexMinus = vectorIndex(nx, ny, i, j-1, k)
                 II[counter+1] = index
                 J[counter+1] = index
-                vals[counter+1] = 1 / Δy 
+                vals[counter+1] = 1 / Δy / density[i, j, k]
                 if j > 1
                     II[counter] = index
                     J[counter] = indexMinus
-                    vals[counter] = -1 / Δy 
+                    vals[counter] = -1 / Δy / density[i, j-1, k]
                 end
             end
-            D⁺₂ = sparse(II, J, vals, nx*ny*nz, nx*ny*nz);
+            D⁺₂ = CuSparseMatrixCSC(sparse(II, J, T.(vals), nx*ny*nz, nx*ny*nz));
             
             # Set up D⁺₃
             II = zeros(2*(nx-2)*(ny-2)*(nz-2)); J = zeros(2*(nx-2)*(ny-2)*(nz-2)); vals = zeros(2*(nx-2)*(ny-2)*(nz-2))
@@ -235,14 +97,14 @@ struct UpwindStencil3D
                 indexMinus = vectorIndex(nx, ny, i, j, k-1)
                 II[counter+1] = index
                 J[counter+1] = index
-                vals[counter+1] = 1 / Δz 
+                vals[counter+1] = 1 / Δz / density[i, j, k]
                 if k > 1
                     II[counter] = index
                     J[counter] = indexMinus
-                    vals[counter] = -1 / Δz 
+                    vals[counter] = -1 / Δz / density[i, j, k-1]
                 end
             end
-            D⁺₃ = sparse(II, J, vals, nx*ny*nz, nx*ny*nz);
+            D⁺₃ = CuSparseMatrixCSC(sparse(II, J, T.(vals), nx*ny*nz, nx*ny*nz));
 
             # Set up D⁻₁
             II = zeros(2*(nx-2)*(ny-2)*(nz-2)); J = zeros(2*(nx-2)*(ny-2)*(nz-2)); vals = zeros(2*(nx-2)*(ny-2)*(nz-2))
@@ -257,14 +119,14 @@ struct UpwindStencil3D
 
                 II[counter+1] = index;
                 J[counter+1] = index;
-                vals[counter+1] = -1/Δx 
+                vals[counter+1] = -1/Δx / density[i,j,k]; 
                 if i < nx
                     II[counter] = index;
                     J[counter] = indexPlus;
-                    vals[counter] = 1/Δx 
+                    vals[counter] = 1/Δx / density[i+1,j,k]; 
                 end
             end
-            D⁻₁ = sparse(II, J, vals, nx*ny*nz, nx*ny*nz);
+            D⁻₁ = CuSparseMatrixCSC(sparse(II, J, T.(vals), nx*ny*nz, nx*ny*nz));
 
             # Set up D⁻₂
             II = zeros(2*(nx-2)*(ny-2)*(nz-2)); J = zeros(2*(nx-2)*(ny-2)*(nz-2)); vals = zeros(2*(nx-2)*(ny-2)*(nz-2))
@@ -279,14 +141,14 @@ struct UpwindStencil3D
 
                 II[counter+1] = index;
                 J[counter+1] = index;
-                vals[counter+1] = -1/Δy 
+                vals[counter+1] = -1/Δy / density[i,j,k]; 
                 if i < ny
                     II[counter] = index;
                     J[counter] = indexPlus;
-                    vals[counter] = 1/Δy 
+                    vals[counter] = 1/Δy / density[i,j+1,k]; 
                 end
             end
-            D⁻₂ = sparse(II, J, vals, nx*ny*nz, nx*ny*nz);
+            D⁻₂ = CuSparseMatrixCSC(sparse(II, J, T.(vals), nx*ny*nz, nx*ny*nz));
 
             # Set up D⁻₃ 
             II = zeros(2*(nx-2)*(ny-2)*(nz-2)); J = zeros(2*(nx-2)*(ny-2)*(nz-2)); vals = zeros(2*(nx-2)*(ny-2)*(nz-2))
@@ -301,14 +163,14 @@ struct UpwindStencil3D
 
                 II[counter+1] = index;
                 J[counter+1] = index;
-                vals[counter+1] = -1/Δz 
+                vals[counter+1] = -1/Δz / density[i,j,k]; 
                 if i < ny
                     II[counter] = index;
                     J[counter] = indexPlus;
-                    vals[counter] = 1/Δz 
+                    vals[counter] = 1/Δz / density[i,j,k+1]; 
                 end
             end
-            D⁻₃ = sparse(II, J, vals, nx*ny*nz, nx*ny*nz);
+            D⁻₃ = CuSparseMatrixCSC(sparse(II, J, T.(vals), nx*ny*nz, nx*ny*nz));
 
         elseif order == 2
             # Second-order accuracy
@@ -328,20 +190,24 @@ struct UpwindStencil3D
 
                 c0, c1, c2 = stencil_weights([x0, x1, x2], x0, 1)
 
+                ρ0 = density[i, j, k]
+                ρ1 = density[i-1, j, k]
+                ρ2 = density[i-2, j, k]
+
                 II[counter]   = index
                 J[counter]    = index
-                vals[counter] = c0
+                vals[counter] = c0 / ρ0
 
                 II[counter+1]   = index
                 J[counter+1]    = indexM
-                vals[counter+1] = c1
+                vals[counter+1] = c1 / ρ1
 
                 II[counter+2]   = index
                 J[counter+2]    = indexMM
-                vals[counter+2] = c2
+                vals[counter+2] = c2 / ρ2
             end
 
-            D⁺₁ = sparse(II, J, vals, nx*ny*nz, nx*ny*nz)
+            D⁺₁ = CuSparseMatrixCSC(sparse(II, J, T.(vals), nx*ny*nz, nx*ny*nz))
             
             II = zeros(3*(nx-4)*(ny-4)*(nz-4)); J = zeros(3*(nx-4)*(ny-4)*(nz-4)); vals = zeros(3*(nx-4)*(ny-4)*(nz-4))
             counter = -2
@@ -361,19 +227,23 @@ struct UpwindStencil3D
 
                 c0, c1, c2 = stencil_weights([x0, x1, x2], x0, 1)
 
+                ρ0 = density[i, j, k]
+                ρ1 = density[i, j-1, k]
+                ρ2 = density[i, j-2, k]
+
                 II[counter]   = index
                 J[counter]    = index
-                vals[counter] = c0
+                vals[counter] = c0 / ρ0
 
                 II[counter+1]   = index
                 J[counter+1]    = indexM
-                vals[counter+1] = c1
+                vals[counter+1] = c1 / ρ1
 
                 II[counter+2]   = index
                 J[counter+2]    = indexMM
-                vals[counter+2] = c2
+                vals[counter+2] = c2 / ρ2
             end
-            D⁺₂ = sparse(II, J, vals, nx*ny*nz, nx*ny*nz);
+            D⁺₂ = CuSparseMatrixCSC(sparse(II, J, T.(vals), nx*ny*nz, nx*ny*nz));
             
             II = zeros(3*(nx-4)*(ny-4)*(nz-4)); J = zeros(3*(nx-4)*(ny-4)*(nz-4)); vals = zeros(3*(nx-4)*(ny-4)*(nz-4))
             counter = -2
@@ -393,19 +263,23 @@ struct UpwindStencil3D
 
                 c0, c1, c2 = stencil_weights([x0, x1, x2], x0, 1)
 
+                ρ0 = density[i, j, k]
+                ρ1 = density[i, j, k-1]
+                ρ2 = density[i, j, k-2]
+
                 II[counter]   = index
                 J[counter]    = index
-                vals[counter] = c0
+                vals[counter] = c0 / ρ0
 
                 II[counter+1]   = index
                 J[counter+1]    = indexM
-                vals[counter+1] = c1
+                vals[counter+1] = c1 / ρ1
 
                 II[counter+2]   = index
                 J[counter+2]    = indexMM
-                vals[counter+2] = c2
+                vals[counter+2] = c2 / ρ2
             end
-            D⁺₃ = sparse(II, J, vals, nx*ny*nz, nx*ny*nz);
+            D⁺₃ = CuSparseMatrixCSC(sparse(II, J, T.(vals), nx*ny*nz, nx*ny*nz));
 
             counter = -2;
             II = zeros(3*(nx-4)*(ny-4)*(nz-4)); J = zeros(3*(nx-4)*(ny-4)*(nz-4)); vals = zeros(3*(nx-4)*(ny-4)*(nz-4))
@@ -424,19 +298,23 @@ struct UpwindStencil3D
 
                 c0, c1, c2 = stencil_weights([x0, x1, x2], x0, 1)
 
+                ρ0 = density[i, j, k]
+                ρ1 = density[i+1, j, k]
+                ρ2 = density[i+2, j, k]
+
                 II[counter]   = index
                 J[counter]    = index
-                vals[counter] = c0
+                vals[counter] = c0 / ρ0
 
                 II[counter+1]   = index
                 J[counter+1]    = indexM
-                vals[counter+1] = c1
+                vals[counter+1] = c1 / ρ1
 
                 II[counter+2]   = index
                 J[counter+2]    = indexMM
-                vals[counter+2] = c2
+                vals[counter+2] = c2 / ρ2
             end
-            D⁻₁ = sparse(II, J, vals, nx*ny*nz, nx*ny*nz);
+            D⁻₁ = CuSparseMatrixCSC(sparse(II, J, T.(vals), nx*ny*nz, nx*ny*nz));
             
             counter = -2;
             II = zeros(3*(nx-4)*(ny-4)*(nz-4)); J = zeros(3*(nx-4)*(ny-4)*(nz-4)); vals = zeros(3*(nx-4)*(ny-4)*(nz-4))
@@ -456,19 +334,23 @@ struct UpwindStencil3D
 
                 c0, c1, c2 = stencil_weights([x0, x1, x2], x0, 1)
 
+                ρ0 = density[i, j, k]
+                ρ1 = density[i, j+1, k]
+                ρ2 = density[i, j+2, k]
+
                 II[counter]   = index
                 J[counter]    = index
-                vals[counter] = c0
+                vals[counter] = c0 / ρ0
 
                 II[counter+1]   = index
                 J[counter+1]    = indexM
-                vals[counter+1] = c1
+                vals[counter+1] = c1 / ρ1
 
                 II[counter+2]   = index
                 J[counter+2]    = indexMM
-                vals[counter+2] = c2
+                vals[counter+2] = c2 / ρ2
             end
-            D⁻₂ = sparse(II, J, vals, nx*ny*nz, nx*ny*nz);
+            D⁻₂ = CuSparseMatrixCSC(sparse(II, J, T.(vals), nx*ny*nz, nx*ny*nz));
 
             counter = -2;
             II = zeros(3*(nx-4)*(ny-4)*(nz-4)); J = zeros(3*(nx-4)*(ny-4)*(nz-4)); vals = zeros(3*(nx-4)*(ny-4)*(nz-4))
@@ -487,22 +369,28 @@ struct UpwindStencil3D
 
                 c0, c1, c2 = stencil_weights([x0, x1, x2], x0, 1)
 
+                ρ0 = density[i, j, k]
+                ρ1 = density[i, j, k+1]
+                ρ2 = density[i, j, k+2]
+
                 II[counter]   = index
                 J[counter]    = index
-                vals[counter] = c0
+                vals[counter] = c0 / ρ0
 
                 II[counter+1]   = index
                 J[counter+1]    = indexM
-                vals[counter+1] = c1
+                vals[counter+1] = c1 / ρ1
 
                 II[counter+2]   = index
                 J[counter+2]    = indexMM
-                vals[counter+2] = c2
+                vals[counter+2] = c2 / ρ2
             end
-            D⁻₃ = sparse(II, J, vals, nx*ny*nz, nx*ny*nz);
+            D⁻₃ = CuSparseMatrixCSC(sparse(II, J, T.(vals), nx*ny*nz, nx*ny*nz));
 
         end
 
         new(D⁺₁, D⁺₂, D⁺₃, D⁻₁, D⁻₂, D⁻₃)
     end
 end
+
+

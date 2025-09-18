@@ -15,7 +15,6 @@ mutable struct ParallelIntegrator
     # Solver settings
     settings::Settings;
 
-    problem::Problem;
     rhs::Rhs;
 
     barC::Array{Array}
@@ -40,7 +39,7 @@ mutable struct ParallelIntegrator
         Û¹ = Array{Matrix{Float64}}(undef, nLeaves)
         FYNodes = Array{Vector{TTN}}(undef, nNodes)
         FYLeaves = Array{Vector{TTN}}(undef, nLeaves)
-        new(x,Δt,settings,Problem(settings),rhs,barC,Û¹,[],[],FYNodes,FYLeaves);
+        new(x,Δt,settings,rhs,barC,Û¹,[],[],FYNodes,FYLeaves);
     end
 end
 
@@ -59,6 +58,8 @@ function Solve(obj::ParallelIntegrator)
         Y = generateIsingTree(obj.settings)
     elseif obj.settings.problem == "radiation2DUQ" || obj.settings.problem == "Lattice"
         Y = generateRadTree2D(obj.settings)
+    elseif obj.settings.problem == "radiation3DUQ"
+        Y = generateRadTree3D(obj.settings)
     else
         Y = generateOrthTestTree(r, n)
     end

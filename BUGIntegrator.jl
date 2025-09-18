@@ -1,4 +1,3 @@
-include("Problem.jl")
 include("TTN.jl")
 
 using LinearAlgebra
@@ -17,7 +16,6 @@ struct BUGIntegrator
     # Solver settings
     settings::Settings;
 
-    problem::Problem;
     rhs::Rhs;
 
     # constructor
@@ -25,7 +23,7 @@ struct BUGIntegrator
         x = settings.x;
         Δt = settings.Δt;
 
-        new(x,Δt,settings,Problem(settings),Rhs(settings));
+        new(x,Δt,settings,Rhs(settings));
     end
 end
 
@@ -44,6 +42,8 @@ function Solve(obj::BUGIntegrator)
         Y = generateIsingTree(obj.settings)
     elseif obj.settings.problem == "radiation2DUQ" || obj.settings.problem == "Lattice"
         Y = generateRadTree2D(obj.settings)
+    elseif obj.settings.problem == "radiation3DUQ"
+        Y = generateRadTree3D(obj.settings)
     else
         Y = generateOrthTestTree(r, n)
     end

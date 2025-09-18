@@ -5,9 +5,7 @@ Pkg.instantiate()
 include("settings.jl")
 include("TTN.jl")
 include("Rhs.jl")
-include("Problem.jl")
 include("BUGIntegrator.jl")
-include("ParallelIntegratorInefficient.jl")
 include("ParallelIntegrator.jl")
 using PyCall
 using PyPlot
@@ -16,7 +14,7 @@ np = pyimport("numpy")
 
 close("all")
 
-s = Settings(101, 21, 100, 100, "radiation2DUQ")
+s = Settings(21, 21, 50, 50, "radiation3DUQ")
 s.nPN = 31
 s.ϵ = 2*1e-2;
 solver = ParallelIntegrator(s)
@@ -26,7 +24,7 @@ s.ϵ = 3*1e-2;
 solver = BUGIntegrator(s)
 YBUG, rBUG = Solve(solver)
 
-n = s.NCells^2
+n = s.NCells^3
 nξ = s.Nxi
 nη = s.Neta
 r = s.r
@@ -50,10 +48,10 @@ for j in 1:n
     σ²BUG[j] += sum(0.25 * wξ * wη' .* (ρBUG[j,:,:] .- EρBUG[j]).^2)
 end
 
-rho = Vec2Mat(s.NCells,s.NCells,Eρ);
-rhoBUG = Vec2Mat(s.NCells,s.NCells,EρBUG);
-rhoVar = Vec2Mat(s.NCells,s.NCells,σ²);
-rhoVarBUG = Vec2Mat(s.NCells,s.NCells,σ²BUG);
+rho = Vec2Ten(s.NCells,s.NCells,s.NCells,Eρ);
+rhoBUG = Vec2Ten(s.NCells,s.NCells,s.NCells,EρBUG);
+rhoVar = Vec2Ten(s.NCells,s.NCells,s.NCells,σ²);
+rhoVarBUG = Vec2Ten(s.NCells,s.NCells,s.NCells,σ²BUG);
 
 
 X = (s.xMid[2:end-1]'.*ones(size(s.xMid[2:end-1])));
@@ -62,8 +60,8 @@ Y = (s.xMid[2:end-1]'.*ones(size(s.xMid[2:end-1])))';
 ## Expected value
 fig = figure("parallel",figsize=(10,10),dpi=100)
 ax = gca()
-maxsol = maximum(4.0*pi*sqrt(2)*rho[2:(end-1),(end-1):-1:2]')
-pcolormesh(X,Y,4.0*pi*sqrt(2)*rho[2:(end-1),(end-1):-1:2]',vmin=0,vmax=maxsol)
+maxsol = maximum(4.0*pi*sqrt(2)*rho[2:(end-1),2:(end-1), 10]')
+pcolormesh(X,Y,4.0*pi*sqrt(2)*rho[2:(end-1),2:(end-1), 10]',vmin=0,vmax=maxsol)
 ax.tick_params("both",labelsize=20) 
 plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
@@ -74,7 +72,7 @@ savefig("scalar_flux_PN_$(s.problem)_nx$(s.NCells)_N$(s.nPN)_parallel.png")
 
 fig = figure("augmented BUG",figsize=(10,10),dpi=100)
 ax = gca()
-pcolormesh(X,Y,4.0*pi*sqrt(2)*rhoBUG[2:(end-1),(end-1):-1:2]',vmin=0,vmax=maxsol)
+pcolormesh(X,Y,4.0*pi*sqrt(2)*rhoBUG[2:(end-1),2:(end-1), 10]',vmin=0,vmax=maxsol)
 ax.tick_params("both",labelsize=20) 
 plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
@@ -86,8 +84,8 @@ savefig("scalar_flux_PN_$(s.problem)_nx$(s.NCells)_N$(s.nPN)_augmented.png")
 ## Variance
 fig = figure("parallel var",figsize=(10,10),dpi=100)
 ax = gca()
-maxsol = maximum(4.0*pi*sqrt(2)*rhoVar[2:(end-1),(end-1):-1:2]')
-pcolormesh(X,Y,4.0*pi*sqrt(2)*rhoVar[2:(end-1),(end-1):-1:2]',vmin=0,vmax=maxsol)
+maxsol = maximum(4.0*pi*sqrt(2)*rhoVar[2:(end-1),2:(end-1), 10]')
+pcolormesh(X,Y,4.0*pi*sqrt(2)*rhoVar[2:(end-1),2:(end-1), 10]',vmin=0,vmax=maxsol)
 ax.tick_params("both",labelsize=20) 
 plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)
@@ -98,7 +96,7 @@ savefig("scalar_flux_var_PN_$(s.problem)_nx$(s.NCells)_N$(s.nPN)_augmented.png")
 
 fig = figure("augmented BUG var",figsize=(10,10),dpi=100)
 ax = gca()
-pcolormesh(X,Y,4.0*pi*sqrt(2)*rhoVarBUG[2:(end-1),(end-1):-1:2]',vmin=0,vmax=maxsol)
+pcolormesh(X,Y,4.0*pi*sqrt(2)*rhoVarBUG[2:(end-1),2:(end-1), 10]',vmin=0,vmax=maxsol)
 ax.tick_params("both",labelsize=20) 
 plt.xlabel("x", fontsize=20)
 plt.ylabel("y", fontsize=20)

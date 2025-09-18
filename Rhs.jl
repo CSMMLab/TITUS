@@ -1,4 +1,6 @@
 using LinearAlgebra
+using FastGaussQuadrature
+
 include("stencil.jl")
 include("PNSystem.jl")
 
@@ -304,6 +306,83 @@ struct Rhs
             if problem_type == "Lattice"
                 QRhs = generateSource(settings, Q)
             end
+            new(ARhs, wξ, wη);
+        elseif problem_type == "radiation3DUQ"
+            nx = settings.NCells
+            ny = nx
+            nz = nx
+            ncells = nx*ny*nz;
+            nξ = settings.Nxi;
+            nη = settings.Neta;
+            nΩ = GlobalIndex( s.nPN, s.nPN ) + 1
+            Δx = settings.Δx;
+            xMid = settings.xMid
+            yMid = settings.xMid
+
+            # construct PN system matrices
+            pn = PNSystem(settings)
+            Ax, Ay, Az = SetupSystemMatrices(pn);
+            Σ₁ = eigvals(Ax)
+            T₁ = eigvecs(Ax)
+            T₁⁻¹ = T₁'
+            Σ₁⁺ = deepcopy(Σ₁); Σ₁⁺[Σ₁⁺ .< 0] .= 0;
+            Σ₁⁻ = deepcopy(Σ₁); Σ₁⁻[Σ₁⁻ .> 0] .= 0;
+
+            Σ₂ = eigvals(Ay)
+            T₂ = eigvecs(Ay)
+            T₂⁻¹ = T₂'
+            Σ₂⁺ = deepcopy(Σ₂); Σ₂⁺[Σ₂⁺ .< 0] .= 0;
+            Σ₂⁻ = deepcopy(Σ₂); Σ₂⁻[Σ₂⁻ .> 0] .= 0;
+
+            Σ₃ = eigvals(Az)
+            T₃ = eigvecs(Az)
+            T₃⁻¹ = T₃'
+            Σ₃⁺ = deepcopy(Σ₃); Σ₃⁺[Σ₃⁺ .< 0] .= 0;
+            Σ₃⁻ = deepcopy(Σ₃); Σ₃⁻[Σ₃⁻ .> 0] .= 0;
+
+            stencil = UpwindStencil3D(settings, nx, ny, nz)
+            D⁺₁ = stencil.D⁺₁
+            D⁺₂ = stencil.D⁺₂
+            D⁺₃ = stencil.D⁺₃
+            D⁻₁ = stencil.D⁻₁
+            D⁻₂ = stencil.D⁻₂
+            D⁻₃ = stencil.D⁻₃
+
+            #Compute diagonal of scattering matrix G
+            G = Diagonal([0.0;ones(nΩ-1)]);
+
+            σₛ = settings.σₛ .* ones(ncells)
+            σₐ = settings.σₐ .* ones(ncells)
+
+            σₛ = Diagonal(σₛ)
+            σₐ = Diagonal(σₐ)
+
+            ξ, wξ = gausslegendre(nξ);
+            η, wη = gausslegendre(nη);
+            σₛξ = Diagonal(settings.σₛξ .* ξ);
+            σₛη = Diagonal(settings.σₛη .* η);
+
+            e₁ = Diagonal(zeros(nΩ))
+            e₁[1, 1] = 1.0
+
+            # setup right hand side 
+            ARhs = [];
+            QRhs = [];
+            RhsTerm = [-D⁺₁, T₁*Diagonal(Σ₁⁺)*T₁⁻¹, Diagonal(ones(nξ)), Diagonal(ones(nη))]
+            push!(ARhs,RhsTerm)
+            RhsTerm = [-D⁻₁, T₁*Diagonal(Σ₁⁻)*T₁⁻¹, Diagonal(ones(nξ)), Diagonal(ones(nη))]
+            push!(ARhs,RhsTerm)
+
+            RhsTerm = [-D⁺₂, T₂*Diagonal(Σ₂⁺)*T₂⁻¹, Diagonal(ones(nξ)), Diagonal(ones(nη))]
+            push!(ARhs,RhsTerm)
+            RhsTerm = [-D⁻₂, T₂*Diagonal(Σ₂⁻)*T₂⁻¹, Diagonal(ones(nξ)), Diagonal(ones(nη))]
+            push!(ARhs,RhsTerm)
+
+            RhsTerm = [-D⁺₃, T₃*Diagonal(Σ₃⁺)*T₃⁻¹, Diagonal(ones(nξ)), Diagonal(ones(nη))]
+            push!(ARhs,RhsTerm)
+            RhsTerm = [-D⁻₃, T₃*Diagonal(Σ₃⁻)*T₃⁻¹, Diagonal(ones(nξ)), Diagonal(ones(nη))]
+            push!(ARhs,RhsTerm)
+
             new(ARhs, wξ, wη);
         elseif problem_type == "IsingModel"
             id = Diagonal(ones(2))

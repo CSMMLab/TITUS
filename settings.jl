@@ -60,7 +60,7 @@ mutable struct Settings
         σₛξ = 4.0#4.0 
         σₛη = 1.0#1.0
 
-        if problem == "radiation2DUQ"
+        if problem == "radiation2DUQ" || problem == "radiation3DUQ"
             a = -1.5 # left boundary
             b = 1.5 # right boundary
             tEnd = 1 #0.005
@@ -113,7 +113,7 @@ function IC(x,xi=0.0)
     return y;
 end
 
-function IC(obj::Settings, x, y)
+function IC(obj::Settings, x, y, z=0)
     if obj.problem == "radiation2DUQ"
         x0 = 0.0
         y0 = 0.0
@@ -123,6 +123,20 @@ function IC(obj::Settings, x, y)
         for j in eachindex(x)
             for i in eachindex(y)
                 out[j, i] = max(floor, 1.0 / (4.0 * π * σ²) * exp(-((x[j] - x0) * (x[j] - x0) + (y[i] - y0) * (y[i] - y0)) / 4.0 / σ²)) / 4.0 / π
+            end
+        end
+    elseif obj.problem == "radiation3DUQ"
+        x0 = 0.0
+        y0 = 0.0
+        z0 = 0.0
+        out = zeros(length(x), length(y), length(z))
+        σ² = 0.03^2
+        floor = 1e-4
+        for j in eachindex(x)
+            for i in eachindex(y)
+                for k in eachindex(z)
+                    out[j, i, k] = max(floor, 1.0 / (4.0 * π * σ²) * exp(-((x[j] - x0) * (x[j] - x0) + (y[i] - y0) * (y[i] - y0) + (z[k] - z0) * (z[k] - z0)) / 4.0 / σ²)) / 4.0 / π
+                end
             end
         end
     elseif obj.problem == "Lattice"

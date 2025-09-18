@@ -155,6 +155,7 @@ function SetupSystemMatrices(obj::PNSystem)
             if  j >= 0 && j < nTotalEntries  obj.Az[i+1,j+1] = BParam( l + 1, k ); end
         end
     end
+    return obj.Ax, obj.Ay, obj.Az
 end
 
 
