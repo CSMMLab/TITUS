@@ -1,12 +1,8 @@
-# rectilinear_csda.jl
-# 3D rectilinear ray tracer + solver for:
+# ray tracer to compute uncollided flux from 
 #   ∂φ/∂z + Σ_a φ = ∂/∂E ( S φ ) + 1/2 ∂/∂E ( T ∂φ/∂E )
 #
 # - Gaussian initial energy distribution (mean, sigma, total_intensity)
 # - Uniform energy grid
-# - Implicit Euler in z, central differences in energy (tridiagonal solve)
-# - Dirichlet φ(Emin)=0 (absorbing low-energy boundary), Neumann-like/backward at Emax
-# - Returns φ(E) sampled along ray (positions and energies)
 
 module RaytracerCSD
 
@@ -26,9 +22,9 @@ end
 
 struct Material
     id::Int
-    sigma_t::Function   # Σ_t(E) total scattering cross section (outscattering + absorption)
-    S::Function         # stopping power S(E) (sign per your convention)
-    T::Function         # straggling coefficient T(E) (>=0)
+    sigma_t::Function   # Σ_t(E) total scattering cross section (outscattering + absorption) -> interpolation fct of first moment/"computeOutscattering fct"?
+    S::Function         # stopping power S(E) -> this should be get_S from the MaterialParameters classes with matComp computed from density
+    T::Function         # straggling coefficient T(E) (>=0) -> need to translate this from Dannys fortran code
 end
 
 const EPS = 1e-14
