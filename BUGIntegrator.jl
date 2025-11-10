@@ -68,8 +68,8 @@ end
 function Φ(obj::BUGIntegrator, Y::TTN, FY::Vector{TTN}, i::Int)
     id = Y.leaves[i].id
     r = size(Y.C);
-    hatr = [2*rᵢ for rᵢ in r]
-    hatr[1] = Int(0.5 * hatr[1])
+    r̂ = [2*rᵢ for rᵢ in r]
+    r̂[1] = Int(0.5 * r̂[1])
     
     # perform prolongation and retraction
     _, FᵢY = prolong_and_retract_full(FY, Y, i)
@@ -94,8 +94,8 @@ function Φ(obj::BUGIntegrator, Y::TTN, FY::Vector{TTN}, i::Int)
     else # Yᵢ is not a leaf
         Ĉ⁰, Ĉ¹, Û¹ = Step(obj, Y.leaves[i], FᵢY) # Yᵢ should be the same as Y.leaves[i]
         Q,_ = np.linalg.qr([tenmat(Ĉ¹, 1)' tenmat(Ĉ⁰, 1)'], mode="reduced"); 
-        hatr = [rᵢ for rᵢ in size(Ĉ⁰)]; hatr[1] = 2*hatr[1];
-        X̂ᵢ = TTN(id, Û¹, matten(Q', 1, hatr))
+        r̂ = [rᵢ for rᵢ in size(Ĉ⁰)]; r̂[1] = 2*r̂[1];
+        X̂ᵢ = TTN(id, Û¹, matten(Q', 1, r̂))
         M = inner(X̂ᵢ, Y.leaves[i]); # Y.leaves[i] has old basis
     end
     
