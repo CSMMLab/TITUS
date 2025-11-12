@@ -45,7 +45,7 @@ mutable struct Settings
 
     problem::String
 
-    function Settings(Nx::Int=102,nPN::Int=100,Nxi::Int=100,Neta::Int=100,problem="radiationUQ8D")
+    function Settings(Nx::Int=102,nPN::Int=100,Nxi::Int=100,Neta::Int=100,problem="radiation3DUQ")
         # spatial grid setting
         NCells = Nx - 1;
         nx = NCells
@@ -71,8 +71,8 @@ mutable struct Settings
             a = 0.0 # left boundary
             b = 7.0 # right boundary
             tEnd = 3.2
-            σₛξ = 0.001#4.0 
-            σₛη = 0.001#1.0
+            σₛξ = 0.0#4.0 
+            σₛη = 0.0#1.0
             cfl = 0.5 # CFL condition
         else
             println("ERROR: Problem ", problem, " undefined.")
@@ -140,7 +140,7 @@ function IC(obj::Settings, x, y, z=0)
             end
         end
     elseif obj.problem == "Lattice"
-        out = 1e-9 * ones(length(x), length(y))
+        out = 1e-11 * ones(length(x), length(y))
     end
     return out
 end

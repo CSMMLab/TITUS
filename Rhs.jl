@@ -7,10 +7,16 @@ include("PNSystem.jl")
 # tree tensor network operator. Consists of several flux matrices at leaves of several TTNs
 struct Rhs
     A::Vector{Array} # flux matrices for leaves
+    hasSource::Bool
     wξ::Vector{Float64}
     wη::Vector{Float64}
+    
+    QRhs
+    source::Vector{Array} # source matrices for leaves
+    isFlux::Vector{Bool}
     function Rhs(settings::Settings)
         problem_type = settings.problem
+        isFlux = [];
         if problem_type == "radiation"
             nx = settings.NCells;
             nΩ = settings.nPN
@@ -63,7 +69,7 @@ struct Rhs
             push!(ARhs,RhsTerm)
             RhsTerm = [-σₛ, G]
             push!(ARhs,RhsTerm)
-            new(ARhs);
+            new(ARhs, false);
         elseif problem_type == "radiationUQ"
             nx = settings.NCells;
             nξ = settings.Nxi;
@@ -127,7 +133,7 @@ struct Rhs
             push!(ARhs,RhsTerm)
             RhsTerm = [-Diagonal(ones(nx)), G, Diagonal(ones(nξ)), σₛη]
             push!(ARhs,RhsTerm)
-            new(ARhs,wξ,wη);
+            new(ARhs,false,wξ,wη);
         
         elseif problem_type == "radiationUQ8D"
             nx = settings.NCells;
@@ -204,7 +210,7 @@ struct Rhs
             push!(ARhs,RhsTerm)
             RhsTerm = [-Diagonal(ones(nx)), G, Diagonal(ones(nξ)), Diagonal(ones(nξ)), Diagonal(ones(nξ)), Diagonal(ones(nη)), Diagonal(ones(nξ)), σₛη₂]
             push!(ARhs,RhsTerm)
-            new(ARhs,wξ,wη);
+            new(ARhs,false,wξ,wη);
         elseif problem_type == "radiation2DUQ" || problem_type == "Lattice"
             nx = settings.NCells
             ny = nx
@@ -305,8 +311,11 @@ struct Rhs
             push!(ARhs,RhsTerm)
             if problem_type == "Lattice"
                 QRhs = generateSource(settings, Q)
+                leaves = get_leaf_nodes(QRhs)
+                new(ARhs, true, wξ, wη, QRhs, [leaf.C for leaf in leaves]);
+            else
+                new(ARhs,false, wξ, wη);
             end
-            new(ARhs, wξ, wη);
         elseif problem_type == "radiation3DUQ"
             nx = settings.NCells
             ny = nx
@@ -369,21 +378,26 @@ struct Rhs
             ARhs = [];
             QRhs = [];
             RhsTerm = [-D⁺₁, T₁*Diagonal(Σ₁⁺)*T₁⁻¹, Diagonal(ones(nξ)), Diagonal(ones(nη))]
-            push!(ARhs,RhsTerm)
+            push!(ARhs,RhsTerm); push!(isFlux,true);
+    
             RhsTerm = [-D⁻₁, T₁*Diagonal(Σ₁⁻)*T₁⁻¹, Diagonal(ones(nξ)), Diagonal(ones(nη))]
-            push!(ARhs,RhsTerm)
+            push!(ARhs,RhsTerm); push!(isFlux,true);
 
             RhsTerm = [-D⁺₂, T₂*Diagonal(Σ₂⁺)*T₂⁻¹, Diagonal(ones(nξ)), Diagonal(ones(nη))]
-            push!(ARhs,RhsTerm)
+            push!(ARhs,RhsTerm); push!(isFlux,true);
             RhsTerm = [-D⁻₂, T₂*Diagonal(Σ₂⁻)*T₂⁻¹, Diagonal(ones(nξ)), Diagonal(ones(nη))]
-            push!(ARhs,RhsTerm)
+            push!(ARhs,RhsTerm); push!(isFlux,true);
 
             RhsTerm = [-D⁺₃, T₃*Diagonal(Σ₃⁺)*T₃⁻¹, Diagonal(ones(nξ)), Diagonal(ones(nη))]
-            push!(ARhs,RhsTerm)
+            push!(ARhs,RhsTerm); push!(isFlux,true);
             RhsTerm = [-D⁻₃, T₃*Diagonal(Σ₃⁻)*T₃⁻¹, Diagonal(ones(nξ)), Diagonal(ones(nη))]
-            push!(ARhs,RhsTerm)
+            push!(ARhs,RhsTerm); push!(isFlux,true);
 
-            new(ARhs, wξ, wη);
+            RhsTerm = [Diagonal(ones(ncells)), Diagonal(ones(pn.nTotalEntries)), Diagonal(ones(nξ)), Diagonal(ones(nη))]
+            push!(ARhs,RhsTerm); push!(isFlux,true);
+
+
+            new(ARhs, false, wξ, wη);
         elseif problem_type == "IsingModel"
             id = Diagonal(ones(2))
             σx = [0.0 1.0; 1.0 0.0]
@@ -408,7 +422,7 @@ struct Rhs
             push!(ARhs,RhsTerm)
             RhsTerm = [σz, id, id, σz]
             push!(ARhs,RhsTerm)
-            new(ARhs);
+            new(ARhs,false);
         else
             nx = settings.NCells;
             id = Diagonal(ones(nx))
@@ -420,7 +434,7 @@ struct Rhs
             push!(ARhs,RhsTerm)
             RhsTerm = [id, Dₓₓ, id, id]
             push!(ARhs,RhsTerm)
-            new(ARhs);
+            new(ARhs,false);
         end
     end
 end
@@ -428,7 +442,7 @@ end
 include("TTN.jl")
 
 # evaluates right-hand side (Rhs) at Y, which is a list of TTNs
-function eval(obj::Rhs, Y::TTN)
+function eval(obj::Rhs, Y::TTN, sourceTerm=0)
     FY = TTN[]
     leavesY = get_leaf_nodes(Y)
     idx = [node.id for node in leavesY ]
@@ -439,6 +453,15 @@ function eval(obj::Rhs, Y::TTN)
             leaf.C = Aᵢⱼ*leaf.C
         end
         push!(FY, FYᵢ)
+    end
+    if isdefined(obj, :QRhs)
+        if sourceTerm == 0
+            for sourceᵢ in obj.source 
+                push!(FY, obj.QRhs)
+            end
+        else
+            push!(FY, sourceTerm)
+        end
     end
     return FY
 end

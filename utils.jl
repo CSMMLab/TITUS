@@ -41,7 +41,7 @@ function Mat2Vec(m)
 end
 
 ## Extra functions
-function rk(f, Y, h, order=4)
+function rk(f, Y, h, order=1)
     if order == 1
         return Y .+ h*f(Y)
     elseif order == 2

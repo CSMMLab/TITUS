@@ -89,8 +89,19 @@ function inner(Y::TTN, Z::TTN)
     elseif length(Y.leaves) == 0 && length(Z.leaves) == 0 # node is leaf
         return Y.C' * Z.C
     else
-        error("Error in inner: Y and Z do not have same length and structure")
+        print_tree(Y)
+        print_tree(Z)
+        error("Error in inner: Y and Z do not have same length and structure: ", size(Y.C), " vs. ", size(Z.C))
     end
+end
+
+# multiplies the TTN Y with bases Xᵢ and evaluates the resulting tensor. Compared to matrix view: input Y = USVᵀ, X = [U,V]. Returns UᵀUSVᵀV (= S)
+function project_and_eval(Y::TTN, X::Vector{TTN})
+    A = Matrix{Float64}[]
+    for (Yᵢ, Xᵢ) in zip(Y.leaves, X)
+        push!(A, inner(Xᵢ, Yᵢ))
+    end
+    return ttm(Y.C, A, collect(1:length(Y.leaves)) .+ 1)
 end
 
 # Y is current TTN
@@ -103,7 +114,7 @@ function prolong_and_retract(FY::Vector{TTN}, Y::TTN, i::Int)
         FᵢYₖ = copy_subtree(FYₖ.leaves[i])
         UᵀAUτⱼ = Matrix{Float64}[];
         for j in noti # compute all projections of τ's leaves (except for leaf i) 
-            push!(UᵀAUτⱼ, inner(FYₖ.leaves[j], Y.leaves[j]))
+            push!(UᵀAUτⱼ, inner(Y.leaves[j], FYₖ.leaves[j]))
         end
         #¬ = ¬ .+ 1 # leaf j is at position j+1 in Q, since we have direction 0 at 1. Hence all indices must be increased by 1.
         FᵢYₖ.VᵀFV = tenmat(ttm(FYₖ.C, UᵀAUτⱼ, noti .+ 1), i+1)*tenmat(Y.C, i+1)' # compute final projection with respect to Q.  Y.C stores Q.
@@ -112,19 +123,64 @@ function prolong_and_retract(FY::Vector{TTN}, Y::TTN, i::Int)
     return FᵢY
 end
 
+# Y is current TTN
+# FY is F evaluated at Y
 # the test tensor V consists of the corresponding subtree τ in Y where the subtrees node is replaced by Q
+# "full" means that Qᵀ, Sᵀ still need to be computed
 function prolong_and_retract_full(FY::Vector{TTN}, Y::TTN, i::Int)
     noti = collect(1:length(Y.leaves)); deleteat!(noti, i);
 
     # perform QR with QᵀSᵀ = Matᵢ(Y.C)ᵀ so that the test funtions will be orthonormal.
     Qᵀ, Sᵀ = np.linalg.qr(tenmat(ttm(Y.C, Y.S, 1), i+1)', mode="reduced");
     Qᵢ = matten(Matrix(Qᵀ'), i+1, [rᵢ for rᵢ in size(Y.C)])
-    Y.leaves[i].S = Matrix(Sᵀ')
+    Y.leaves[i].S = Matrix(Sᵀ') # move the information (S) onto the i-th subtree. This information will be needed later in the RK steps when computing K 
 
     FᵢY = TTN[]
     for FYₖ in FY
-        QFᵀ, SFᵀ = np.linalg.qr(tenmat(ttm(FYₖ.C, FYₖ.VᵀFV * FYₖ.S, 1), i+1)', mode="reduced");
-        QFᵢ = matten(Matrix(QFᵀ'), i+1, [rᵢ for rᵢ in size(Y.C)])
+        #QFᵀ, SFᵀ = np.linalg.qr(tenmat(ttm(FYₖ.C, FYₖ.VᵀFV * FYₖ.S, 1), i+1)', mode="reduced");
+        QFᵀ, SFᵀ = np.linalg.qr(tenmat(ttm(FYₖ.C, FYₖ.VᵀFV * FYₖ.S , 1), i+1)', mode="reduced"); # this needs to be checked! The transpose in FYₖ.VᵀFV' is new!
+        rC = collect(size(FYₖ.C))
+        rC[1] = size(Y.C, 1)
+        QFᵢ = matten(Matrix(QFᵀ'), i+1, [rᵢ for rᵢ in rC])
+        FYₖ.leaves[i].S = Matrix(SFᵀ')
+        UᵀAUτⱼ = Matrix{Float64}[];
+        for j in noti # compute all projections of τ's leaves (except for leaf i) 
+            push!(UᵀAUτⱼ, inner(Y.leaves[j], FYₖ.leaves[j])) # this does not transpose flux matrices
+        end
+
+        FYₖ.leaves[i].VᵀFV = tenmat(Qᵢ, i+1)*tenmat(ttm(QFᵢ, UᵀAUτⱼ, noti .+ 1), i+1)' # compute final projection with respect to Q.  
+        # The above step transposes the flux matrix again, so we recover the original matrix. The V from the solution is on the front (test functions), the V from the TTNO is on the back (the V of the solution to which F is applied).
+        push!(FᵢY, FYₖ.leaves[i])
+    end
+    return Sᵀ, FᵢY
+end
+
+# Y is current TTN
+# FY is F evaluated at Y
+# the test tensor V consists of the corresponding subtree τ in Y where the subtrees node is replaced by Q
+# "full" means that Qᵀ, Sᵀ still need to be computed
+function prolong_and_retract_full_bu(FY::Vector{TTN}, Y::TTN, i::Int)
+    noti = collect(1:length(Y.leaves)); deleteat!(noti, i);
+
+    # perform QR with QᵀSᵀ = Matᵢ(Y.C)ᵀ so that the test funtions will be orthonormal.
+    Qᵀ, Sᵀ = np.linalg.qr(tenmat(ttm(Y.C, Y.S, 1), i+1)', mode="reduced");
+    Qᵢ = matten(Matrix(Qᵀ'), i+1, [rᵢ for rᵢ in size(Y.C)])
+    Y.leaves[i].S = Matrix(Sᵀ') # move the information (S) onto the i-th subtree. This information will be needed later in the RK steps when computing K 
+
+    FᵢY = TTN[]
+    for FYₖ in FY
+        #println(size(FYₖ.C))
+        #println(size(FYₖ.VᵀFV))
+        #println(size(FYₖ.S))
+        #println("check symmetry: ", norm(FYₖ.VᵀFV - FYₖ.VᵀFV'))
+        #QFᵀ, SFᵀ = np.linalg.qr(tenmat(ttm(FYₖ.C, FYₖ.VᵀFV * FYₖ.S, 1), i+1)', mode="reduced");
+        QFᵀ, SFᵀ = np.linalg.qr(tenmat(ttm(FYₖ.C, FYₖ.VᵀFV' * FYₖ.S, 1), i+1)', mode="reduced"); # this needs to be checked! The transpose in FYₖ.VᵀFV' is new!
+        #println(size(Matrix(QFᵀ')))
+        #println(size(FYₖ.C))
+        #println(size(Y.C))
+        rC = collect(size(FYₖ.C))
+        rC[1] = size(Y.C, 1)
+        QFᵢ = matten(Matrix(QFᵀ'), i+1, [rᵢ for rᵢ in rC])
         FYₖ.leaves[i].S = Matrix(SFᵀ')
         UᵀAUτⱼ = Matrix{Float64}[];
         for j in noti # compute all projections of τ's leaves (except for leaf i) 
@@ -388,7 +444,12 @@ function generateRadTree2D(s::Settings)
     nη = s.Neta
     r = s.r
     input = zeros(n, r)
-    input[:, 1] .= vec(IC(s, s.xMid, s.xMid))
+    
+    if s.problem == "Lattice"
+        input[:, 1] .= 1e-5
+    else
+        input[:, 1] .= vec(IC(s, s.xMid, s.xMid))
+    end
     Qᵢ, Rᵢ = np.linalg.qr(input, mode="reduced");
     push!(Q, Qᵢ); push!(R, Rᵢ)
     subleaf1 = TTN(1, Qᵢ) # space
@@ -832,6 +893,7 @@ function generateSmallRadTree(s::Settings)
 
     input = zeros(nΩ, r)
     input[1, 1] = 1
+    input[2, 1] = 1
     Qᵢ, Rᵢ = np.linalg.qr(input, mode="reduced");
     push!(Q, Qᵢ); push!(R, Rᵢ)
     subleaf2 = TTN(2, Qᵢ) # angle (moments)
