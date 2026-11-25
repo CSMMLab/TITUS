@@ -127,16 +127,30 @@ end
 # FY is F evaluated at Y
 # the test tensor V consists of the corresponding subtree τ in Y where the subtrees node is replaced by Q
 # "full" means that Qᵀ, Sᵀ still need to be computed
-function prolong_and_retract_full(FY::Vector{TTN}, Y::TTN, i::Int)
+function prolong_and_retract_full(FY::Vector{TTN}, Y::TTN, i::Int, nFlux::Int=length(FY))
     noti = collect(1:length(Y.leaves)); deleteat!(noti, i);
 
     # perform QR with QᵀSᵀ = Matᵢ(Y.C)ᵀ so that the test funtions will be orthonormal.
     Qᵀ, Sᵀ = np.linalg.qr(tenmat(ttm(Y.C, Y.S, 1), i+1)', mode="reduced");
     Qᵢ = matten(Matrix(Qᵀ'), i+1, [rᵢ for rᵢ in size(Y.C)])
-    Y.leaves[i].S = Matrix(Sᵀ') # move the information (S) onto the i-th subtree. This information will be needed later in the RK steps when computing K 
+    Y.leaves[i].S = Matrix(Sᵀ') # move the information (S) onto the i-th subtree. This information will be needed later in the RK steps when computing K
 
     FᵢY = TTN[]
-    for FYₖ in FY
+    for (k, FYₖ) in enumerate(FY)
+        if k > nFlux
+            # Source term Q (independent of Y, own tree with own ranks q). No QR is performed, so
+            # that the full magnitude of Q is kept and arbitrary source ranks are supported:
+            #   VᵀFV = Matᵢ(Qᵢ) Matᵢ(Q̃ ×ⱼ ⟨Uⱼ, U_Q,ⱼ⟩)ᵀ  (rᵢ × qᵢ),   Q̃ = C_Q ×₀ (VᵀFV S)
+            # The K-step source of child i is then U_Q,ᵢ VᵀFVᵀ, and S is set to the identity.
+            Q̃ = ttm(FYₖ.C, FYₖ.VᵀFV * FYₖ.S, 1)
+            UᵀQτⱼ = Matrix{Float64}[inner(Y.leaves[j], FYₖ.leaves[j]) for j in noti]
+            Srcᵢ = copy_subtree(FYₖ.leaves[i])
+            Srcᵢ.VᵀFV = tenmat(Qᵢ, i+1) * tenmat(ttm(Q̃, UᵀQτⱼ, noti .+ 1), i+1)'
+            qᵢ = size(Q̃, i+1)
+            Srcᵢ.S = Matrix{Float64}(I, qᵢ, qᵢ)
+            push!(FᵢY, Srcᵢ)
+            continue
+        end
         #QFᵀ, SFᵀ = np.linalg.qr(tenmat(ttm(FYₖ.C, FYₖ.VᵀFV * FYₖ.S, 1), i+1)', mode="reduced");
         QFᵀ, SFᵀ = np.linalg.qr(tenmat(ttm(FYₖ.C, FYₖ.VᵀFV * FYₖ.S , 1), i+1)', mode="reduced"); # this needs to be checked! The transpose in FYₖ.VᵀFV' is new!
         rC = collect(size(FYₖ.C))

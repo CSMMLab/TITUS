@@ -40,7 +40,7 @@ function Solve(obj::BUGIntegrator)
         Y = generateRadTree8D(obj.settings)
     elseif obj.settings.problem == "IsingModel"
         Y = generateIsingTree(obj.settings)
-    elseif obj.settings.problem == "radiation2DUQ" || obj.settings.problem == "Lattice"
+    elseif obj.settings.problem == "radiation2DUQ" || obj.settings.problem == "Lattice" || obj.settings.problem == "ProtonUQ"
         Y = generateRadTree2D(obj.settings)
     elseif obj.settings.problem == "radiation3DUQ"
         Y = generateRadTree3D(obj.settings)
@@ -67,32 +67,27 @@ end
 # update and augment the ith basis matrix
 function Φ(obj::BUGIntegrator, Y::TTN, FY::Vector{TTN}, i::Int)
     id = Y.leaves[i].id
-    r = size(Y.C);
-    r̂ = [2*rᵢ for rᵢ in r]
-    r̂[1] = Int(0.5 * r̂[1])
+    nF = length(obj.rhs.A) # entries nF+1:end of FY are source terms
     
     # perform prolongation and retraction
-    _, FᵢY = prolong_and_retract_full(FY, Y, i)
+    _, FᵢY = prolong_and_retract_full(FY, Y, i, nF)
 
     if length(Y.leaves[i].leaves) == 0 # Yᵢ is leaf
         U⁰ = Y.leaves[i].C
         K⁰ = U⁰*Y.leaves[i].S;
-        K¹ = K⁰
 
-        #writedlm("K$(i)-value-TTN.txt", K⁰)
+        # source contribution to the K-step: U_Q,ᵢ (VᵀQV)ᵀ, independent of K
+        srcK = zeros(size(K⁰))
+        for k in nF+1:length(FᵢY)
+            srcK .+= FᵢY[k].C * FᵢY[k].VᵀFV'
+        end
 
         # define right-hand side of Φ step
         FΦ = K -> begin
-            rhsK = zeros(size(K))
-            for (k, FᵢYₖ) in enumerate(FᵢY) 
-                if k <= length(obj.rhs.A)
-                    rhsK .+= obj.rhs.A[k][Y.leaves[i].id]*K*FᵢYₖ.VᵀFV'; # changed: removed the transpose on FᵢYₖ.VᵀFV'
-                else
-                    rhsK .+= obj.rhs.source[Y.leaves[i].id] * FᵢYₖ.VᵀFV';
-                end
+            rhsK = Base.copy(srcK)
+            for k in 1:nF
+                rhsK .+= obj.rhs.A[k][id]*K*FᵢY[k].VᵀFV';
             end
-            #println(rhsK)
-            #writedlm("K$(i)-rhs-TTN.txt", rhsK)
             return rhsK
         end
         K¹ = rk(FΦ, K⁰, obj.Δt)
@@ -102,7 +97,7 @@ function Φ(obj::BUGIntegrator, Y::TTN, FY::Vector{TTN}, i::Int)
     else # Yᵢ is not a leaf
         Ĉ⁰, Ĉ¹, Û¹ = Step(obj, Y.leaves[i], FᵢY) # Yᵢ should be the same as Y.leaves[i]
         Q,_ = np.linalg.qr([tenmat(Ĉ¹, 1)' tenmat(Ĉ⁰, 1)'], mode="reduced"); 
-        r̂ = [rᵢ for rᵢ in size(Ĉ⁰)]; r̂[1] = 2*r̂[1];
+        r̂ = [rᵢ for rᵢ in size(Ĉ⁰)]; r̂[1] = size(Q, 2); # = 2rᵢ unless limited by the children ranks
         X̂ᵢ = TTN(id, Û¹, matten(Q', 1, r̂))
         M = inner(X̂ᵢ, Y.leaves[i]); # Y.leaves[i] has old basis
     end
@@ -110,43 +105,33 @@ function Φ(obj::BUGIntegrator, Y::TTN, FY::Vector{TTN}, i::Int)
     return X̂ᵢ, M
 end
 
-# general question: What is the difference between (Y.S, Y.VFV) and (FY.S, FY.VFV) I do understand FY.VFV and Y.S
-
 # augment and update core tensor
 function Ψ(obj::BUGIntegrator, Y::TTN, M::Vector{Matrix{Float64}}, FY::Vector{TTN}, Δt::Float64, X̂::Vector{TTN})
+    nF = length(obj.rhs.A) # entries nF+1:end of FY are source terms
     Ĉ⁰ = ttm(Y.C, M, 2:length(Y.leaves)+1)
     hatY = TTN(Y.id, X̂, Ĉ⁰, Y.S, Y.VᵀFV)
-    if obj.rhs.hasSource
-        FQ = copy_subtree(FY[end])
-        FhatY = eval(obj.rhs, hatY, FQ)
-        VᵀQV = 0
-    else
-        FhatY = eval(obj.rhs, hatY)
-    end
-    Ĉ¹ = deepcopy(Ĉ⁰)
+    FhatY = eval(obj.rhs, hatY)[1:nF] # flux terms evaluated in the augmented basis
+
+    # Galerkin matrices X̂ᵀAX̂ of the flux terms
     UᵀAU = Vector{Matrix}[]
-    for (i, FhatYᵢ) in enumerate(FhatY)
-        push!(UᵀAU, Matrix[])
-        if i <= length(obj.rhs.A) # FhatYᵢ is flux
-            for (FhatX̂ᵢ, X̂ᵢ) in zip(FhatYᵢ.leaves, X̂)
-                push!(UᵀAU[i], inner(X̂ᵢ, FhatX̂ᵢ))
-            end
-        else # FhatYᵢ is source
-            FQ.C = ttm(FQ.C, FQ.VᵀFV, 1) # multiply the projected part to mode 0
-            VᵀQV = project_and_eval(FQ,X̂)
-        end
+    for FhatYᵢ in FhatY
+        push!(UᵀAU, Matrix[inner(X̂ᵢ, FhatX̂ᵢ) for (FhatX̂ᵢ, X̂ᵢ) in zip(FhatYᵢ.leaves, X̂)])
+    end
+
+    # Galerkin projection of the source terms, C_Q ×₀ (VᵀFV S) ×ⱼ ⟨X̂ⱼ, U_Q,ⱼ⟩ (constant in C)
+    srcC = zeros(size(Ĉ⁰))
+    for k in nF+1:length(FY)
+        FQ = copy_subtree(FY[k])
+        FQ.C = ttm(FQ.C, FQ.VᵀFV * FQ.S, 1) # multiply the projected part to mode 0
+        srcC .+= project_and_eval(FQ, X̂)
     end
 
     FΨ = C -> begin
-        dC = zeros(size(Ĉ⁰))
-        for (i, FYᵢ) in enumerate(FY)
-            if i <= length(obj.rhs.A) # rhs term is a flux term F = F(Y)
-                dCᵢ = ttm(C, FYᵢ.VᵀFV, 1)
-                for j in eachindex(UᵀAU[i])
-                    dCᵢ = ttm(dCᵢ, UᵀAU[i][j], j+1)
-                end
-            else # rhs term is a source term F = Q ≠ F(Y)
-                dCᵢ = VᵀQV
+        dC = Base.copy(srcC)
+        for i in 1:nF
+            dCᵢ = ttm(C, FY[i].VᵀFV, 1)
+            for j in eachindex(UᵀAU[i])
+                dCᵢ = ttm(dCᵢ, UᵀAU[i][j], j+1)
             end
             dC += dCᵢ
         end
@@ -173,35 +158,47 @@ function Step(obj::BUGIntegrator, Y::TTN, FY::Vector{TTN})
     return Ĉ⁰, Ĉ¹, Û¹
 end
 
-function θ(obj::BUGIntegrator, Y::TTN)
-    P = Array{Float64, 2}[]
-    for i in 1:length(Y.leaves)
-        Pᵢ, Σ, _ = svd(tenmat(Y.C, i+1))
-        rMaxTotal = obj.settings.rMax;
-        rMinTotal = obj.settings.rMin;
-
-        tmp = 0.0;
+# Root-to-leaves truncation of the augmented TTN.
+# W is the weight of the node's mode 0, i.e. the singular values that the parent assigned to the
+# basis functions of this subtree (W = 1 at the root). Without this weighting, the truncation of an
+# inner node treats all of its basis functions as equally important, including directions with
+# negligible weight at the parent, which led to large truncation errors.
+function θ(obj::BUGIntegrator, Y::TTN, W::AbstractMatrix=ones(1, 1))
+    nL = length(Y.leaves)
+    rMaxTotal = obj.settings.rMax;
+    rMinTotal = obj.settings.rMin;
+    Cw = ttm(Y.C, Matrix(W), 1)
+    Pfull = Matrix{Float64}[]
+    Σfull = Vector{Float64}[]
+    rnew = zeros(Int, nL)
+    for i in 1:nL
+        Pᵢ, Σ, _ = svd(tenmat(Cw, i+1))
         tol = obj.settings.ϵ * norm(Σ);
 
-        rmax = Int(floor(size(Σ,1)/2));
-
-        for j=1:2*rmax
-            tmp = sqrt(sum(Σ[j:2*rmax]).^2);
-            if tmp < tol
+        # smallest rank such that the (ℓ¹-)tail of the discarded singular values is below tol;
+        # if the tolerance cannot be met, all augmented directions are kept (capped by rMax)
+        rmax = length(Σ)
+        for j = 1:length(Σ)
+            if sum(Σ[j:end]) < tol
                 rmax = j;
                 break;
             end
         end
 
-        # if 2*r was actually not enough move to highest possible rank
-        if rmax == -1
-            rmax = rMaxTotal;
-        end
-
         rmax = min(rmax,rMaxTotal);
         rmax = max(rmax,rMinTotal);
+        push!(Pfull, Pᵢ); push!(Σfull, Σ); rnew[i] = min(rmax, size(Pᵢ, 2));
+    end
 
-        Pᵢ = Pᵢ[:,1:rmax]
+    # rank consistency: rᵢ ≤ r₀ ∏_{j≠i} rⱼ (otherwise Matᵢ(C) cannot have rᵢ orthonormal rows,
+    # which breaks the QR in prolong_and_retract_full). Can be violated when rMin is enforced.
+    for _ in 1:nL, i in 1:nL
+        rnew[i] = min(rnew[i], size(Y.C, 1) * prod(rnew[[j for j in 1:nL if j != i]]))
+    end
+
+    P = Array{Float64, 2}[]
+    for i in 1:nL
+        Pᵢ = Pfull[i][:, 1:rnew[i]]
         push!(P, Pᵢ')
 
         if length(Y.leaves[i].leaves) == 0 # Yᵢ is leaf
@@ -209,7 +206,7 @@ function θ(obj::BUGIntegrator, Y::TTN)
         else
             Yᵢ = copy_subtree(Y.leaves[i])
             Yᵢ.C = ttm(Yᵢ.C, Pᵢ', 1)
-            Y.leaves[i] = θ(obj, Yᵢ)
+            Y.leaves[i] = θ(obj, Yᵢ, Diagonal(Σfull[i][1:rnew[i]]))
         end
     end
     Y.C = ttm(Y.C, P, [i+1 for i in 1:length(Y.leaves)])

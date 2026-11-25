@@ -1,4 +1,5 @@
 __precompile__
+
 mutable struct Settings
     # grid settings
     # number spatial interfaces
@@ -45,6 +46,8 @@ mutable struct Settings
 
     problem::String
 
+    proton::Any # ProtonProblem of the "ProtonUQ" test case (see protonUQ.jl), set by the driver
+
     function Settings(Nx::Int=102,nPN::Int=100,Nxi::Int=100,Neta::Int=100,problem="radiation3DUQ")
         # spatial grid setting
         NCells = Nx - 1;
@@ -74,6 +77,13 @@ mutable struct Settings
             σₛξ = 0.0#4.0 
             σₛη = 0.0#1.0
             cfl = 0.5 # CFL condition
+        elseif problem == "ProtonUQ"
+            a = 0.0 # beam entrance [cm]
+            b = 8.0 # [cm]
+            tEnd = 1.0 # unused, the energy grid is set up in ProtonProblem
+            σₛξ = 0.0
+            σₛη = 0.0
+            cfl = 0.5
         else
             println("ERROR: Problem ", problem, " undefined.")
         end
@@ -98,7 +108,7 @@ mutable struct Settings
         rMin = 2;
 
         # build class
-        new(Nx,NCells,Nxi,Neta,a,b,Δx,tEnd,dt,cfl,nPN,x,xMid,σₐ,σₛ,σₛξ,σₛη,ϵ,r,rMax,rMin,problem);
+        new(Nx,NCells,Nxi,Neta,a,b,Δx,tEnd,dt,cfl,nPN,x,xMid,σₐ,σₛ,σₛξ,σₛη,ϵ,r,rMax,rMin,problem,nothing);
     end
 
 end
@@ -141,6 +151,8 @@ function IC(obj::Settings, x, y, z=0)
         end
     elseif obj.problem == "Lattice"
         out = 1e-11 * ones(length(x), length(y))
+    elseif obj.problem == "ProtonUQ"
+        out = zeros(length(x), length(y)) # collided flux starts at zero, driven by the source
     end
     return out
 end

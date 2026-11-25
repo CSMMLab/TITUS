@@ -316,6 +316,13 @@ struct Rhs
             else
                 new(ARhs,false, wξ, wη);
             end
+        elseif problem_type == "ProtonUQ"
+            # proton pencil beam (see protonUQ.jl); coefficients are reset in every energy step
+            prob = settings.proton
+            ARhs = [Any[t[1], t[2], t[3], t[4]] for t in prob.terms]
+            QRhs = generateSourceTTN(settings, sourceField(settings, prob, 1); tol=prob.num.tolSource, angle=prob.aΩ)
+            leaves = get_leaf_nodes(QRhs)
+            new(ARhs, true, prob.pξ, prob.pη, QRhs, [leaf.C for leaf in leaves]);
         elseif problem_type == "radiation3DUQ"
             nx = settings.NCells
             ny = nx
@@ -440,6 +447,9 @@ struct Rhs
 end
 
 include("TTN.jl")
+include("uqTools.jl")
+include("protonPhysics.jl")
+include("protonUQ.jl")
 
 # evaluates right-hand side (Rhs) at Y, which is a list of TTNs
 function eval(obj::Rhs, Y::TTN, sourceTerm=0)
@@ -456,9 +466,8 @@ function eval(obj::Rhs, Y::TTN, sourceTerm=0)
     end
     if isdefined(obj, :QRhs)
         if sourceTerm == 0
-            for sourceᵢ in obj.source 
-                push!(FY, obj.QRhs)
-            end
+            # push source 
+            push!(FY, copy_subtree(obj.QRhs))
         else
             push!(FY, sourceTerm)
         end
